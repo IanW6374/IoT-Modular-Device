@@ -10,8 +10,9 @@ The runtime owns product behavior:
 - fleet, audit, support and operational diagnostics; and
 - transport-neutral request, response and event models.
 
-Alpha 12 consumes native platform ABI 6 and configuration contract version 4.
-The runtime drives the native paired journal through opaque primitive calls,
+Alpha 13 consumes native platform ABI 6 and configuration contract version 4.
+It normalises activating state created by pre-ABI-6 frozen coordinators before
+the runtime drives the native paired journal through opaque primitive calls,
 marks the expected runtime slot healthy before native confirmation and leaves
 the durable pointer on the prior slot until that confirmation succeeds. A failed
 native trial can therefore be discarded entirely by frozen recovery, including

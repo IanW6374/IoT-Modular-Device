@@ -4,11 +4,12 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.12` retains native ABI 6 and makes paired confirmation
-power-loss safe across core generations. Frozen code prepares the native trial
-without importing an application-slot adapter, native confirmation precedes the
-durable application pointer, failures retain their exact phase, and a newer
-signed pair can replace a stale trial journal. Alpha 11's interrupted-cutover
+Version `3.0.0-alpha.13` retains native ABI 6 and upgrades activating
+transactions written by older frozen coordinators before preparing the native
+pair. Frozen code prepares the native trial without importing an
+application-slot adapter, native confirmation precedes the durable application
+pointer, failures retain their exact phase, and a newer signed pair can replace
+a stale trial journal. Alpha 11's interrupted-cutover
 reconciliation, durable migration, independent v3 driver translation and
 executable product bootstrap remain. These are implemented mechanisms, not
 completed qualification claims; compatibility remains active until
@@ -47,8 +48,9 @@ wholesale.
 Read the [target architecture](../docs/V3_ARCHITECTURE.md),
 [requirements](../docs/V3_REQUIREMENTS.md) and
 [roadmap](../docs/V3_ROADMAP.md) before adding implementation code. The
-[Alpha 12 test note](../docs/V3_ALPHA12.md) defines its exact scope and safe
-test procedure. The [Alpha 11 note](../docs/V3_ALPHA11.md),
+[Alpha 13 test note](../docs/V3_ALPHA13.md) defines its exact scope and safe
+test procedure. The [Alpha 12 note](../docs/V3_ALPHA12.md),
+[Alpha 11 note](../docs/V3_ALPHA11.md),
 [Alpha 9 note](../docs/V3_ALPHA9.md),
 [Alpha 8 note](../docs/V3_ALPHA8.md),
 [Alpha 7 note](../docs/V3_ALPHA7.md), [Alpha 6 note](../docs/V3_ALPHA6.md),

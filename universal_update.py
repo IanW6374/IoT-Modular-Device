@@ -614,11 +614,51 @@ def _native_platform():
         return None
 
 
+def _upgrade_legacy_pair_state(state):
+    """Add native-pair fields omitted by pre-ABI-6 staging firmware."""
+    changed = False
+    sequence = int(state.get('release_sequence', 0))
+    if not state.get('pair_id'):
+        if sequence <= 0:
+            raise RuntimeError('paired release sequence is invalid')
+        state['pair_id'] = ('iotmd-' + str(sequence))[:64]
+        changed = True
+
+    application_state = app_update.update_status()
+    active_slot = app_update.active_slot()
+    if not state.get('runtime_slot'):
+        target_slot = str(application_state.get('target_slot', ''))
+        state['runtime_slot'] = (
+            target_slot
+            if application_state.get('status') in (
+                'activating', 'trial', 'committing'
+            ) and target_slot else active_slot
+        )
+        changed = True
+    if not state.get('previous_runtime_slot'):
+        state['previous_runtime_slot'] = active_slot
+        changed = True
+    if 'confirmation_phase' not in state:
+        state['confirmation_phase'] = 'pending'
+        changed = True
+    if 'confirmation_error' not in state:
+        state['confirmation_error'] = ''
+        changed = True
+    if changed:
+        _write_state(state)
+        update_support.record_update_event(
+            'universal', 'pair_state_upgraded', state.get('version', ''),
+            detail='added native pair metadata from running component state'
+        )
+    return state
+
+
 def begin_native_pair_trial():
     """Reconcile the native journal after the new core/runtime are selected."""
     state = update_status()
     if state.get('status') != 'activating':
         return False
+    state = _upgrade_legacy_pair_state(state)
     platform = _native_platform()
     if platform is None:
         return False

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.13 - 2026-09-06
+
+- Upgrade activating universal transactions created by pre-ABI-6 frozen
+  coordinators before native pair preparation. The new core reconstructs the
+  bounded pair identifier, trial runtime slot, previous slot and confirmation
+  fields from the signed release sequence and live component state.
+- Record `pair_state_upgraded` when this compatibility migration occurs, so
+  qualification evidence distinguishes migrated trials from newly staged ones.
+- Retain all Alpha 12 paired-confirmation ordering, failure recording and
+  power-loss recovery protections.
+
 ## 3.0.0-alpha.12 - 2026-09-06
 
 - Keep the previous application slot authoritative until native ESP-IDF core

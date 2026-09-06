@@ -72,9 +72,10 @@ handle. Confirmation fails unless the running partition and healthy runtime
 match the persisted pair. Implementation presence remains separate from
 release-bound qualification evidence.
 
-Alpha 12 retains ABI 6. Frozen recovery code accesses that ABI directly when it
-prepares the pair, so it does not depend on an application-slot adapter before
-the slot is available. The native OTA-valid readback still precedes committing
+Alpha 13 retains ABI 6. Frozen recovery code upgrades older activating
+transaction records and accesses that ABI directly when it prepares the pair,
+so it does not depend on an application-slot adapter before the slot is
+available. The native OTA-valid readback still precedes committing
 the application pointer. The universal record persists each confirmation phase
 and exact failure, and a higher signed release sequence may supersede a stale
 native trial left by a rejected core.

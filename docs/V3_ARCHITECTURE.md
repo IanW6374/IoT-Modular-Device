@@ -106,7 +106,10 @@ MicroPython restart cannot retain stale claims or peripheral drivers.
 ABI 6 is the atomic pair boundary. The frozen supervisor prepares and begins a
 pair only when the expected platform partition is running. It calls the native
 ABI through a frozen adapter, never through an application-slot module that may
-not yet be importable. The replaceable
+not yet be importable. When an older frozen coordinator staged the transaction,
+the new supervisor first reconstructs its missing pair identifier and slot
+metadata from the signed sequence and live component state, then persists the
+upgraded record before invoking native code. The replaceable
 runtime marks its exact slot healthy; only then may native code confirm the
 ESP-IDF OTA image. The durable application pointer remains on the prior slot
 until that native confirmation succeeds. A failed runtime records rollback

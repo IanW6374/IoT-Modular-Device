@@ -486,6 +486,55 @@ class UniversalUpdateTests(unittest.TestCase):
         ):
             self.assertTrue(universal_update.begin_native_pair_trial())
 
+    def test_legacy_activating_state_gets_native_pair_metadata(self):
+        Path(universal_update.STATE_PATH).write_text(json.dumps({
+            'status': 'activating', 'version': '3.0.0-alpha.13',
+            'release_sequence': 2718,
+        }))
+
+        class PairPlatform:
+            def __init__(self):
+                self.state = {'phase': 'idle', 'sequence': 0, 'pair_id': ''}
+                self.prepared = ()
+
+            def update_snapshot(self):
+                return {'running_label': 'ota_0'}
+
+            def pair_snapshot(self):
+                return dict(self.state)
+
+            def prepare_pair(self, pair_id, sequence, platform, runtime, previous):
+                self.prepared = (pair_id, sequence, platform, runtime, previous)
+                self.state = {
+                    'phase': 'prepared', 'sequence': sequence,
+                    'pair_id': pair_id, 'runtime_slot': runtime,
+                }
+
+            def begin_pair_trial(self, pair_id, runtime):
+                self.state['phase'] = 'trial'
+
+        platform = PairPlatform()
+        with (
+            patch.object(universal_update, '_native_platform', return_value=platform),
+            patch.object(app_update, 'update_status', return_value={
+                'status': 'trial', 'target_slot': 'b',
+            }),
+            patch.object(app_update, 'active_slot', return_value='a'),
+        ):
+            self.assertTrue(universal_update.begin_native_pair_trial())
+        self.assertEqual(
+            platform.prepared, ('iotmd-2718', 2718, 'ota_0', 'b', 'a')
+        )
+        state = universal_update.update_status()
+        self.assertEqual(state['pair_id'], 'iotmd-2718')
+        self.assertEqual(state['runtime_slot'], 'b')
+        self.assertEqual(state['previous_runtime_slot'], 'a')
+        self.assertEqual(state['confirmation_phase'], 'pending')
+        self.assertEqual(
+            update_support.update_history()[-1]['event'],
+            'pair_state_upgraded',
+        )
+
     def test_frozen_pair_boundary_does_not_require_application_adapter(self):
         calls = []
         provider = SimpleNamespace(
