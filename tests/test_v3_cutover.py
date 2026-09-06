@@ -1,4 +1,5 @@
 import unittest
+import json
 
 from v3.runtime.iotmd_next.cutover import CutoverCoordinator, CutoverError
 
@@ -159,6 +160,24 @@ class V3CutoverTests(unittest.TestCase):
         with self.assertRaisesRegex(CutoverError, 'health gate failed'):
             coordinator.poll()
         self.assertEqual(coordinator.snapshot()['phase'], 'fallback')
+
+    def test_interrupted_active_boot_is_durably_latched_to_compatibility(self):
+        namespace = MemoryNamespace()
+        namespace.payload = json.dumps({
+            'state_version': 1, 'requested_mode': 'active',
+            'effective_mode': 'compatibility', 'phase': 'starting',
+            'boot_attempts': 1, 'failures': 0, 'last_failure': '',
+        }, separators=(',', ':')).encode()
+        coordinator = self.make(
+            platform=True, qualified=True, namespace=namespace
+        )
+        state = coordinator.snapshot()
+        self.assertEqual(state['phase'], 'fallback')
+        self.assertEqual(state['requested_mode'], 'compatibility')
+        self.assertEqual(state['failures'], 1)
+        self.assertEqual(
+            self.recovery.reasons, ['v3 runtime boot was interrupted']
+        )
 
 
 if __name__ == '__main__':

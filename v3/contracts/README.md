@@ -72,6 +72,11 @@ handle. Confirmation fails unless the running partition and healthy runtime
 match the persisted pair. Implementation presence remains separate from
 release-bound qualification evidence.
 
+Alpha 11 retains ABI 6 but tightens its confirmation semantics: the native
+paired record is committed only after the running OTA image reads back as
+valid. Application-side reconciliation uses exact release sequences and
+restores the recorded previous runtime slot if the paired core is rejected.
+
 Later qualification milestones must prove:
 
 - power-loss-safe paired ownership and rollback on hardware;

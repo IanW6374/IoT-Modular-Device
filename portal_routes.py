@@ -29,6 +29,7 @@ ROUTES = {
     '/activate-update': ('operator', 'maintenance'),
     '/activate-firmware': ('operator', 'maintenance'),
     '/activate-universal': ('operator', 'maintenance'),
+    '/discard-update': ('operator', 'maintenance'),
     '/rollback-application': ('operator', 'maintenance'),
     '/calibrate': ('operator', 'modules'),
     '/discover': ('operator', 'modules'),

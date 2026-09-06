@@ -12,6 +12,7 @@ from .production_drivers import (
     translate_v2_modules, validate_complete_driver_catalog,
 )
 from .integration import ProductionComposition
+from .bootstrap import BootstrapError, ProductBootstrap
 from .shadow import ShadowRuntime
 from .fleet import FleetError, FleetPolicyService
 from .migration import MigrationError, V2MigrationCoordinator
@@ -42,6 +43,7 @@ __all__ = (
     'ProductionIdentityAdapter', 'FleetError',
     'ProductionMigrationStaging', 'translate_v2_modules',
     'validate_complete_driver_catalog', 'ProductionComposition',
+    'BootstrapError', 'ProductBootstrap',
     'ShadowRuntime',
     'FleetPolicyService', 'MigrationError', 'V2MigrationCoordinator',
     'DriverError', 'DriverService', 'build_driver_factories',

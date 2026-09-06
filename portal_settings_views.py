@@ -55,7 +55,6 @@ def render_login_page(username='', error=''):
         '<label class="field">Password<input name="password" type="password" '
         'autocomplete="current-password" required maxlength="256"></label>'
         '<button id="login-button" type="submit">Sign in</button>'
-        '<p id="auth-status" class="portal-status" role="status" aria-live="polite"></p>'
         '</form></section>'
     )
     script = (
@@ -63,8 +62,7 @@ def render_login_page(username='', error=''):
         'if(f.getAttribute("data-submitting")==="1")return false;'
         'if(e&&e.preventDefault)e.preventDefault();f.setAttribute("data-submitting","1");'
         'var b=document.getElementById("login-button");b.disabled=true;'
-        'b.textContent="Signing in…";document.getElementById("auth-status").textContent='
-        '"Securely verifying your password…";setTimeout(function(){f.submit();},80);'
+        'b.textContent="Signing in…";setTimeout(function(){f.submit();},80);'
         'return false;};'
     )
     return portal_ui.shell(

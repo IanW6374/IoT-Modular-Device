@@ -414,6 +414,64 @@ class UniversalUpdateTests(unittest.TestCase):
             detail='cleared orphaned transaction after component rollback'
         )
 
+    def test_reconcile_restores_confirmed_application_when_core_rolled_back(self):
+        Path(universal_update.STATE_PATH).write_text(json.dumps({
+            'status': 'activating', 'version': '2.0.0',
+            'application_sequence': 40, 'firmware_sequence': 40,
+            'application_required': True, 'firmware_required': True,
+            'previous_runtime_slot': 'a',
+        }))
+        with (
+            patch.object(app_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(firmware_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(app_update, 'running_release_sequence', return_value=40),
+            patch.object(firmware_update, 'running_release_sequence', return_value=39),
+            patch.object(
+                universal_update.application_slot_recovery,
+                'restore_paired_slot', return_value=True
+            ) as restore,
+            patch.object(update_support, 'record_update_event'),
+        ):
+            self.assertTrue(universal_update.reconcile_pending())
+        restore.assert_called_once_with(app_update, 'a', 40)
+        self.assertEqual(universal_update.update_status(), {'status': 'idle'})
+
+    def test_native_pair_failure_restores_already_committed_application(self):
+        Path(universal_update.STATE_PATH).write_text(json.dumps({
+            'status': 'activating', 'version': '2.0.0', 'pair_id': 'iotmd-40',
+            'application_sequence': 40, 'firmware_sequence': 40,
+            'application_required': True, 'firmware_required': True,
+            'previous_runtime_slot': 'a',
+        }))
+
+        class PairPlatform:
+            phase = 'trial'
+
+            def pair_snapshot(self):
+                return {'phase': self.phase, 'pair_id': 'iotmd-40'}
+
+            def request_pair_rollback(self, pair_id, reason):
+                self.phase = 'rollback'
+
+            def complete_pair_rollback(self, pair_id, slot):
+                self.phase = 'rolled-back'
+                return slot == 'a'
+
+        platform = PairPlatform()
+        with (
+            patch.object(universal_update, '_native_platform', return_value=platform),
+            patch.object(app_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(app_update, 'running_release_sequence', return_value=40),
+            patch.object(app_update, 'active_slot', return_value='a'),
+            patch.object(
+                universal_update.application_slot_recovery,
+                'restore_paired_slot', return_value=True
+            ) as restore,
+        ):
+            self.assertTrue(universal_update.rollback_native_pair('test failure'))
+        restore.assert_called_once_with(app_update, 'a', 40)
+        self.assertEqual(platform.phase, 'rolled-back')
+
     def test_reconcile_preserves_live_universal_trial(self):
         Path(universal_update.STATE_PATH).write_text(json.dumps({
             'status': 'activating', 'version': '2.0.0',

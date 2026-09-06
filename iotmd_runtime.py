@@ -27,6 +27,7 @@ import json
 import credential_security
 import credential_store
 import app_update
+import application_slot_recovery
 import application_upload
 import firmware_update
 import universal_update
@@ -958,9 +959,8 @@ def portal_status():
         boot_tracker.snapshot(), hardware_platform.capabilities()
     )
     update = app_update.update_status()
-    status['running_version'] = app_update.running_version(
-        device_settings.ha_device_info.get('sw', '')
-    )
+    status['running_version'] = application_slot_recovery.executing_version(
+        app_update, device_settings.ha_device_info.get('sw', ''))
     status['base_version'] = hardware_platform.runtime_version()
     status['update_status'] = update.get('status', 'idle')
     status['update_version'] = update.get('version', '')
@@ -2090,6 +2090,9 @@ def portal_action(action, params):
         schedule_hardware_reset('universal_update_reboot', 8000)
         return 'Universal core and application update staged; rebooting into trial versions'
 
+    if action == 'discard-update':
+        return ('Staged upgrade cancelled' if universal_update.discard_all_ready()
+                else 'No staged upgrade to cancel')
     if action == 'rollback-application':
         try:
             result = app_update.rollback_to_previous()

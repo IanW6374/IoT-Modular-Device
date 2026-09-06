@@ -173,6 +173,18 @@ claim peripherals. Active mode still fails closed until native qualification
 flags and all release-bound observed gates pass; a failed active boot latches
 the requested mode back to compatibility.
 
+Alpha 11 adds the executable bootstrap around that composition root and closes
+three reboot boundaries found during universal-update testing. The application
+reported during trial is the slot actually executing, but its durable active
+pointer still moves only after health confirmation. If the bootloader rejects
+the paired core after that application pointer was committed, frozen universal
+reconciliation restores the journalled previous runtime slot. Native pair
+confirmation is persisted only after the running OTA partition reads back as
+valid. Interrupted cutover startup latches compatibility, while a previously
+healthy running phase is converted to a fresh gated boot. Migration staging
+persists a native handle intent before writing secret material, permitting
+deterministic orphan cleanup after power loss.
+
 The fleet service accepts only signed P-256 policy targeted to the device or
 its configured cohort. It rejects unknown fields, invalid time windows, replayed
 sequences and unsynchronized clocks before saving policy transactionally.

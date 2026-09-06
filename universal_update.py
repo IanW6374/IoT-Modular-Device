@@ -21,6 +21,7 @@ except ImportError:
     import os
 
 import app_update
+import application_slot_recovery
 import application_upload
 import firmware_update
 import update_security
@@ -202,18 +203,33 @@ def reconcile_pending():
     if firmware_required and firmware_status != 'idle':
         return False
 
+    application_sequence = int(state.get('application_sequence', 0))
+    firmware_sequence = int(state.get('firmware_sequence', 0))
     application_installed = (
-        app_update.running_release_sequence() >=
-        int(state.get('application_sequence', 0))
+        not application_required or
+        app_update.running_release_sequence() == application_sequence
     )
     firmware_installed = (
-        firmware_update.running_release_sequence() >=
-        int(state.get('firmware_sequence', 0))
+        not firmware_required or
+        firmware_update.running_release_sequence() == firmware_sequence
     )
     outcome = (
         'confirmed' if application_installed and firmware_installed
         else 'rolled_back'
     )
+    if outcome == 'rolled_back' and application_installed:
+        previous_slot = str(state.get('previous_runtime_slot', ''))
+        if previous_slot:
+            try:
+                application_slot_recovery.restore_paired_slot(
+                    app_update, previous_slot, application_sequence
+                )
+            except Exception as exc:
+                update_support.record_update_event(
+                    'universal', 'rollback_failed', state.get('version', ''),
+                    detail='could not restore previous application slot: ' + str(exc)
+                )
+                return False
     _remove(STATE_PATH)
     update_support.record_update_event(
         'universal', outcome, state.get('version', ''),
@@ -618,7 +634,19 @@ def rollback_native_pair(reason):
     if pair['phase'] in ('prepared', 'trial'):
         platform.request_pair_rollback(pair_id, str(reason)[:160])
     if platform.pair_snapshot()['phase'] == 'rollback':
-        app_update.rollback_update()
+        application_state = app_update.update_status()
+        if (
+            state.get('application_required', True) and
+            application_state.get('status') == 'idle' and
+            app_update.running_release_sequence() ==
+            int(state.get('application_sequence', 0))
+        ):
+            application_slot_recovery.restore_paired_slot(
+                app_update, str(state.get('previous_runtime_slot', '')),
+                int(state.get('application_sequence', 0))
+            )
+        else:
+            app_update.rollback_update()
         return platform.complete_pair_rollback(
             pair_id, app_update.active_slot()
         )
@@ -638,11 +666,13 @@ def confirm_update():
     if state.get('status') == 'idle':
         return False
     application_installed = (
-        app_update.running_release_sequence() >=
+        not state.get('application_required', True) or
+        app_update.running_release_sequence() ==
         int(state.get('application_sequence', 0))
     )
     firmware_installed = (
-        firmware_update.running_release_sequence() >=
+        not state.get('firmware_required', True) or
+        firmware_update.running_release_sequence() ==
         int(state.get('firmware_sequence', 0))
     )
     if application_installed and firmware_installed:
@@ -669,6 +699,18 @@ def discard_pending_update():
     ):
         discarded = bool(firmware_update.discard_pending_update()) or discarded
     _remove(STATE_PATH)
+    return discarded
+
+
+def discard_all_ready():
+    """Discard every verified component that has not been activated."""
+    discarded = False
+    if update_status().get('status') == 'ready':
+        discarded = bool(discard_pending_update()) or discarded
+    if app_update.update_status().get('status') == 'ready':
+        discarded = bool(app_update.discard_pending_update()) or discarded
+    if firmware_update.update_status().get('status') == 'ready':
+        discarded = bool(firmware_update.discard_pending_update()) or discarded
     return discarded
 
 

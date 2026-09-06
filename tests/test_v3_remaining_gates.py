@@ -67,6 +67,22 @@ class RuntimeSlots:
         return self.slot
 
 
+class MemoryNamespace:
+    def __init__(self):
+        self.generation = 0
+        self.payload = b''
+
+    def snapshot(self):
+        return self.generation, self.payload
+
+    def commit(self, generation, payload):
+        if generation != self.generation:
+            raise RuntimeError('generation changed')
+        self.generation += 1
+        self.payload = bytes(payload)
+        return self.generation
+
+
 class RemainingGateTests(unittest.TestCase):
     @staticmethod
     def _startup():
@@ -96,12 +112,12 @@ class RemainingGateTests(unittest.TestCase):
         discarded = []
         next_handle = [0]
 
-        def stage(section, payload):
-            next_handle[0] += 1
-            return next_handle[0]
+        def stage(handle, section, payload):
+            next_handle[0] = handle
+            return handle
 
         adapter = ProductionMigrationStaging(
-            stage, lambda handles: activated.extend(handles),
+            MemoryNamespace(), stage, lambda handles: activated.extend(handles),
             lambda handles: discarded.extend(handles)
         )
         handles = [adapter.stage('credentials', {}),
@@ -111,6 +127,22 @@ class RemainingGateTests(unittest.TestCase):
         self.assertEqual(adapter.snapshot()['staged'], 0)
         with self.assertRaisesRegex(ValueError, 'handle'):
             adapter.discard(handles)
+
+    def test_migration_staging_survives_restart_and_cleans_interrupted_intent(self):
+        namespace = MemoryNamespace()
+        discarded = []
+        adapter = ProductionMigrationStaging(
+            namespace, lambda handle, section, payload: handle,
+            lambda handles: None, lambda handles: discarded.extend(handles)
+        )
+        handle = adapter.stage('credentials', {'opaque': True})
+        restarted = ProductionMigrationStaging(
+            namespace, lambda handle, section, payload: handle,
+            lambda handles: None, lambda handles: discarded.extend(handles)
+        )
+        self.assertEqual(restarted.snapshot()['staged'], 1)
+        restarted.discard((handle,))
+        self.assertEqual(discarded, [handle])
 
     def test_all_declared_driver_variants_have_v3_catalog_entries(self):
         self.assertEqual(validate_complete_driver_catalog(), {
@@ -128,7 +160,7 @@ class RemainingGateTests(unittest.TestCase):
         self.assertTrue(snapshot['shadow']['side_effects'] is False)
         self.assertEqual(snapshot['health']['state'], 'healthy')
 
-    def test_paired_confirmation_commits_native_before_component_metadata(self):
+    def test_paired_confirmation_commits_runtime_before_native_pair(self):
         calls = []
         app = SimpleNamespace(
             update_status=lambda: {'status': 'trial'},
@@ -162,8 +194,8 @@ class RemainingGateTests(unittest.TestCase):
             (True, True),
         )
         self.assertEqual(calls, [
-            'prepare-runtime', 'confirm-native', 'commit-platform',
-            'commit-runtime', 'confirm-universal', 'healthy',
+            'prepare-runtime', 'commit-runtime', 'confirm-native',
+            'commit-platform', 'confirm-universal', 'healthy',
         ])
 
     def test_paired_confirmation_failure_rolls_back_without_health_marker(self):
@@ -172,7 +204,8 @@ class RemainingGateTests(unittest.TestCase):
             update_status=lambda: {'status': 'trial'},
             running_release_sequence=lambda: 0,
             confirm_update=lambda prepare=False:
-                calls.append('prepare-runtime') or True,
+                calls.append('prepare-runtime' if prepare else 'commit-runtime')
+                or True,
         )
         firmware = SimpleNamespace(running_release_sequence=lambda: 0)
         universal = SimpleNamespace(
@@ -193,7 +226,9 @@ class RemainingGateTests(unittest.TestCase):
             ),
             (False, False),
         )
-        self.assertEqual(calls, ['prepare-runtime', 'rollback'])
+        self.assertEqual(calls, [
+            'prepare-runtime', 'commit-runtime', 'rollback',
+        ])
 
 
 if __name__ == '__main__':

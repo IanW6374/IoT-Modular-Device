@@ -54,6 +54,9 @@ class ProductionComposition:
     def poll(self):
         return self.coordinator.poll()
 
+    def stop(self):
+        return self.coordinator.stop()
+
     def request_mode(self, mode):
         return self.coordinator.request_mode(mode)
 

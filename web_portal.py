@@ -1088,6 +1088,12 @@ async def start_web_portal(portal):
                         ('Set-Cookie', session_cookie('', secure_cookie, True)),
                     )
                 )
+            elif method == 'POST' and path.startswith('/discard-update'):
+                apply_portal_action(
+                    'discard-update', action_path, action_handler, log_output,
+                    form_params
+                )
+                await send_redirect(writer, '/updates')
             elif method == 'POST' and path.startswith('/rollback-application'):
                 result = apply_portal_action(
                     'rollback-application', action_path, action_handler, log_output, form_params
@@ -1331,7 +1337,6 @@ async def start_web_portal(portal):
         finally:
             if not handed_off:
                 await close_writer()
-
     ssl_context = None
     if settings.get('https', False):
         ssl_context = make_tls_context(settings.get('cert_path'), settings.get('key_path'))

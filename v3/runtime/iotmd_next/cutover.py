@@ -98,6 +98,26 @@ class CutoverCoordinator:
         self._state = _decode(payload)
         if not payload:
             self._commit()
+        else:
+            self._reconcile_interrupted_boot()
+
+    def _reconcile_interrupted_boot(self):
+        """Convert a durable in-flight phase into an explicit boot decision."""
+        phase = self._state['phase']
+        if phase == 'starting':
+            self._state['failures'] = min(
+                1000000, self._state['failures'] + 1
+            )
+            self._state['last_failure'] = 'v3 runtime boot was interrupted'
+            self._state['requested_mode'] = 'compatibility'
+            self._state['effective_mode'] = 'compatibility'
+            self._state['phase'] = 'fallback'
+            self._commit()
+            self._recovery.request(self._state['last_failure'])
+        elif phase == 'running':
+            self._state['effective_mode'] = 'compatibility'
+            self._state['phase'] = 'idle'
+            self._commit()
 
     def _commit(self):
         self._generation = self._namespace.commit(

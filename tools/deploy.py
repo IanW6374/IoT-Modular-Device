@@ -10,6 +10,7 @@ FILES = (
     "main.py",
     "recovery_boot.py",
     "app_update.py",
+    "application_slot_recovery.py",
     "firmware_update.py",
     "hardware_platform.py",
     "boot_state.py",

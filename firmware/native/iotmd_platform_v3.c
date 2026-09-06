@@ -606,8 +606,17 @@ static mp_obj_t iotmd_platform_v3_pair_confirm(mp_obj_t pair_id_in) {
         error = esp_ota_mark_app_valid_cancel_rollback();
     }
     if (error == ESP_OK) {
-        record.phase = IOTMD_V3_PAIR_CONFIRMED;
-        error = iotmd_v3_pair_store(nvs, &record);
+        const esp_partition_t *confirmed = NULL;
+        esp_ota_img_states_t confirmed_state = ESP_OTA_IMG_UNDEFINED;
+        error = iotmd_v3_running_state(&confirmed, &confirmed_state);
+        if (error == ESP_OK &&
+                iotmd_v3_label_matches(confirmed, record.platform_label) &&
+                confirmed_state == ESP_OTA_IMG_VALID) {
+            record.phase = IOTMD_V3_PAIR_CONFIRMED;
+            error = iotmd_v3_pair_store(nvs, &record);
+        } else if (error == ESP_OK) {
+            error = ESP_ERR_INVALID_STATE;
+        }
     }
     nvs_close(nvs);
     if (error != ESP_OK) {

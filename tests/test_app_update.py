@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import app_update
+import application_slot_recovery
 import credential_store
 import update_security
 import update_support
@@ -135,6 +136,10 @@ class AppUpdateTests(unittest.TestCase):
         self.assertEqual(Path('.app-slots/a/device_modules/new.py').read_bytes(), b'VALUE=2')
         self.assertEqual(app_update.application_entry(), '.app-slots/a/iotmd.py')
         self.assertEqual(app_update.update_status()['status'], 'trial')
+        self.assertEqual(
+            application_slot_recovery.executing_version(app_update), 'test-1'
+        )
+        self.assertEqual(app_update.running_version('old-version'), 'old-version')
         self.assertTrue(app_update.confirm_update())
         self.assertEqual(app_update.update_status()['status'], 'idle')
         self.assertEqual(app_update.active_slot(), 'a')
@@ -255,6 +260,24 @@ class AppUpdateTests(unittest.TestCase):
         self.assertEqual(app_update.application_entry(), '.app-slots/a/iotmd.py')
         self.assertEqual(Path('.app-slots/a/iotmd.py').read_bytes(), b'stable')
         self.assertFalse(Path('.app-slots/b').exists())
+
+    def test_paired_core_rollback_restores_already_confirmed_application(self):
+        self.make_bundle({'iotmd.py': b'stable'}, 'stable', 39)
+        app_update.stage_bundle()
+        app_update.activate_pending()
+        app_update.confirm_update()
+        self.make_bundle({'iotmd.py': b'trial'}, 'trial', 40)
+        app_update.stage_bundle()
+        app_update.activate_pending()
+        app_update.confirm_update()
+
+        self.assertEqual(app_update.running_version(), 'trial')
+        self.assertTrue(application_slot_recovery.restore_paired_slot(
+            app_update, 'a', 40
+        ))
+        self.assertEqual(app_update.active_slot(), 'a')
+        self.assertEqual(app_update.running_version(), 'stable')
+        self.assertEqual(app_update.running_release_sequence(), 39)
 
     def test_bad_shared_certificate_rolls_back_with_failed_trial_slot(self):
         Path('certs').mkdir()

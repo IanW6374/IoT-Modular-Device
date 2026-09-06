@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.11 - 2026-09-06
+
+- Make universal rollback restore the recorded previous application slot when
+  the ESP bootloader rejects the matching core, preventing mixed releases.
+- Report the application actually executing during its uncommitted trial while
+  keeping the durable active-slot pointer unchanged until confirmation.
+- Require native OTA-valid readback before committing the paired-update
+  journal and use exact release-sequence matches for pair confirmation.
+- Replace the manual-upgrade status fragments with one vertical workflow, one
+  current-task progress bar, Cancel and a state-aware primary action.
+- Remove the redundant password-verification message from sign-in.
+- Add durable migration handle intents, interrupted-cutover reconciliation and
+  an executable v3 product bootstrap.
+- Remove the v3 production driver translator's dependency on v2 driver and
+  logical resource-manager code.
+
 ## 3.0.0-alpha.10 - 2026-09-05
 
 - Advance the native platform boundary to ABI 6 with an encrypted paired-update

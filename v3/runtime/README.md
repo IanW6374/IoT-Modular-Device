@@ -10,13 +10,16 @@ The runtime owns product behavior:
 - fleet, audit, support and operational diagnostics; and
 - transport-neutral request, response and event models.
 
-Alpha 10 consumes native platform ABI 6 and configuration contract version 4.
+Alpha 11 consumes native platform ABI 6 and configuration contract version 4.
 The runtime drives the native paired journal through opaque primitive calls,
 marks the expected runtime slot healthy before native confirmation and restores
-the prior slot before requesting rollback. A single production composition root
-wires transport, identity, fleet, migration and driver services to the existing
-fail-closed cutover coordinator. Shadow mode validates and compares only; it
-cannot bind listeners, publish MQTT state or construct physical resources.
+the prior slot before requesting rollback. It also restores a committed runtime
+slot if the bootloader rejects its paired core. A product bootstrap owns the
+single production composition root, while interrupted cutover startup is
+durably latched to compatibility. Migration handle intents survive restart and
+the production driver translator is independent of v2 implementation modules.
+Shadow mode validates and compares only; it cannot bind listeners, publish MQTT
+state or construct physical resources.
 
 Alpha 9 introduced physical and production adapter integration. Module resource
 declarations carry bounded physical parameters and explicit

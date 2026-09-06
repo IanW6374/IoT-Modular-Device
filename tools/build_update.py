@@ -81,6 +81,7 @@ V3_ALPHA_FILES = (
     'v3/__init__.py',
     'v3/runtime/__init__.py',
     'v3/runtime/iotmd_next/__init__.py',
+    'v3/runtime/iotmd_next/bootstrap.py',
     'v3/runtime/iotmd_next/configuration.py',
     'v3/runtime/iotmd_next/connectivity.py',
     'v3/runtime/iotmd_next/cutover.py',
