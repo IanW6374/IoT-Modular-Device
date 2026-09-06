@@ -485,16 +485,28 @@ def run():
         universal_update.reconcile_pending()
 
     try:
-        universal_update.begin_native_pair_trial()
+        native_pair_ready = universal_update.begin_native_pair_trial()
+        if (
+            universal_update.update_status().get('status') == 'activating' and
+            not native_pair_ready
+        ):
+            raise RuntimeError('native paired trial could not be prepared')
     except Exception as exc:
         try:
-            universal_update.rollback_native_pair(
-                'native pair reconciliation failed: ' + str(exc)
-            )
+            universal_update.record_confirmation_failure(exc)
         except Exception:
             pass
-        request_recovery('Paired update reconciliation failed: ' + str(exc))
-        _run_core_recovery('Paired update reconciliation failed')
+        rolled_back = False
+        try:
+            rolled_back = bool(universal_update.rollback_native_pair(
+                'native pair reconciliation failed: ' + str(exc)
+            ))
+        except Exception:
+            pass
+        if not rolled_back:
+            app_update.rollback_update()
+        clear_recovery_request()
+        _reset()
         return
 
     # Guard every application startup, not only update trials. A hung application

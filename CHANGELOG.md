@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.12 - 2026-09-06
+
+- Keep the previous application slot authoritative until native ESP-IDF core
+  confirmation succeeds, so bootloader rollback cannot strand a newer runtime
+  on an older frozen core.
+- Prepare and reconcile the native pair through a frozen direct ABI adapter,
+  rather than importing an application-slot adapter before that slot is on the
+  module path; this ensures the native trial actually exists for confirmation.
+- Persist each paired-confirmation phase and its exact failure before rollback,
+  allowing the next boot and support history to identify confirmation faults.
+- Permit a newer signed release sequence to replace a stale native pair journal
+  left by an interrupted or bootloader-rejected trial.
+- Remove the replaceable runtime's dependency on the newly frozen
+  `application_slot_recovery` helper while retaining trial-aware version
+  reporting, preserving operation with the previous confirmed core.
+
 ## 3.0.0-alpha.11 - 2026-09-06
 
 - Make universal rollback restore the recorded previous application slot when

@@ -79,7 +79,38 @@ def _state_from_manifest(manifest, firmware_required, application_required):
         'maintenance_required': bool(manifest.get('maintenance_required')),
         'rollback_policy': str(manifest.get('rollback_policy', 'paired')),
         'trial_timeout_s': int(manifest.get('trial_timeout_s', 180)),
+        'confirmation_phase': 'pending',
+        'confirmation_error': '',
     }
+
+
+def record_confirmation_phase(phase):
+    """Durably identify the last completed paired-confirmation boundary."""
+    state = update_status()
+    if state.get('status') != 'activating':
+        return False
+    state['confirmation_phase'] = str(phase)[:40]
+    state['confirmation_error'] = ''
+    _write_state(state)
+    update_support.record_update_event(
+        'universal', 'confirmation_phase', state.get('version', ''),
+        detail=state['confirmation_phase']
+    )
+    return True
+
+
+def record_confirmation_failure(error):
+    """Persist a native confirmation error before rollback or reset."""
+    state = update_status()
+    detail = str(error)[:160]
+    if state.get('status') == 'activating':
+        state['confirmation_error'] = detail
+        _write_state(state)
+    update_support.record_update_event(
+        'universal', 'confirmation_failed', state.get('version', ''),
+        detail=(str(state.get('confirmation_phase', 'pending')) + ': ' + detail)[:160]
+    )
+    return detail
 
 
 def stage_preverified(manifest, firmware_required, application_required):
@@ -543,9 +574,42 @@ def activate_pending(maintenance_allowed=True):
 
 
 def _native_platform():
+    """Return the frozen native pair boundary without application imports."""
     try:
-        from v3.runtime.iotmd_next.platform import Platform
-        return Platform()
+        import _iotmd_platform_v3 as provider
+        if int(getattr(provider, 'ABI_VERSION', 0) or 0) < 6:
+            return None
+
+        class NativePairPlatform:
+            def update_snapshot(self):
+                return provider.update_snapshot()
+
+            def pair_snapshot(self):
+                return provider.pair_snapshot()
+
+            def prepare_pair(self, pair_id, sequence, platform_label,
+                             runtime_slot, previous_runtime_slot=''):
+                return provider.pair_prepare(
+                    pair_id, sequence, platform_label, runtime_slot,
+                    previous_runtime_slot
+                )
+
+            def begin_pair_trial(self, pair_id, runtime_slot):
+                return provider.pair_begin_trial(pair_id, runtime_slot)
+
+            def mark_pair_runtime_healthy(self, pair_id, runtime_slot):
+                return provider.pair_mark_runtime_healthy(pair_id, runtime_slot)
+
+            def confirm_pair(self, pair_id):
+                return provider.pair_confirm(pair_id) is True
+
+            def request_pair_rollback(self, pair_id, reason):
+                return provider.pair_request_rollback(pair_id, reason)
+
+            def complete_pair_rollback(self, pair_id, runtime_slot=''):
+                return provider.pair_complete_rollback(pair_id, runtime_slot)
+
+        return NativePairPlatform()
     except Exception:
         return None
 
@@ -564,9 +628,21 @@ def begin_native_pair_trial():
     update = platform.update_snapshot()
     running_label = str(update.get('running_label', ''))
     pair = platform.pair_snapshot()
-    if pair['phase'] in ('idle', 'confirmed', 'rolled-back'):
+    sequence = int(state.get('release_sequence', 0))
+    stale_pair = (
+        pair['phase'] in ('prepared', 'trial', 'rollback') and
+        pair['pair_id'] != pair_id and
+        int(pair.get('sequence', 0)) < sequence
+    )
+    confirmed_previous_pair = (
+        pair['phase'] == 'confirmed' and pair['pair_id'] != pair_id
+    )
+    if (
+        pair['phase'] in ('idle', 'rolled-back') or stale_pair or
+        confirmed_previous_pair
+    ):
         platform.prepare_pair(
-            pair_id, int(state.get('release_sequence', 0)), running_label,
+            pair_id, sequence, running_label,
             runtime_slot, previous
         )
         pair = platform.pair_snapshot()
@@ -583,9 +659,13 @@ def begin_native_pair_trial():
             raise RuntimeError('runtime trial slot does not match universal release')
         platform.begin_pair_trial(pair_id, runtime_slot)
         return True
-    if pair['phase'] == 'trial':
+    if pair['phase'] in ('trial', 'confirmed'):
         if running_runtime == runtime_slot:
             return True
+        if pair['phase'] == 'confirmed':
+            raise RuntimeError(
+                'confirmed native pair does not match the running runtime slot'
+            )
         platform.request_pair_rollback(
             pair_id, 'runtime slot changed during universal trial'
         )
@@ -594,7 +674,7 @@ def begin_native_pair_trial():
         restored = app_update.active_slot()
         platform.complete_pair_rollback(pair_id, restored)
         return False
-    return pair['phase'] == 'trial'
+    return pair['phase'] in ('trial', 'confirmed')
 
 
 def confirm_native_pair():

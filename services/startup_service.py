@@ -81,12 +81,15 @@ class StartupService:
                         'Local', 'Application update',
                         {'log': 'Runtime slot passed local health check'}, 'INFO'
                     )
-                if application_required and not application_already_confirmed:
-                    if not app_update.confirm_update():
-                        raise RuntimeError('runtime confirmation commit failed')
-                    application_already_confirmed = True
+                universal_update.record_confirmation_phase('runtime-healthy')
+                # Keep the durable application pointer on the previously
+                # confirmed slot until ESP-IDF has made the matching core
+                # non-rollbackable.  If power is lost or native confirmation
+                # fails, the frozen supervisor can still discard the trial
+                # application without needing code from the rejected core.
                 if not universal_update.confirm_native_pair():
                     raise RuntimeError('native paired trial is unavailable')
+                universal_update.record_confirmation_phase('platform-confirmed')
                 if firmware_required:
                     firmware_committed = (
                         firmware_update.confirm_after_native_pair() or
@@ -97,6 +100,12 @@ class StartupService:
                     if not firmware_committed:
                         raise RuntimeError('core confirmation metadata is unavailable')
                     firmware_confirmed = True
+                universal_update.record_confirmation_phase('platform-metadata')
+                if application_required and not application_already_confirmed:
+                    if not app_update.confirm_update():
+                        raise RuntimeError('runtime confirmation commit failed')
+                    application_already_confirmed = True
+                universal_update.record_confirmation_phase('runtime-committed')
                 application_confirmed = application_required
                 self.log_output(
                     'Local', 'Universal update',
@@ -104,6 +113,7 @@ class StartupService:
                     'INFO'
                 )
             except Exception as exc:
+                universal_update.record_confirmation_failure(exc)
                 self.log_output(
                     'Local', 'Universal update',
                     {'log': 'Could not confirm native pair - ' + str(exc)},

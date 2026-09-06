@@ -368,7 +368,7 @@ def confirm_update():
 
 
 def confirm_after_native_pair():
-    """Persist component metadata after ABI 6 confirmed the OTA partition."""
+    """Persist component metadata after native confirmation of the partition."""
     state = boot_status()
     if state.get('status') != 'trial':
         return False

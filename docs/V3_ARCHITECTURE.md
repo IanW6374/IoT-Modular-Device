@@ -104,13 +104,18 @@ resource-manager construction first invokes a native reset so a prior abrupt
 MicroPython restart cannot retain stale claims or peripheral drivers.
 
 ABI 6 is the atomic pair boundary. The frozen supervisor prepares and begins a
-pair only when the expected platform partition is running. The replaceable
+pair only when the expected platform partition is running. It calls the native
+ABI through a frozen adapter, never through an application-slot module that may
+not yet be importable. The replaceable
 runtime marks its exact slot healthy; only then may native code confirm the
-ESP-IDF OTA image. A failed runtime records rollback intent before its previous
-slot is restored and native bootloader rollback is requested. The journal is
-re-read after interruption, so an incomplete transition cannot silently become
-a confirmed mixed pair. Production capability flags remain false until the
-power-cut HIL matrix demonstrates this behavior at every transition.
+ESP-IDF OTA image. The durable application pointer remains on the prior slot
+until that native confirmation succeeds. A failed runtime records rollback
+intent before its trial slot is discarded and native bootloader rollback is
+requested. A higher signed sequence may replace a stale journal from a rejected
+trial. The journal is re-read after interruption, so an incomplete transition
+cannot silently become a confirmed mixed pair. Production capability flags
+remain false until the power-cut HIL matrix demonstrates this behavior at every
+transition.
 
 ## Application kernel
 

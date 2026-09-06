@@ -23,8 +23,11 @@ boot/recovery state and fixed four-job/eight-event worker, and adds an encrypted
 paired-release journal. The journal binds the monotonic release sequence, pair
 identifier, running platform partition, trial runtime slot and previous runtime
 slot. Runtime health must be marked for that exact pair before guarded native
-OTA confirmation is possible. Rollback intent is persisted before the previous
-runtime is restored and bootloader rollback is requested.
+OTA confirmation is possible. The native core is made valid before the durable
+runtime pointer changes. Rollback intent is persisted before the runtime trial
+is discarded and bootloader rollback is requested. The running OTA image must
+read back as valid before the pair journal is confirmed; the application layer
+retains the exact confirmation phase and any error for post-reset diagnosis.
 
 ABI 5 turned logical resource claims into
 physical peripheral lifecycles. The native platform constructs GPIO, ADC,

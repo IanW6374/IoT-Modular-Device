@@ -491,9 +491,15 @@ static mp_obj_t iotmd_platform_v3_pair_prepare(size_t n_args,
     if (current.phase == IOTMD_V3_PAIR_PREPARED ||
             current.phase == IOTMD_V3_PAIR_TRIAL ||
             current.phase == IOTMD_V3_PAIR_ROLLBACK) {
-        nvs_close(nvs);
-        mp_raise_msg(&mp_type_RuntimeError,
-            MP_ERROR_TEXT("another paired update is pending"));
+        const esp_partition_t *running = iotmd_v3_running_partition();
+        bool stale_trial = (uint32_t)sequence > current.sequence &&
+            strcmp(current.pair_id, record.pair_id) != 0 &&
+            strcmp(record.platform_label, running->label) == 0;
+        if (!stale_trial) {
+            nvs_close(nvs);
+            mp_raise_msg(&mp_type_RuntimeError,
+                MP_ERROR_TEXT("another paired update is pending"));
+        }
     }
     if (current.phase == IOTMD_V3_PAIR_CONFIRMED &&
             (uint32_t)sequence <= current.sequence) {

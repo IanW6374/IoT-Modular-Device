@@ -2,11 +2,13 @@ import asyncio
 import hashlib
 import json
 import os
+import sys
 import tempfile
 import unittest
 import services.update_service as update_service
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import app_update
 import firmware_update
@@ -392,6 +394,125 @@ class UniversalUpdateTests(unittest.TestCase):
             universal_update.activate_pending(True)
         self.assertEqual(calls, ['firmware', 'application'])
         self.assertEqual(universal_update.trial_timeout_ms(), 420000)
+
+    def test_confirmation_failure_is_persisted_with_last_completed_phase(self):
+        Path(universal_update.STATE_PATH).write_text(json.dumps({
+            'status': 'activating', 'version': '3.0.0-alpha.12',
+            'confirmation_phase': 'pending',
+        }))
+        self.assertTrue(
+            universal_update.record_confirmation_phase('runtime-healthy')
+        )
+        self.assertEqual(
+            update_support.update_history()[-1]['event'],
+            'confirmation_phase',
+        )
+        universal_update.record_confirmation_failure(
+            OSError('native confirmation failed')
+        )
+        state = universal_update.update_status()
+        self.assertEqual(state['confirmation_phase'], 'runtime-healthy')
+        self.assertEqual(
+            state['confirmation_error'], 'native confirmation failed'
+        )
+        self.assertEqual(
+            update_support.update_history()[-1]['event'],
+            'confirmation_failed',
+        )
+        self.assertIn(
+            'runtime-healthy: native confirmation failed',
+            update_support.update_history()[-1]['detail'],
+        )
+
+    def test_newer_pair_supersedes_stale_native_trial(self):
+        Path(universal_update.STATE_PATH).write_text(json.dumps({
+            'status': 'activating', 'version': '3.0.0-alpha.12',
+            'release_sequence': 41, 'pair_id': 'iotmd-41',
+            'runtime_slot': 'b', 'previous_runtime_slot': 'a',
+        }))
+
+        class PairPlatform:
+            def __init__(self):
+                self.state = {
+                    'phase': 'trial', 'sequence': 40,
+                    'pair_id': 'iotmd-40', 'runtime_slot': 'b',
+                }
+
+            def update_snapshot(self):
+                return {'running_label': 'ota_0'}
+
+            def pair_snapshot(self):
+                return dict(self.state)
+
+            def prepare_pair(self, pair_id, sequence, platform, runtime, previous):
+                self.state = {
+                    'phase': 'prepared', 'sequence': sequence,
+                    'pair_id': pair_id, 'runtime_slot': runtime,
+                }
+
+            def begin_pair_trial(self, pair_id, runtime):
+                self.state['phase'] = 'trial'
+
+        platform = PairPlatform()
+        with (
+            patch.object(universal_update, '_native_platform', return_value=platform),
+            patch.object(app_update, 'update_status', return_value={
+                'status': 'trial', 'target_slot': 'b',
+            }),
+        ):
+            self.assertTrue(universal_update.begin_native_pair_trial())
+        self.assertEqual(platform.state['pair_id'], 'iotmd-41')
+        self.assertEqual(platform.state['sequence'], 41)
+        self.assertEqual(platform.state['phase'], 'trial')
+
+    def test_confirmed_native_pair_resumes_runtime_commit_after_power_loss(self):
+        Path(universal_update.STATE_PATH).write_text(json.dumps({
+            'status': 'activating', 'version': '3.0.0-alpha.12',
+            'release_sequence': 41, 'pair_id': 'iotmd-41',
+            'runtime_slot': 'b', 'previous_runtime_slot': 'a',
+        }))
+        platform = SimpleNamespace(
+            update_snapshot=lambda: {'running_label': 'ota_0'},
+            pair_snapshot=lambda: {
+                'phase': 'confirmed', 'sequence': 41,
+                'pair_id': 'iotmd-41', 'runtime_slot': 'b',
+            },
+        )
+        with (
+            patch.object(universal_update, '_native_platform', return_value=platform),
+            patch.object(app_update, 'update_status', return_value={
+                'status': 'committing', 'target_slot': 'b',
+            }),
+        ):
+            self.assertTrue(universal_update.begin_native_pair_trial())
+
+    def test_frozen_pair_boundary_does_not_require_application_adapter(self):
+        calls = []
+        provider = SimpleNamespace(
+            ABI_VERSION=6,
+            update_snapshot=lambda: {'running_label': 'ota_0'},
+            pair_snapshot=lambda: {'phase': 'trial'},
+            pair_prepare=lambda *args: calls.append(('prepare', args)) or {},
+            pair_begin_trial=lambda *args: calls.append(('begin', args)) or {},
+            pair_mark_runtime_healthy=lambda *args:
+                calls.append(('healthy', args)) or True,
+            pair_confirm=lambda *args: calls.append(('confirm', args)) or True,
+            pair_request_rollback=lambda *args:
+                calls.append(('rollback', args)) or {},
+            pair_complete_rollback=lambda *args:
+                calls.append(('complete', args)) or True,
+        )
+        with patch.dict(sys.modules, {'_iotmd_platform_v3': provider}):
+            platform = universal_update._native_platform()
+            self.assertEqual(
+                platform.update_snapshot()['running_label'], 'ota_0'
+            )
+            platform.prepare_pair('pair', 41, 'ota_0', 'b', 'a')
+            self.assertTrue(platform.confirm_pair('pair'))
+        self.assertEqual(calls, [
+            ('prepare', ('pair', 41, 'ota_0', 'b', 'a')),
+            ('confirm', ('pair',)),
+        ])
 
     def test_reconcile_clears_orphaned_activating_transaction_after_rollback(self):
         Path(universal_update.STATE_PATH).write_text(json.dumps({

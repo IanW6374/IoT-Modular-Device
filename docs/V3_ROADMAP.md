@@ -132,7 +132,7 @@ product, repeated incomplete boot, watchdog and OTA trial tests recover through
 the frozen core; queue saturation remains bounded; and controlled confirm and
 rollback tests produce correct events without selecting the wrong partition.
 
-Current status: `3.0.0-alpha.11` retains these mechanisms and host contracts.
+Current status: `3.0.0-alpha.12` retains these mechanisms and host contracts.
 The `paired_trial`, `native_rollback`, native recovery and native job
 qualification flags intentionally remain false pending the Alpha 7 HIL matrix.
 This release does not claim bare-ESP-IDF recovery from a corrupted confirmed
@@ -155,7 +155,7 @@ interrupt, failure and soft-restart tests; network fault tests establish service
 parity; and every enrollment/renewal/trust method passes recovery and
 interoperability tests without exposing key material.
 
-Current status: `3.0.0-alpha.11` retains and host-tests these mechanisms and
+Current status: `3.0.0-alpha.12` retains and host-tests these mechanisms and
 compiles ABI 6 into the production-secure ESP32-S3 core. Resource,
 transport-adapter and identity qualification remain open until HIL and shadow
 parity evidence is recorded. The v2.5 compatibility runtime therefore remains
@@ -178,12 +178,14 @@ fault campaigns; all physical, transport, identity, fleet, migration and driver
 matrices pass; and controlled active cutover persistently falls back after a
 failed v3 boot.
 
-Current status: `3.0.0-alpha.11` hardens mixed-pair rollback and OTA-valid
-confirmation, adds the executable product bootstrap, reconciles interrupted
-cutover state, makes migration staging durable and removes the v3 driver
-translator's v2 implementation dependency. It remains a HIL candidate, not
-evidence that the exit criteria have passed. Compatibility remains the default
-and active-v3 is still blocked.
+Current status: `3.0.0-alpha.12` prepares the native pair through a frozen direct
+ABI adapter, confirms the native core before committing the application pointer,
+persists the precise confirmation phase/error and permits a newer signed pair
+to supersede a stale trial journal. It retains the executable product bootstrap,
+interrupted-cutover reconciliation, durable migration staging and independent
+v3 driver translation. It remains a HIL candidate, not evidence that the exit
+criteria have passed. Compatibility remains the default and active-v3 is still
+blocked.
 
 ## Beta — operational qualification
 

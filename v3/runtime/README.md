@@ -10,11 +10,12 @@ The runtime owns product behavior:
 - fleet, audit, support and operational diagnostics; and
 - transport-neutral request, response and event models.
 
-Alpha 11 consumes native platform ABI 6 and configuration contract version 4.
+Alpha 12 consumes native platform ABI 6 and configuration contract version 4.
 The runtime drives the native paired journal through opaque primitive calls,
-marks the expected runtime slot healthy before native confirmation and restores
-the prior slot before requesting rollback. It also restores a committed runtime
-slot if the bootloader rejects its paired core. A product bootstrap owns the
+marks the expected runtime slot healthy before native confirmation and leaves
+the durable pointer on the prior slot until that confirmation succeeds. A failed
+native trial can therefore be discarded entirely by frozen recovery, including
+after a bootloader rollback to an older core. A product bootstrap owns the
 single production composition root, while interrupted cutover startup is
 durably latched to compatibility. Migration handle intents survive restart and
 the production driver translator is independent of v2 implementation modules.

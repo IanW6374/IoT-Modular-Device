@@ -8,9 +8,11 @@ native/runtime boundaries are qualified. Use the release-specific test note,
 including its monotonically increasing sequence and open HIL gates, before
 installing one.
 
-Alpha 11 requires a universal install because it changes both the frozen native
+Alpha 12 requires a universal install because it repairs both the frozen native
 confirmation path and replaceable runtime while retaining platform ABI 6 and
-runtime configuration version 4. It adds mixed-pair rollback restoration,
+runtime configuration version 4. It prepares the pair from frozen code, confirms
+the native core before committing the application pointer, persists confirmation
+failures and supersedes stale lower-sequence pair journals. Alpha 11 added mixed-pair rollback restoration,
 durable migration staging, interrupted-cutover reconciliation and the product
 bootstrap. Alpha 10 added the encrypted paired journal, frozen reconciliation
 and remaining-gate composition, shadow, migration and driver bridges. Alpha 9 added
@@ -204,7 +206,7 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha10.state.json \
   --evidence .qualification/alpha10.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.11 --sequence 2716 status
+  --device-id iot-md-001 --version 3.0.0-alpha.12 --sequence 2717 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
@@ -213,7 +215,7 @@ Monitor health over the mTLS Device API using the applicable JSON field paths:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha10.state.json \
   --evidence .qualification/alpha10.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.11 --sequence 2716 monitor \
+  --device-id iot-md-001 --version 3.0.0-alpha.12 --sequence 2717 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \

@@ -160,7 +160,7 @@ class RemainingGateTests(unittest.TestCase):
         self.assertTrue(snapshot['shadow']['side_effects'] is False)
         self.assertEqual(snapshot['health']['state'], 'healthy')
 
-    def test_paired_confirmation_commits_runtime_before_native_pair(self):
+    def test_paired_confirmation_commits_native_before_runtime_pointer(self):
         calls = []
         app = SimpleNamespace(
             update_status=lambda: {'status': 'trial'},
@@ -183,6 +183,10 @@ class RemainingGateTests(unittest.TestCase):
             confirm_native_pair=lambda: calls.append('confirm-native') or True,
             confirm_update=lambda: calls.append('confirm-universal') or True,
             rollback_native_pair=lambda reason: calls.append('rollback'),
+            record_confirmation_phase=lambda phase:
+                calls.append('phase:' + phase) or True,
+            record_confirmation_failure=lambda error:
+                calls.append('failure:' + str(error)),
         )
         recovery = SimpleNamespace(
             mark_application_healthy=lambda: calls.append('healthy')
@@ -194,8 +198,10 @@ class RemainingGateTests(unittest.TestCase):
             (True, True),
         )
         self.assertEqual(calls, [
-            'prepare-runtime', 'commit-runtime', 'confirm-native',
-            'commit-platform', 'confirm-universal', 'healthy',
+            'prepare-runtime', 'phase:runtime-healthy', 'confirm-native',
+            'phase:platform-confirmed', 'commit-platform',
+            'phase:platform-metadata', 'commit-runtime',
+            'phase:runtime-committed', 'confirm-universal', 'healthy',
         ])
 
     def test_paired_confirmation_failure_rolls_back_without_health_marker(self):
@@ -214,8 +220,12 @@ class RemainingGateTests(unittest.TestCase):
                 'firmware_required': True, 'application_sequence': 10,
                 'firmware_sequence': 10,
             },
-            confirm_native_pair=lambda: False,
+            confirm_native_pair=lambda: calls.append('confirm-native') or False,
             rollback_native_pair=lambda reason: calls.append('rollback'),
+            record_confirmation_phase=lambda phase:
+                calls.append('phase:' + phase) or True,
+            record_confirmation_failure=lambda error:
+                calls.append('failure:' + str(error)),
         )
         recovery = SimpleNamespace(
             mark_application_healthy=lambda: calls.append('healthy')
@@ -227,7 +237,8 @@ class RemainingGateTests(unittest.TestCase):
             (False, False),
         )
         self.assertEqual(calls, [
-            'prepare-runtime', 'commit-runtime', 'rollback',
+            'prepare-runtime', 'phase:runtime-healthy', 'confirm-native',
+            'failure:native paired trial is unavailable', 'rollback',
         ])
 
 

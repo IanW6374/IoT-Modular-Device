@@ -21,13 +21,11 @@ if gc is not None:
 # contiguous. Importing it after dozens of small modules fragmented the heap
 # and made a 17 KiB persistent-code allocation fail during a v2.3.5 trial.
 from portal_server import start_web_portal
-
 from binascii import hexlify
 import json
 import credential_security
 import credential_store
 import app_update
-import application_slot_recovery
 import application_upload
 import firmware_update
 import universal_update
@@ -959,8 +957,10 @@ def portal_status():
         boot_tracker.snapshot(), hardware_platform.capabilities()
     )
     update = app_update.update_status()
-    status['running_version'] = application_slot_recovery.executing_version(
-        app_update, device_settings.ha_device_info.get('sw', ''))
+    trial_version = (str(update.get('version', '')) if
+                     update.get('status') in ('trial', 'committing') else '')
+    status['running_version'] = trial_version or app_update.running_version(
+        device_settings.ha_device_info.get('sw', ''))
     status['base_version'] = hardware_platform.runtime_version()
     status['update_status'] = update.get('status', 'idle')
     status['update_version'] = update.get('version', '')

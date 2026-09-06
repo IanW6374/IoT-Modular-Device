@@ -167,6 +167,31 @@ class RecoveryBootTests(unittest.TestCase):
         self.assertIn('heap before load free=131072 allocated=524288', detail)
         self.assertIn('before execute free=98304 allocated=557056', detail)
 
+    def test_missing_native_pair_fails_back_before_application_import(self):
+        values, app, firmware = self.fake_modules(
+            'raise AssertionError("application must not run")\n'
+        )
+        failures = []
+        universal = SimpleNamespace(
+            cleanup_interrupted=lambda: None,
+            reconcile_pending=lambda: False,
+            update_status=lambda: {'status': 'activating'},
+            begin_native_pair_trial=lambda: False,
+            record_confirmation_failure=lambda error:
+                failures.append(str(error)),
+            rollback_native_pair=lambda reason: False,
+        )
+        with patch.dict(sys.modules, {
+            'app_update': app, 'firmware_update': firmware,
+            'universal_update': universal,
+        }), patch.object(recovery_boot, '_reset') as reset:
+            recovery_boot.run()
+
+        self.assertEqual(values['prepared'], 0)
+        self.assertEqual(values['app_rollbacks'], 1)
+        self.assertEqual(failures, ['native paired trial could not be prepared'])
+        reset.assert_called_once_with()
+
     def test_confirmed_application_exception_requests_core_recovery(self):
         values, app, firmware = self.fake_modules(
             'raise RuntimeError("broken confirmed app")\n', app_status='idle'
