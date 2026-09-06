@@ -124,6 +124,46 @@ def load_json_with_backup(path):
         raise error
 
 
+def commit_json_with_backup(value, target, temporary_suffix='.tmp'):
+    """Persist one JSON object atomically and verify its committed generation.
+
+    The previous generation is restored if either the prepared or committed
+    document cannot be read back exactly.  This gives settings transactions the
+    same interruption safety as upgrade state without silently accepting a
+    partial write.
+    """
+    if not isinstance(value, dict):
+        raise ValueError('JSON root must be an object')
+    temporary = target + temporary_suffix
+    remove_file(temporary)
+    committed = False
+    backup = ''
+    try:
+        with open(temporary, 'w') as stream:
+            json.dump(value, stream)
+        with open(temporary, 'r') as stream:
+            prepared = json.load(stream)
+        if prepared != value:
+            raise ValueError('prepared JSON did not match requested settings')
+        backup = commit_file_with_backup(temporary, target)
+        committed = True
+        with open(target, 'r') as stream:
+            persisted = json.load(stream)
+        if persisted != value:
+            raise ValueError('committed JSON did not match requested settings')
+        return persisted
+    except Exception:
+        remove_file(temporary)
+        if committed:
+            remove_file(target)
+            if backup:
+                try:
+                    _copy(backup, target)
+                except Exception:
+                    pass
+        raise
+
+
 def _read_history():
     try:
         with open(HISTORY_PATH, 'r') as stream:

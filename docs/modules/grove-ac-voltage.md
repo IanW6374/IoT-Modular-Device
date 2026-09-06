@@ -17,7 +17,9 @@ pin against the board schematic and every other configured module.
 
 The main `voltage` entity can be accompanied by `ac_present`, ADC and error
 diagnostics. Calibrate from **Module > Diagnostics** using a trusted meter; the
-calculated multiplier is persisted with module configuration. Start from the complete
+calculated multiplier is committed atomically to module configuration, read
+back before success is reported, and shown in diagnostics. The previous
+settings generation remains available if the transaction fails. Start from the complete
 [example configuration](../../examples/module_settings.grove_ac_voltage.example.json).
 
 ## State, commands and diagnostics

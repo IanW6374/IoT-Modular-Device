@@ -116,6 +116,25 @@ class UpdateSecurityTests(unittest.TestCase):
             json.loads(Path('module_settings.json').read_text()), recovered
         )
 
+    def test_shared_json_commit_is_verified_and_retains_previous_generation(self):
+        previous = {'devices': [{'name': 'old'}]}
+        current = {'devices': [{'name': 'new', 'calibration': 712.5}]}
+        Path('module_settings.json').write_text(json.dumps(previous))
+
+        persisted = update_support.commit_json_with_backup(
+            current, 'module_settings.json', '.calibration'
+        )
+
+        self.assertEqual(persisted, current)
+        self.assertEqual(
+            json.loads(Path('module_settings.json').read_text()), current
+        )
+        self.assertEqual(
+            json.loads(Path('module_settings.json.previous').read_text()),
+            previous
+        )
+        self.assertFalse(Path('module_settings.json.calibration').exists())
+
     def test_signed_manifest_is_required_after_key_provisioning(self):
         source = Path('source.py')
         source.write_text('VALUE = 1')

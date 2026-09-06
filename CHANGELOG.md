@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.15 - 2026-09-08
+
+- Simplify manual upgrade staging to one file-specific vertical workflow and
+  one current-task progress area. Hide the selected file once staging starts,
+  keep Cancel and the state-aware primary action at the lower right, and make
+  Cancel return to file selection.
+- Persist Grove AC Voltage calibration through an atomic, read-back-verified
+  settings transaction while retaining the previous settings generation for
+  recovery.
+- Display the active Grove AC calibration multiplier and offset in module
+  diagnostics, and show calibration success or persistence failure on the same
+  diagnostics page.
+- Retain whole-tile keyboard focus and pointer feedback for linked overview
+  metrics without changing the semantic status colours of their text.
+- Retain Alpha 14's portal consistency work and Alpha 13's paired-update state
+  migration without changing native platform ABI 6.
+
 ## 3.0.0-alpha.14 - 2026-09-06
 
 - Make overview health and service metrics direct links to their relevant

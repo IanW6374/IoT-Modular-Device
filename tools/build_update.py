@@ -38,6 +38,7 @@ CORE_FILES = (
     'web_portal.py',
     'portal_http.py',
     'portal_live_views.py',
+    'portal_module_transport.py',
     'portal_presenters.py',
     'portal_settings_views.py',
     'api_security.py',

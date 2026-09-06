@@ -72,7 +72,7 @@ handle. Confirmation fails unless the running partition and healthy runtime
 match the persisted pair. Implementation presence remains separate from
 release-bound qualification evidence.
 
-Alpha 14 retains ABI 6. Frozen recovery code upgrades older activating
+Alpha 15 retains ABI 6. Frozen recovery code upgrades older activating
 transaction records and accesses that ABI directly when it prepares the pair,
 so it does not depend on an application-slot adapter before the slot is
 available. The native OTA-valid readback still precedes committing

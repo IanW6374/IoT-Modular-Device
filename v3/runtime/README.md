@@ -10,7 +10,7 @@ The runtime owns product behavior:
 - fleet, audit, support and operational diagnostics; and
 - transport-neutral request, response and event models.
 
-Alpha 14 consumes native platform ABI 6 and configuration contract version 4.
+Alpha 15 consumes native platform ABI 6 and configuration contract version 4.
 It normalises activating state created by pre-ABI-6 frozen coordinators before
 the runtime drives the native paired journal through opaque primitive calls,
 marks the expected runtime slot healthy before native confirmation and leaves

@@ -9,6 +9,7 @@ from unittest import mock
 import web_portal
 import portal_http
 import portal_live_views
+import portal_module_transport
 from portal_contracts import PortalDependencies
 import credential_security
 import http_support
@@ -319,6 +320,8 @@ class WebPortalTests(unittest.TestCase):
         )
         self.assertIn('href="/messaging" aria-label="Open MQTT"', overview)
         self.assertIn('href="/device-api" aria-label="Open Device API"', overview)
+        self.assertIn('.metric-link:focus-visible{outline:3px solid', portal_ui.PORTAL_CSS)
+        self.assertIn('.metric-link{color:inherit;text-decoration:none;cursor:pointer', portal_ui.PORTAL_CSS)
     def test_http_request_parser_rejects_oversized_and_ambiguous_headers(self):
         class Reader:
             def __init__(self, lines):
@@ -1673,6 +1676,39 @@ class WebPortalTests(unittest.TestCase):
         self.assertTrue(logs[0][2]['force'])
         self.assertEqual(logs[0][3], 'INFO')
 
+    def test_calibration_result_is_rendered_after_snapshot_refresh(self):
+        responses = []
+
+        class Snapshot:
+            def __init__(self):
+                self.invalidated = False
+
+            def invalidate(self):
+                self.invalidated = True
+
+            def get(self):
+                self.assert_invalidated()
+                return []
+
+            def assert_invalidated(self):
+                if not self.invalidated:
+                    raise AssertionError('module snapshot was not refreshed')
+
+        async def send(_writer, status, body, _content_type=None):
+            responses.append((status, body))
+
+        snapshot = Snapshot()
+        asyncio.run(portal_module_transport.handle_calibration(
+            '/calibrate', {'uuid': '0001'},
+            lambda _action, _params: 'Calibration failed to persist: disk full',
+            lambda *_args: None, snapshot, 'csrf', 5000,
+            'administrator', object(), send
+        ))
+
+        self.assertTrue(snapshot.invalidated)
+        self.assertEqual(responses[0][0], '400 Bad Request')
+        self.assertIn('Calibration failed to persist: disk full', responses[0][1])
+
     def test_failed_upgrade_action_is_logged_as_error(self):
         logs = []
         result = apply_portal_action(
@@ -1849,7 +1885,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('action="/calibrate"', html)
         self.assertIn('action="/ems-debug"', html)
         self.assertEqual(html.count('disabled aria-disabled="true"'), 8)
-        self.assertIn('<button type="submit" title="Calculate a new in-memory calibration multiplier for this module." disabled aria-disabled="true"', html)
+        self.assertIn('<button type="submit" title="Calculate and persist a calibration multiplier for this module." disabled aria-disabled="true"', html)
 
     def test_operator_module_actions_remain_enabled(self):
         html = web_portal.render_modules_html([{
@@ -1950,6 +1986,10 @@ class WebPortalTests(unittest.TestCase):
         diagnostics = web_portal.render_module_diagnostics_page(
             'abc', modules, 3000
         )
+        calibrated = web_portal.render_module_diagnostics_page(
+            'abc', modules, 3000, 'administrator',
+            'Calibration set to 712.5 for module 0001'
+        )
         updates = web_portal.render_updates_page(
             'abc', status, {
                 'release_channel': 'beta',
@@ -1968,6 +2008,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('id="logs"', diagnostics)
         self.assertIn('Read duration (ms)', diagnostics)
         self.assertIn('action="/ems-debug"', diagnostics)
+        self.assertIn('Calibration set to 712.5 for module 0001', calibrated)
         self.assertIn('fetch("/api/module-diagnostics"', diagnostics)
 
         self.assertIn('<h1>Device log</h1>', logging)
@@ -1994,7 +2035,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('.iotuni recommended; component files are for recovery.', updates)
         self.assertNotIn('Universal .iotuni upgrades are recommended;', updates)
         self.assertIn('name="release_channel"', updates)
-        self.assertIn('id="update-progress"', updates)
+        self.assertNotIn('id="update-progress"', updates)
+        self.assertIn('id="update-file-selection"', updates)
         self.assertIn('class="manual-upgrade-workspace"', updates)
         self.assertIn('id="update-cancel"', updates)
         self.assertIn('<strong>Current task</strong>', updates)
@@ -2006,7 +2048,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Prepare and hash file', updates)
         self.assertIn('Pair verified components', updates)
         self.assertIn('renderWorkflow(workflowKind(selected))', updates)
-        self.assertIn('class="status-spinner"', updates)
+        self.assertNotIn('class="status-spinner"', updates)
+        self.assertIn('fileSelection.hidden=true', updates)
+        self.assertIn('fileSelection.hidden=false', updates)
         self.assertNotIn('<progress', updates)
         self.assertIn('/resumable-upload-chunk', updates)
         self.assertIn('/universal-upload-prepare', updates)
@@ -2015,7 +2059,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('kind=universal?"universal"', updates)
         self.assertIn('received_bytes', updates)
         self.assertIn('Writing firmware ', updates)
-        self.assertIn('Completed: upload · firmware write', updates)
+        self.assertNotIn('Completed: upload · firmware write', updates)
         self.assertIn('Verification complete', updates)
         self.assertIn('setTimeout(poll,1000)', updates)
         self.assertIn('f.slice(offset,end)', updates)
@@ -2026,7 +2070,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('out.textContent=text', updates)
         self.assertNotIn('out.appendChild(line)', updates)
         self.assertIn('Checking uploaded ', updates)
-        self.assertIn('previous("Completed: upload");startPolling()', updates)
+        self.assertNotIn('previous(', updates)
         self.assertNotIn('Writing firmware on device', updates)
         self.assertIn('Verifying signed ', updates)
         self.assertIn('"Uploading "+componentName(kind)+" "+percent+"%"', updates)
@@ -2081,7 +2125,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Seconds since state was last published to Home Assistant over MQTT.', html)
         self.assertIn('title="Republish Home Assistant MQTT discovery config for all loaded entities."', html)
         self.assertIn('title="ERROR is quiet, INFO is normal, DEBUG includes MQTT detail."', html)
-        self.assertIn('title="Calculate a new in-memory calibration multiplier for this module."', html)
+        self.assertIn('title="Calculate and persist a calibration multiplier for this module."', html)
         self.assertIn('action="/ems-debug"', html)
         self.assertIn('Enable debug frames', html)
         self.assertIn('title="Enable or disable verbose EMS UART frame logging."', html)
@@ -2383,8 +2427,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('action="/activate-update"', universal)
         self.assertNotIn('action="/activate-firmware"', universal)
         self.assertNotIn('Upload and verify', ready)
-        self.assertIn('Application uploaded and verified. Ready for activation.', ready)
-        self.assertIn('class="task-progress complete"', ready)
+        self.assertNotIn('Application uploaded and verified. Ready for activation.', ready)
+        self.assertNotIn('id="update-ready"', ready)
+        self.assertNotIn('class="task-progress complete"', ready)
         self.assertIn('class="actions manual-upgrade-buttons"', ready)
         self.assertIn('action="/discard-update"', ready)
         self.assertIn('Activate and reboot', ready)

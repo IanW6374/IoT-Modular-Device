@@ -127,6 +127,23 @@ class GroveACVoltageTests(unittest.TestCase):
         self.assertEqual(result['calibration'], 2000)
         self.assertEqual(self.driver.device['ac_voltage']['calibration'], 2000)
 
+    def test_runtime_calibration_attaches_missing_configuration(self):
+        config = device_config()
+        del config['ac_voltage']
+        driver = self.module.GroveACVoltageDriver(config, {'adc': self.adc})
+        driver._update_entities({'voltage': 50})
+
+        result = driver.set_calibration({'known_voltage': '100'})
+
+        self.assertTrue(result['ok'])
+        self.assertEqual(config['ac_voltage']['calibration'], 1400)
+
+    def test_diagnostics_expose_active_calibration(self):
+        diagnostics = self.driver.diagnostics_payload()
+
+        self.assertEqual(diagnostics['calibration'], 1000)
+        self.assertEqual(diagnostics['calibration_offset'], 0)
+
     def test_binary_discovery_uses_binary_sensor_component(self):
         discovery, _ = self.driver.get_discovery_payloads('abc', 'Voltage Monitor')
 

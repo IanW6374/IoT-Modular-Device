@@ -31,6 +31,7 @@ import web_portal_ui as portal_ui
 import http_support
 import timezone_rules
 import portal_auth
+import portal_module_transport
 from portal_view_models import overview_metrics, update_check_summary
 from portal_sessions import PortalSessions
 from device_modules.base import module_diagnostics_need_attention
@@ -59,8 +60,6 @@ _UPDATE_PROGRESS_PHASES = (
     'writing', 'verification', 'firmware_writing',
     'firmware_verification', 'application_verification', 'compacting'
 )
-
-
 def update_progress_reporter(record):
     """Return a byte-based progress callback backed by a shared record."""
     async def report(phase, completed=0, total=0):
@@ -1038,8 +1037,9 @@ async def start_web_portal(portal):
                 apply_portal_action('discover', action_path, action_handler, log_output, form_params)
                 await send_redirect(writer, '/')
             elif method == 'POST' and path.startswith('/calibrate'):
-                apply_portal_action('calibrate', action_path, action_handler, log_output, form_params)
-                await send_redirect(writer, '/diagnostics')
+                await portal_module_transport.handle_calibration(
+                    action_path, form_params, action_handler, log_output, module_snapshot, csrf_token,
+                    value_refresh_ms, session_role, writer, send_response)
             elif method == 'POST' and path.startswith('/ems-debug'):
                 apply_portal_action('ems-debug', action_path, action_handler, log_output, form_params)
                 await send_redirect(writer, '/diagnostics')

@@ -5,7 +5,7 @@ publishes a calibrated RMS voltage. The optional threshold entity is exposed as
 a Home Assistant binary_sensor while sharing the same MQTT state payload.
 """
 
-MODULE_VERSION = 1
+MODULE_VERSION = 2
 
 from machine import ADC, Pin
 try:
@@ -207,7 +207,7 @@ class GroveACVoltageDriver(DeviceDriver):
             return {'ok': False, 'error': 'current voltage must be greater than zero'}
 
         self.calibration = round((self.calibration * known_voltage) / measured_voltage, 6)
-        cfg = self.device.get('ac_voltage', {})
+        cfg = self.device.setdefault('ac_voltage', {})
         cfg['calibration'] = self.calibration
         self._log('Calibration set to ' + str(self.calibration), 'INFO')
         return {
@@ -216,6 +216,12 @@ class GroveACVoltageDriver(DeviceDriver):
             'known_voltage': known_voltage,
             'measured_voltage': measured_voltage
         }
+
+    def diagnostics_payload(self):
+        payload = super().diagnostics_payload()
+        payload['calibration'] = self.calibration
+        payload['calibration_offset'] = self.offset
+        return payload
 
     def _sample_adc(self):
         values = []

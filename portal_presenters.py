@@ -41,6 +41,8 @@ FRIENDLY_LABELS = {
     'ems_bus_protocol': 'Detected EMS bus protocol',
     'adc_rms': 'ADC RMS', 'adc_midpoint': 'ADC midpoint',
     'adc_min': 'ADC minimum', 'adc_max': 'ADC maximum',
+    'module_calibration': 'Calibration multiplier',
+    'module_calibration_offset': 'Calibration offset',
     'ac_voltage_error': 'AC voltage error', 'rtd_raw': 'RTD raw value',
     'fault_code': 'Fault code',
 }

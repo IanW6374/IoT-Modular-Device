@@ -8,11 +8,13 @@ native/runtime boundaries are qualified. Use the release-specific test note,
 including its monotonically increasing sequence and open HIL gates, before
 installing one.
 
-Alpha 14 uses the Alpha 13 universal update path and improves the operator-facing
-manual workflow without changing its signed staging or activation semantics.
-The selected `.iotapp`, `.iotcore` or `.iotuni` file now previews its exact
-workflow, and **Upload and stage** accurately describes the action. Alpha 13
-requires a universal install because it upgrades activating transaction state
+Alpha 15 uses the Alpha 13 universal update path and further simplifies the
+operator-facing manual workflow without changing its signed staging or
+activation semantics. The file selector is hidden after staging begins, Cancel
+returns to selection, and one progress area complements the file-specific
+vertical workflow. Alpha 14 introduced that file-specific preview and
+**Upload and stage** action. Alpha 13 requires a universal install because it
+upgrades activating transaction state
 written by older frozen coordinators before invoking the native ABI. It retains
 Alpha 12's direct frozen pair preparation, native-first confirmation,
 failure persistence and stale-journal handling while retaining platform ABI 6
@@ -210,7 +212,7 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha10.state.json \
   --evidence .qualification/alpha10.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.14 --sequence 2719 status
+  --device-id iot-md-001 --version 3.0.0-alpha.15 --sequence 2720 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
@@ -219,7 +221,7 @@ Monitor health over the mTLS Device API using the applicable JSON field paths:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha10.state.json \
   --evidence .qualification/alpha10.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.14 --sequence 2719 monitor \
+  --device-id iot-md-001 --version 3.0.0-alpha.15 --sequence 2720 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \

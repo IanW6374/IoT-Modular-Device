@@ -1961,10 +1961,9 @@ def portal_action(action, params):
                 )
                 if errors:
                     raise ValueError('; '.join(errors))
-                temporary = moduleSettingsFile + '.calibration'
-                with open(temporary, 'w') as stream:
-                    json.dump(candidate, stream)
-                update_support.commit_file_with_backup(temporary, moduleSettingsFile)
+                update_support.commit_json_with_backup(
+                    candidate, moduleSettingsFile, '.calibration'
+                )
             except Exception as exc:
                 if previous_calibration is not None:
                     driver.calibration = previous_calibration

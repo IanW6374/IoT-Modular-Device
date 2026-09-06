@@ -187,7 +187,7 @@ def render_modules_parts(modules, token):
                 '<input type="hidden" name="uuid" value="' + html_escape(module.get('uuid', '')) + '">' +
                 '<label title="Enter the voltage measured with a trusted meter.">Known voltage ' +
                 '<input name="known_voltage" inputmode="decimal" size="6" placeholder="240" title="Voltage currently measured at the sensor input."></label>' +
-                '<button type="submit" title="Calculate a new in-memory calibration multiplier for this module.">Calibrate</button></form>'
+                '<button type="submit" title="Calculate and persist a calibration multiplier for this module.">Calibrate</button></form>'
             )
 
         debug_frames = ''
@@ -761,12 +761,12 @@ def render_logging_settings_page(token, settings, message='', error=False):
     )
 
 def render_module_diagnostics_page(token, modules, value_refresh_ms=5000,
-                                   role='administrator'):
+                                   role='administrator', message='', error=False):
     body = (
         portal_ui.page_heading(
             'Module', 'Diagnostics',
             'Review live values, health information and controls for loaded modules.'
-        ) +
+        ) + _notice(message, error) +
         '<div id="module-diagnostics">' +
         render_modules_html(modules or [], token, role) + '</div>'
         '<div class="actions"><span></span><a class="button secondary" '
@@ -858,7 +858,8 @@ def update_upload_script():
     return (
         'var uploadForm=document.getElementById("update-upload-form"),csrfToken=uploadForm.dataset.csrf,'
         'cancelButton=document.getElementById("update-cancel"),primaryButton=document.getElementById('
-        '"update-primary"),activeRequest=null,updateCancelled=false,pollTimer=null,stageList='
+        '"update-primary"),fileSelection=document.getElementById("update-file-selection"),'
+        'activeRequest=null,updateCancelled=false,pollTimer=null,stageList='
         'document.getElementById("update-stage-list"),workflows={application:[["prepare","Prepare and hash file"],'
         '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
         '["ready","Ready for activation"]],firmware:[["prepare","Prepare and hash file"],'
@@ -881,15 +882,14 @@ def update_upload_script():
         'cancelButton.onclick=function(){updateCancelled=true;if(pollTimer)clearTimeout(pollTimer);'
         'if(activeRequest)activeRequest.abort();uploadForm.reset();document.getElementById("update-file-name").textContent='
         '"No file selected";cancelButton.disabled=true;primaryButton.disabled=false;primaryButton.textContent="Upload and stage";'
-        'renderWorkflow("");'
-        'var box=document.getElementById("update-progress");box.hidden=true;document.getElementById("update-overall").hidden=true;'
-        'document.getElementById("update-result").className="status-history";document.getElementById("update-result").textContent='
-        '"Upgrade cancelled. No staged release was activated.";};'
+        'renderWorkflow("");fileSelection.hidden=false;var box=document.getElementById("update-overall");box.hidden=true;'
+        'box.classList.remove("complete","failed");document.getElementById("update-result").className="portal-status";'
+        'document.getElementById("update-result").textContent="";};'
         'uploadForm.onsubmit=function(e){e.preventDefault();updateCancelled=false;primaryButton.disabled=true;'
         'primaryButton.textContent="Working…";cancelButton.disabled=false;var input='
         'document.getElementById("update-bundle"),f=input.files&&input.files[0],out=document.getElementById('
-        '"update-result"),box=document.getElementById("update-progress"),'
-        'label=box.querySelector(".status-text"),overall=document.getElementById("update-overall"),'
+        '"update-result"),overall=document.getElementById("update-overall"),box=overall,'
+        'label=document.getElementById("update-overall-label"),'
         'overallLabel=document.getElementById("update-overall-label"),overallBar=document.getElementById('
         '"update-overall-bar"),overallFill=document.getElementById("update-overall-fill");if(!f){portalRequire(input,'
         '"Choose a .iotapp, .iotcore or .iotuni upgrade bundle");primaryButton.disabled=false;'
@@ -906,32 +906,27 @@ def update_upload_script():
         'var taskValue=Math.round(fraction*100);overallFill.style.width=taskValue+"%";'
         'overallBar.setAttribute("aria-valuenow",String(taskValue));'
         'overallLabel.textContent="Step "+(index+1)+" of "+flow.length+" · "+flow[index][1];}'
-        'function previous(text){if(out.dataset.last===text)return;out.textContent=text;out.dataset.last=text;}'
-        'function failure(text){out.className="status-history failed";out.textContent=text;}'
+        'function failure(text){out.className="portal-status error";out.textContent=text;}'
         'if(!firmware&&!application&&!universal){failure("Choose a .iotapp, .iotcore or .iotuni upgrade bundle.");'
         'primaryButton.disabled=false;primaryButton.textContent="Upload and stage";return;}'
         'var selectedKind=universal?"universal":(firmware?"firmware":"application");configureWorkflow(selectedKind);'
-        'box.classList.remove("complete","failed");box.hidden=false;label.textContent=universal?"Inspecting universal bundle…":'
-        '"Preparing file…";out.className="status-history";out.replaceChildren();delete out.dataset.last;'
+        'fileSelection.hidden=true;box.classList.remove("complete","failed");box.hidden=false;label.textContent=universal?'
+        '"Inspecting universal bundle…":"Preparing file…";out.className="portal-status";out.replaceChildren();'
         'var id="",polling=false,finished=false;function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
         'function startPolling(){if(polling)return;polling=true;poll();}function poll(){fetch("/update-progress?id="+encodeURIComponent(id),'
         '{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){location.replace('
         '"/login");return null;}return r.json();}).then(function(s){if(!s)return;if(s.phase==="writing"){'
-        'label.textContent="Writing firmware "+(s.percent||0)+"%";setStage("write_core",(s.percent||0)/100);'
-        'previous("Completed: upload");}'
+        'label.textContent="Writing firmware "+(s.percent||0)+"%";setStage("write_core",(s.percent||0)/100);}'
         'else if(s.phase==="verification"){label.textContent="Verifying "+(s.percent||0)+"%";'
-        'setStage(firmware?"verify_core":"verify_application",(s.percent||0)/100);'
-        'previous(firmware?"Completed: upload · firmware write":"Completed: upload · application staging");}'
+        'setStage(firmware?"verify_core":"verify_application",(s.percent||0)/100);}'
         'else if(s.phase==="firmware_writing"){label.textContent="Writing core firmware "+(s.percent||0)+"%";'
-        'setStage("write_core",(s.percent||0)/100);previous("Completed: universal upload");}'
+        'setStage("write_core",(s.percent||0)/100);}'
         'else if(s.phase==="firmware_verification"){'
-        'label.textContent="Verifying core firmware "+(s.percent||0)+"%";setStage("verify_core",(s.percent||0)/100);'
-        'previous("Completed: universal upload · core write");}'
+        'label.textContent="Verifying core firmware "+(s.percent||0)+"%";setStage("verify_core",(s.percent||0)/100);}'
         'else if(s.phase==="application_verification"){label.textContent="Verifying application "+(s.percent||0)+"%";'
-        'setStage("verify_application",(s.percent||0)/100);'
-        'previous("Completed: universal upload · core write and verification · application staging");}'
+        'setStage("verify_application",(s.percent||0)/100);}'
         'else if(s.phase==="complete"){finished=true;box.classList.add("complete");label.textContent="Verification complete";'
-        'setStage("ready",1);previous("Completed: signed verification");'
+        'setStage("ready",1);'
         'setTimeout(function(){location.replace("/updates");},900);return;}else if(s.phase==="failed"){'
         'finished=true;box.classList.add("failed");label.textContent="Failed";failure(s.message||"Verification failed");return;}'
         'schedulePoll();}).catch(function(){schedulePoll();});}'
@@ -951,7 +946,7 @@ def update_upload_script():
         'request.onloadend=function(){if(activeRequest===request)activeRequest=null;};request.send(blob);});}'
         'function sendChunk(offset){var uploadStage=firmware?"upload_core":"upload_application";if(offset>=f.size){'
         'setStage(uploadStage,1);label.textContent="Checking uploaded "+(firmware?"core firmware":"application")+" bytes";'
-        'previous("Completed: upload");startPolling();'
+        'startPolling();'
         'return fetch("/resumable-upload-complete",{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify({id:id})}).then(function(r){'
         'if(r.status===401){location.replace("/login");return;}if(r.status===202||r.ok){startPolling();return;}return r.text().then(function(t){'
@@ -996,16 +991,16 @@ def update_upload_script():
         'prefix+firmwareSize+applicationSize!==f.size)throw new Error("Universal update length does not match its manifest");'
         'return jsonPost("/universal-upload-prepare",{manifest:manifest}).then(function(plan){setStage("inspect",1);'
         'var sequence=Promise.resolve();'
-        'if(plan.firmware&&plan.firmware.required){sequence=sequence.then(function(){previous("Universal manifest verified");'
+        'if(plan.firmware&&plan.firmware.required){sequence=sequence.then(function(){'
         'setStage("upload_core",0);'
         'return uploadUniversalComponent(f.slice(prefix,prefix+firmwareSize),"firmware",String(manifest.firmware.sha256),plan.id);});}'
-        'if(plan.application&&plan.application.required){sequence=sequence.then(function(){previous("Core component verified");'
+        'if(plan.application&&plan.application.required){sequence=sequence.then(function(){'
         'setStage("upload_application",0);'
         'return uploadUniversalComponent(f.slice(prefix+firmwareSize),"application",String(manifest.application.sha256),plan.id);});}'
         'return sequence.then(function(){setStage("pair",0);label.textContent="Pairing verified components";return jsonPost('
         '"/universal-upload-finalize",{id:plan.id});});});});});}'
         'if(universal){startUniversalUpload().then(function(){finished=true;box.classList.add("complete");label.textContent='
-        '"Universal verification complete";setStage("ready",1);previous("Core and application paired for activation");setTimeout(function(){location.replace('
+        '"Universal verification complete";setStage("ready",1);setTimeout(function(){location.replace('
         '"/updates");},900);}).catch(function(err){if(updateCancelled)return;finished=true;box.classList.add("failed");label.textContent="Failed";failure('
         'err&&err.message?err.message:"Universal upload failed");});return;}'
         'setStage("prepare",0);label.textContent="Preparing and hashing file…";requestAnimationFrame(function(){'
@@ -1029,11 +1024,6 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
     automatic_action = render_release_check_html(status, token)
     script = update_preferences_script()
     if activation:
-        completed = []
-        if status.get('update_status') == 'ready':
-            completed.append('Application uploaded and verified')
-        if status.get('firmware_update_status') == 'ready':
-            completed.append('Firmware written and verified')
         ready_steps = (
             'Inspect signed release', 'Upload components',
             'Verify components', 'Pair core and application', 'Activate and reboot'
@@ -1047,11 +1037,8 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
                 '<li class="' + ('complete' if index < len(ready_steps) - 1 else 'active') + '">' +
                 html_escape(label) + '</li>'
                 for index, label in enumerate(ready_steps)
-            ) + '</ol></aside><div class="upgrade-operation">' +
-            portal_ui.progress(
-                'update-ready', '; '.join(completed) + '. Ready for activation.',
-                False, 'complete'
-            ) + '<div class="actions manual-upgrade-buttons">'
+            ) + '</ol></aside><div class="upgrade-operation">'
+            '<div class="actions manual-upgrade-buttons">'
             '<form action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
             html_escape(token) + '"><button class="secondary" type="submit">Cancel</button></form>' +
             activation + '</div></div></div>'
@@ -1063,18 +1050,17 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
             '<li class="active">Select signed file</li><li>Upload release</li>'
             '<li>Verify and stage</li><li>Activate and reboot</li></ol></aside>'
             '<div class="upgrade-operation"><form id="update-upload-form" data-csrf="' + html_escape(token) + '">'
-            '<div><input id="update-bundle" class="file-input-hidden" type="file" required '
+            '<div id="update-file-selection"><input id="update-bundle" class="file-input-hidden" type="file" required '
             'accept=".iotapp,.iotcore,.iotuni"><label class="button secondary file-button" for="update-bundle">'
             'Choose upgrade file</label> <span id="update-file-name" class="file-name">No file selected</span>'
-            '<span class="file-guidance"> — .iotuni recommended; component files are for recovery.</span></div>' +
-            portal_ui.progress('update-progress', '0%', True) +
+            '<span class="file-guidance"> — .iotuni recommended; component files are for recovery.</span></div>'
             '<div id="update-overall" class="upgrade-overall" hidden>'
             '<div class="upgrade-overall-head"><strong>Current task</strong>'
             '<span id="update-overall-label">Waiting to start</span></div>'
             '<div id="update-overall-bar" class="upgrade-overall-track" role="progressbar" '
             'aria-label="Current upgrade task progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
             '<span id="update-overall-fill" class="upgrade-overall-fill"></span></div></div>' +
-            '<p id="update-result" class="status-history" role="status" aria-live="polite"></p>'
+            '<p id="update-result" class="portal-status" role="status" aria-live="polite"></p>'
             '<div class="actions manual-upgrade-buttons"><button id="update-cancel" class="secondary" '
             'type="button" disabled>Cancel</button><button id="update-primary" type="submit">'
             'Upload and stage</button></div></form></div></div>'
