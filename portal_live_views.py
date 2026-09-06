@@ -414,6 +414,21 @@ def render_update_actions_html(status, token):
 def render_overview_status(status):
     status = status or {}
     values = []
+    metric_routes = {
+        'device_name': '/settings',
+        'device_state': '/health-history',
+        'network_transport': '/settings',
+        'wifi_ip': '/settings',
+        'mqtt': '/messaging',
+        'api': '/device-api',
+        'syslog': '/logging-settings',
+        'hardware_resources': '/diagnostics',
+        'uptime_s': '/health-history',
+        'running_version': '/updates',
+        'firmware_running_version': '/updates',
+        'base_version': '/updates',
+        'release_qualification_summary': '/release-qualification',
+    }
     for metric in overview_metrics(status):
         key = metric['key']
         label = metric['label']
@@ -437,9 +452,16 @@ def render_overview_status(status):
                 ' good' if lowered == 'ready' else
                 (' bad' if lowered in ('blocked', 'unavailable') else ' warn')
             )
+        route = metric_routes.get(key)
+        content = (
+            '<span>' + html_escape(label) + '</span><strong>' +
+            html_escape(value) + '</strong>'
+        )
         values.append(
-            '<div class="metric' + tone + '"><span>' + label +
-            '</span><strong>' + html_escape(value) + '</strong></div>'
+            '<a class="metric' + tone + ' metric-link" href="' +
+            html_escape(route) + '" aria-label="Open ' + html_escape(label) +
+            '">' + content + '</a>' if route else
+            '<div class="metric' + tone + '">' + content + '</div>'
         )
     return '<div id="overview-status" class="metrics">' + ''.join(values) + '</div>'
 
@@ -836,13 +858,30 @@ def update_upload_script():
     return (
         'var uploadForm=document.getElementById("update-upload-form"),csrfToken=uploadForm.dataset.csrf,'
         'cancelButton=document.getElementById("update-cancel"),primaryButton=document.getElementById('
-        '"update-primary"),activeRequest=null,updateCancelled=false,pollTimer=null;'
-        'document.getElementById("update-bundle").onchange=function(){document.getElementById('
+        '"update-primary"),activeRequest=null,updateCancelled=false,pollTimer=null,stageList='
+        'document.getElementById("update-stage-list"),workflows={application:[["prepare","Prepare and hash file"],'
+        '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
+        '["ready","Ready for activation"]],firmware:[["prepare","Prepare and hash file"],'
+        '["upload_core","Upload core firmware"],["write_core","Write core firmware"],'
+        '["verify_core","Verify core firmware"],["ready","Ready for activation"]],universal:'
+        '[["inspect","Inspect paired manifest"],["upload_core","Upload core firmware"],'
+        '["write_core","Write core firmware"],["verify_core","Verify core firmware"],'
+        '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
+        '["pair","Pair verified components"],["ready","Ready for activation"]]},defaultWorkflow='
+        '[["select","Select signed file"],["upload","Upload release"],["verify","Verify and stage"],'
+        '["activate","Activate and reboot"]];'
+        'function workflowKind(file){if(!file)return "";return /\\.iotuni$/i.test(file.name)?"universal":'
+        '(/\\.iotcore$/i.test(file.name)?"firmware":(/\\.iotapp$/i.test(file.name)?"application":""));}'
+        'function renderWorkflow(kind){var items=workflows[kind]||defaultWorkflow;stageList.replaceChildren();'
+        'items.forEach(function(item,index){var li=document.createElement("li");li.textContent=item[1];'
+        'li.dataset.stage=item[0];if(index===0)li.className="active";stageList.appendChild(li);});}'
+        'document.getElementById("update-bundle").onchange=function(){var selected=this.files&&this.files[0];document.getElementById('
         '"update-file-name").textContent=this.files&&this.files[0]?this.files[0].name:"No file selected";'
-        'cancelButton.disabled=!(this.files&&this.files[0]);};'
+        'cancelButton.disabled=!selected;renderWorkflow(workflowKind(selected));};'
         'cancelButton.onclick=function(){updateCancelled=true;if(pollTimer)clearTimeout(pollTimer);'
         'if(activeRequest)activeRequest.abort();uploadForm.reset();document.getElementById("update-file-name").textContent='
-        '"No file selected";cancelButton.disabled=true;primaryButton.disabled=false;primaryButton.textContent="Upload and verify";'
+        '"No file selected";cancelButton.disabled=true;primaryButton.disabled=false;primaryButton.textContent="Upload and stage";'
+        'renderWorkflow("");'
         'var box=document.getElementById("update-progress");box.hidden=true;document.getElementById("update-overall").hidden=true;'
         'document.getElementById("update-result").className="status-history";document.getElementById("update-result").textContent='
         '"Upgrade cancelled. No staged release was activated.";};'
@@ -852,18 +891,11 @@ def update_upload_script():
         '"update-result"),box=document.getElementById("update-progress"),'
         'label=box.querySelector(".status-text"),overall=document.getElementById("update-overall"),'
         'overallLabel=document.getElementById("update-overall-label"),overallBar=document.getElementById('
-        '"update-overall-bar"),overallFill=document.getElementById("update-overall-fill"),stageList='
-        'document.getElementById("update-stage-list");if(!f){portalRequire(input,'
-        '"Choose a .iotapp, .iotcore or .iotuni upgrade bundle");return;}var firmware=/\\.iotcore$/i.test(f.name),'
+        '"update-overall-bar"),overallFill=document.getElementById("update-overall-fill");if(!f){portalRequire(input,'
+        '"Choose a .iotapp, .iotcore or .iotuni upgrade bundle");primaryButton.disabled=false;'
+        'primaryButton.textContent="Upload and stage";cancelButton.disabled=true;return;}var firmware=/\\.iotcore$/i.test(f.name),'
         'application=/\\.iotapp$/i.test(f.name),universal=/\\.iotuni$/i.test(f.name);'
-        'var workflows={application:[["prepare","Prepare and hash file"],["upload_application","Upload application"],'
-        '["verify_application","Verify and stage application"],["ready","Ready for activation"]],firmware:'
-        '[["prepare","Prepare and hash file"],["upload_core","Upload core firmware"],["write_core","Write core firmware"],'
-        '["verify_core","Verify core firmware"],["ready","Ready for activation"]],universal:'
-        '[["inspect","Inspect paired manifest"],["upload_core","Upload core firmware"],["write_core","Write core firmware"],'
-        '["verify_core","Verify core firmware"],["upload_application","Upload application"],'
-        '["verify_application","Verify and stage application"],["pair","Pair verified components"],'
-        '["ready","Ready for activation"]]},flow=[],stagePosition=-1;'
+        'var flow=[],stagePosition=-1;'
         'function configureWorkflow(kind){flow=workflows[kind]||[];stagePosition=-1;stageList.replaceChildren();'
         'flow.forEach(function(item){var li=document.createElement("li");li.textContent=item[1];li.dataset.stage=item[0];'
         'stageList.appendChild(li);});overall.hidden=false;setStage(flow[0][0],0);}'
@@ -876,8 +908,9 @@ def update_upload_script():
         'overallLabel.textContent="Step "+(index+1)+" of "+flow.length+" · "+flow[index][1];}'
         'function previous(text){if(out.dataset.last===text)return;out.textContent=text;out.dataset.last=text;}'
         'function failure(text){out.className="status-history failed";out.textContent=text;}'
-        'if(!firmware&&!application&&!universal){failure("Choose a .iotapp, .iotcore or .iotuni upgrade bundle.");return;}'
-        'var workflowKind=universal?"universal":(firmware?"firmware":"application");configureWorkflow(workflowKind);'
+        'if(!firmware&&!application&&!universal){failure("Choose a .iotapp, .iotcore or .iotuni upgrade bundle.");'
+        'primaryButton.disabled=false;primaryButton.textContent="Upload and stage";return;}'
+        'var selectedKind=universal?"universal":(firmware?"firmware":"application");configureWorkflow(selectedKind);'
         'box.classList.remove("complete","failed");box.hidden=false;label.textContent=universal?"Inspecting universal bundle…":'
         '"Preparing file…";out.className="status-history";out.replaceChildren();delete out.dataset.last;'
         'var id="",polling=false,finished=false;function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
@@ -1032,7 +1065,8 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
             '<div class="upgrade-operation"><form id="update-upload-form" data-csrf="' + html_escape(token) + '">'
             '<div><input id="update-bundle" class="file-input-hidden" type="file" required '
             'accept=".iotapp,.iotcore,.iotuni"><label class="button secondary file-button" for="update-bundle">'
-            'Choose upgrade file</label> <span id="update-file-name" class="file-name">No file selected</span></div>' +
+            'Choose upgrade file</label> <span id="update-file-name" class="file-name">No file selected</span>'
+            '<span class="file-guidance"> — .iotuni recommended; component files are for recovery.</span></div>' +
             portal_ui.progress('update-progress', '0%', True) +
             '<div id="update-overall" class="upgrade-overall" hidden>'
             '<div class="upgrade-overall-head"><strong>Current task</strong>'
@@ -1040,11 +1074,10 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
             '<div id="update-overall-bar" class="upgrade-overall-track" role="progressbar" '
             'aria-label="Current upgrade task progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
             '<span id="update-overall-fill" class="upgrade-overall-fill"></span></div></div>' +
-            '<p id="update-result" class="status-history" role="status" aria-live="polite">'
-            'Universal .iotuni upgrades are recommended; .iotapp and .iotcore remain available for recovery.</p>'
+            '<p id="update-result" class="status-history" role="status" aria-live="polite"></p>'
             '<div class="actions manual-upgrade-buttons"><button id="update-cancel" class="secondary" '
             'type="button" disabled>Cancel</button><button id="update-primary" type="submit">'
-            'Upload and verify</button></div></form></div></div>'
+            'Upload and stage</button></div></form></div></div>'
         )
         script += update_upload_script()
     body = (

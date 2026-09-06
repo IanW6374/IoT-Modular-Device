@@ -79,6 +79,21 @@ def render_badge(label, tone='neutral'):
     )
 
 
+def render_certificate_badge(details):
+    """Render one certificate/trust state using the portal-wide tone rules."""
+    details = details or {}
+    installed = bool(details.get('installed'))
+    level = details.get('expiry_level', 'ok' if installed else 'missing')
+    if details.get('error'):
+        return render_badge('invalid', 'bad')
+    if level == 'expired':
+        return render_badge('expired', 'bad')
+    if level in ('warning', 'critical'):
+        return render_badge(str(details.get('days_remaining')) + ' days', 'warn')
+    return render_badge('installed' if installed else 'not installed',
+                        'good' if installed else 'warn')
+
+
 def diagnostic_help(key):
     return DIAGNOSTIC_HELP.get(
         key, 'Diagnostic value for module troubleshooting.'

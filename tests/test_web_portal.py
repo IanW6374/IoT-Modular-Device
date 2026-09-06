@@ -85,7 +85,8 @@ class WebPortalTests(unittest.TestCase):
             'release_qualification_summary': 'Blocked',
         })
         self.assertIn('Release qualification', overview)
-        self.assertIn('metric bad', overview)
+        self.assertIn('metric bad metric-link', overview)
+        self.assertIn('href="/release-qualification"', overview)
         page = web_portal.render_release_qualification_page('csrf', {
             'available': True,
             'summary': 'In progress',
@@ -290,6 +291,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('Time unavailable</time>', page)
         self.assertNotIn('Updated Time unavailable', page)
         self.assertIn('<h2>Current runtime health</h2>', page)
+        self.assertIn('<section class="health-group"><h3>Runtime</h3>', page)
+        self.assertIn('<section class="health-group"><h3>Resources</h3>', page)
+        self.assertIn('<section class="health-group"><h3>Features</h3>', page)
         self.assertIn('<span>Type</span><strong>application</strong>', page)
         self.assertIn('<span>Result</span><strong>confirmed</strong>', page)
         self.assertIn('<span>Version</span><strong>2.0.0</strong>', page)
@@ -309,9 +313,12 @@ class WebPortalTests(unittest.TestCase):
             'device_state': 'running', 'mqtt': 'up', 'api': 'online'
         })
         self.assertIn(
-            'class="metric good"><span>Device state</span><strong>running</strong>',
+            'class="metric good metric-link" href="/health-history" '
+            'aria-label="Open Device state"><span>Device state</span><strong>running</strong>',
             overview
         )
+        self.assertIn('href="/messaging" aria-label="Open MQTT"', overview)
+        self.assertIn('href="/device-api" aria-label="Open Device API"', overview)
     def test_http_request_parser_rejects_oversized_and_ambiguous_headers(self):
         class Reader:
             def __init__(self, lines):
@@ -774,6 +781,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('.portal-user-grid{grid-template-columns:repeat(auto-fill,30rem)', portal_ui.PORTAL_CSS)
         self.assertIn('.portal-user-card form+form{margin-top:12px', portal_ui.PORTAL_CSS)
         self.assertIn('>Administrator</option>', user)
+        self.assertNotIn('<span class="badge">administrator</span>', user)
         self.assertIn('action="/user?action=password"', user)
         self.assertIn('id="change-password-dialog"', user)
         self.assertNotIn('/change-password', user)
@@ -1982,7 +1990,9 @@ class WebPortalTests(unittest.TestCase):
         )
         self.assertIn('.upgrade-grid{display:grid;grid-template-columns:1fr;', portal_ui.PORTAL_CSS)
         self.assertIn('id="update-upload-form"', updates)
-        self.assertIn('Upload and verify', updates)
+        self.assertIn('Upload and stage', updates)
+        self.assertIn('.iotuni recommended; component files are for recovery.', updates)
+        self.assertNotIn('Universal .iotuni upgrades are recommended;', updates)
         self.assertIn('name="release_channel"', updates)
         self.assertIn('id="update-progress"', updates)
         self.assertIn('class="manual-upgrade-workspace"', updates)
@@ -1995,6 +2005,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Step "+(index+1)+" of "+flow.length', updates)
         self.assertIn('Prepare and hash file', updates)
         self.assertIn('Pair verified components', updates)
+        self.assertIn('renderWorkflow(workflowKind(selected))', updates)
         self.assertIn('class="status-spinner"', updates)
         self.assertNotIn('<progress', updates)
         self.assertIn('/resumable-upload-chunk', updates)
@@ -2301,7 +2312,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<h2>Manual upgrade</h2>', idle)
         self.assertIn('action="/check-release"', idle)
         self.assertIn('id="update-upload-form"', idle)
-        self.assertIn('Upload and verify', idle)
+        self.assertIn('Upload and stage', idle)
         self.assertIn('name="release_check_schedule"', idle)
         self.assertIn('<option value="disabled" selected>Disabled</option>', idle)
         self.assertIn('>Daily</option>', idle)

@@ -8,7 +8,9 @@ except ImportError:
 import web_portal_ui as portal_ui
 import timezone_rules
 from portal_http import html_escape, js_escape, configuration_backup_filename
-from portal_presenters import render_badge, render_label
+from portal_presenters import (
+    render_badge, render_certificate_badge, render_label,
+)
 
 def _notice(message='', error=False):
     if not message:
@@ -482,8 +484,7 @@ def render_user_settings_page(
         )
         user_rows.append(
             '<article class="module-card portal-user-card"><div class="module-card-title"><strong>' +
-            html_escape(name) + '</strong><span class="badge">' + html_escape(role) +
-            '</span></div><form action="/user/update" method="post">'
+            html_escape(name) + '</strong></div><form action="/user/update" method="post">'
             '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
             '<input type="hidden" name="username" value="' + html_escape(name) + '">'
             '<label class="field">Username<input name="new_username" required maxlength="32" value="' +
@@ -564,16 +565,7 @@ def render_certificate_details(certificates):
     def certificate_card(key, label, missing_message='No certificate file is installed.'):
         details = certificates.get(key, {}) or {}
         installed = bool(details.get('installed'))
-        expiry_level = details.get('expiry_level', 'ok' if installed else 'missing')
-        badge = render_badge(
-            (
-                'expired' if expiry_level == 'expired' else
-                (str(details.get('days_remaining')) + ' days'
-                 if expiry_level in ('warning', 'critical') else
-                 ('installed' if installed else 'not installed'))
-            ),
-            'good' if installed and expiry_level == 'ok' else 'warn'
-        )
+        badge = render_certificate_badge(details)
         rows = []
         if details.get('error'):
             rows.append(
@@ -793,13 +785,13 @@ def render_device_control_page(csrf, error=''):
         ) + _notice(error, True) +
         '<section class="card"><div class="section-title"><h2>Power controls</h2></div>'
         '<p class="muted">Restart and shutdown retain all settings, certificates, logs and '
-        'installed software.</p><div class="actions power-actions">'
+        'installed software. Shutdown enters deep sleep; power-cycle or externally reset the '
+        'device to start it again.</p><div class="actions power-actions">'
         '<form action="/restart-device" method="post"><input type="hidden" name="csrf" value="' +
         html_escape(csrf) + '"><button class="secondary" type="submit">Restart device</button></form>'
         '<form action="/shutdown-device" method="post"><input type="hidden" name="csrf" value="' +
         html_escape(csrf) + '"><button class="danger" type="submit">Shut down device</button></form>'
-        '</div><p class="muted">Shutdown enters deep sleep. Power-cycle or externally reset '
-        'the device to start it again.</p></section>'
+        '</div></section>'
         '<section class="card"><div class="section-title"><h2>Factory default</h2></div>'
         '<p class="warning"><strong>This cannot be undone.</strong> Network, MQTT, portal, '
         'Home Assistant, module, certificate, ACME and log-history data will be erased. '
@@ -1119,14 +1111,25 @@ def render_health_history_page(csrf, status):
         render_label(key) for key in sorted(feature_state)
         if (feature_state.get(key, {}) or {}).get('enabled') is True
     ) or 'None'
-    runtime_rows = ''.join((
-        health_item('device_state', (status or {}).get('device_state', 'unknown')),
-        health_item('boot_stage', (status or {}).get('boot_stage', 'unknown')),
-        health_item('network_transport', (status or {}).get('network_transport', 'Wi-Fi')),
-        health_item('hardware_resources', (status or {}).get('hardware_resources', 0), 'Allocated hardware resources'),
-        health_item('usb_ncm_available', 'Yes' if (status or {}).get('usb_ncm_available') else 'No'),
-        health_item('feature_flags', enabled_features, 'Enabled runtime features'),
-    ))
+    runtime_groups = (
+        ('Runtime', (
+            health_item('device_state', (status or {}).get('device_state', 'unknown')),
+            health_item('boot_stage', (status or {}).get('boot_stage', 'unknown')),
+            health_item('network_transport', (status or {}).get('network_transport', 'Wi-Fi')),
+        )),
+        ('Resources', (
+            health_item('hardware_resources', (status or {}).get('hardware_resources', 0), 'Allocated hardware resources'),
+            health_item('usb_ncm_available', 'Yes' if (status or {}).get('usb_ncm_available') else 'No'),
+        )),
+        ('Features', (
+            health_item('feature_flags', enabled_features, 'Enabled runtime features'),
+        )),
+    )
+    runtime_cards = ''.join(
+        '<section class="health-group"><h3>' + title +
+        '</h3><div class="health-items">' + ''.join(rows) + '</div></section>'
+        for title, rows in runtime_groups
+    )
     events = []
     for event in list(health.get('events', []))[-24:][::-1]:
         events.append(
@@ -1144,7 +1147,7 @@ def render_health_history_page(csrf, status):
         )) + '</span></div>' +
         '<div class="health-groups">' + ''.join(grouped) + '</div></section>'
         '<section class="card"><div class="section-title"><h2>Current runtime health</h2></div>'
-        '<div class="health-items">' + runtime_rows + '</div></section>'
+        '<div class="health-groups">' + runtime_cards + '</div></section>'
         '<section class="card"><div class="section-title"><h2>Recent significant events</h2></div>'
         + ('<ul>' + ''.join(events) + '</ul>' if events else '<p class="muted">No events recorded.</p>') +
         '</section><section class="card"><div class="section-title"><h2>Reset history</h2></div>'

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.14 - 2026-09-06
+
+- Make overview health and service metrics direct links to their relevant
+  configuration, diagnostics, upgrade or qualification pages, with consistent
+  keyboard focus and hover treatment.
+- Preview the file-specific application, core or universal workflow as soon as
+  a manual upgrade file is selected. Rename the primary action to **Upload and
+  stage** and replace the separate guidance panel with a concise inline note.
+- Standardise certificate badges so installed identities and trust anchors are
+  green, expiry warnings are amber, and invalid or expired material is red.
+- Align Power & reset, Current runtime health and Portal users with the shared
+  portal card patterns, including removal of the redundant user-role badge.
+- Retain Alpha 13's paired-update migration and all Alpha 12 confirmation and
+  rollback protections unchanged.
+
 ## 3.0.0-alpha.13 - 2026-09-06
 
 - Upgrade activating universal transactions created by pre-ABI-6 frozen

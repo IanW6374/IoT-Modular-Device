@@ -338,6 +338,37 @@ class CertificateManagerTests(unittest.TestCase):
         self.assertIn('CN=IoTMD CA', identities)
         self.assertIn('not installed', ca_trust)
 
+        installed_unknown = dict(details)
+        installed_unknown['mqtt_ca'] = {
+            'installed': True, 'subject': 'CN=Broker CA',
+            'expiry_level': 'unknown',
+        }
+        consistent = web_portal.render_certificate_route(
+            '/certificate-authorities', 'csrf',
+            certificates=installed_unknown
+        )
+        self.assertIn(
+            '<span class="badge good">installed</span>', consistent
+        )
+
+        state_details = dict(details)
+        state_details['mqtt_ca'] = {
+            'installed': True, 'expiry_level': 'warning',
+            'days_remaining': 21,
+        }
+        state_details['release_ca'] = {
+            'installed': True, 'expiry_level': 'expired',
+        }
+        state_details['syslog_ca'] = {
+            'installed': True, 'error': 'invalid DER',
+        }
+        states = web_portal.render_certificate_route(
+            '/certificate-authorities', 'csrf', certificates=state_details
+        )
+        self.assertIn('<span class="badge warn">21 days</span>', states)
+        self.assertIn('<span class="badge bad">expired</span>', states)
+        self.assertIn('<span class="badge bad">invalid</span>', states)
+
     def test_replaceable_ca_and_exact_api_client_trust_can_be_removed(self):
         class APITrust:
             def __init__(self):

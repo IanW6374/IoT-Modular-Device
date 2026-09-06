@@ -2,7 +2,7 @@
 
 import web_portal_ui as portal_ui
 from portal_http import html_escape
-from portal_presenters import render_badge
+from portal_presenters import render_badge, render_certificate_badge
 
 
 METHODS = {
@@ -44,13 +44,7 @@ def _method(certificates):
 def _card(details, label, actions=''):
     details = details or {}
     installed = bool(details.get('installed'))
-    level = details.get('expiry_level', 'ok' if installed else 'missing')
-    badge = render_badge(
-        'expired' if level == 'expired' else (
-            str(details.get('days_remaining')) + ' days'
-            if level in ('warning', 'critical') else ('installed' if installed else 'not installed')
-        ), 'good' if installed and level == 'ok' else 'warn'
-    )
+    badge = render_certificate_badge(details)
     rows = []
     if details.get('error'):
         rows.append('<p class="error-text">Unable to decode: ' + html_escape(details['error']) + '</p>')
