@@ -78,7 +78,7 @@ class CutoverCoordinator:
     """Own one runtime path and require recorded evidence before v3 activation."""
 
     def __init__(self, namespace, platform, kernel_factory, compatibility,
-                 recovery, qualification):
+                 recovery, qualification, shadow_factory=None):
         if not callable(kernel_factory):
             raise CutoverError('kernel factory is unavailable')
         if not callable(getattr(qualification, 'snapshot', None)):
@@ -86,6 +86,7 @@ class CutoverCoordinator:
         self._namespace = namespace
         self._platform = platform
         self._kernel_factory = kernel_factory
+        self._shadow_factory = shadow_factory or kernel_factory
         self._compatibility = _adapter(
             compatibility, ('start', 'stop', 'poll', 'snapshot'),
             'compatibility runtime'
@@ -156,7 +157,11 @@ class CutoverCoordinator:
             if requested in ('compatibility', 'shadow'):
                 self._compatibility.start()
             if requested in ('shadow', 'active'):
-                self._kernel = self._kernel_factory()
+                factory = (
+                    self._shadow_factory if requested == 'shadow' else
+                    self._kernel_factory
+                )
+                self._kernel = factory()
                 self._kernel.boot(configuration)
             self._state['effective_mode'] = requested
             self._state['phase'] = 'running'

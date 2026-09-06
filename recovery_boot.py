@@ -462,6 +462,13 @@ def run():
     try:
         activation_result = app_update.activate_pending()
         if 'rolled back' in str(activation_result):
+            try:
+                universal_update.rollback_native_pair(
+                    'application trial was not confirmed'
+                )
+            except Exception:
+                pass
+            universal_update.reconcile_pending()
             clear_recovery_request()
             _prepare_boot_attempt(trial=False)
     except Exception as exc:
@@ -475,6 +482,20 @@ def run():
         except Exception:
             pass
         app_update.rollback_update()
+        universal_update.reconcile_pending()
+
+    try:
+        universal_update.begin_native_pair_trial()
+    except Exception as exc:
+        try:
+            universal_update.rollback_native_pair(
+                'native pair reconciliation failed: ' + str(exc)
+            )
+        except Exception:
+            pass
+        request_recovery('Paired update reconciliation failed: ' + str(exc))
+        _run_core_recovery('Paired update reconciliation failed')
+        return
 
     # Guard every application startup, not only update trials. A hung application
     # is reset and repeated unhealthy boots enter the frozen recovery console.

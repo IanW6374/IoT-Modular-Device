@@ -68,6 +68,7 @@ class AlphaQualificationTests(unittest.TestCase):
             def capabilities(self):
                 return {
                     'updates': {
+                        'native_pair_journal': True,
                         'native_trial_observation': True,
                         'native_trial_control': True,
                         'paired_trial': False,
@@ -93,6 +94,14 @@ class AlphaQualificationTests(unittest.TestCase):
                     'can_confirm': False, 'can_rollback': False,
                 }
 
+            def pair_snapshot(self):
+                return {
+                    'phase': 'idle', 'sequence': 0, 'pair_id': '',
+                    'platform_label': '', 'runtime_slot': '',
+                    'previous_runtime_slot': '', 'runtime_healthy': False,
+                    'failure': '',
+                }
+
             def recovery_snapshot(self):
                 return {'requested': False, 'failed_boots': 0}
 
@@ -102,6 +111,7 @@ class AlphaQualificationTests(unittest.TestCase):
         service.platform = Platform()
         native = service.status()['native_update']
         self.assertTrue(native['control_available'])
+        self.assertTrue(native['pair_journal_available'])
         self.assertFalse(native['paired_trial_qualified'])
         self.assertTrue(native['recovery_available'])
         self.assertTrue(native['jobs_available'])

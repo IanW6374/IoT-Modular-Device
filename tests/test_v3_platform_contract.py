@@ -10,6 +10,18 @@ from v3.runtime.iotmd_next.platform import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def pair_snapshot(phase='idle'):
+    active = phase != 'idle'
+    return {
+        'phase': phase, 'sequence': 1 if active else 0,
+        'pair_id': 'pair-1' if active else '',
+        'platform_label': 'ota_1' if active else '',
+        'runtime_slot': 'slot-b' if active else '',
+        'previous_runtime_slot': 'slot-a' if active else '',
+        'runtime_healthy': False, 'failure': '',
+    }
+
+
 class V3PlatformContractTests(unittest.TestCase):
     def example(self):
         path = (
@@ -24,7 +36,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_provider_must_match_versioned_native_abi(self):
         class Provider:
-            ABI_VERSION = 5
+            ABI_VERSION = 6
 
             def storage_open(self, namespace):
                 return 1
@@ -69,6 +81,14 @@ class V3PlatformContractTests(unittest.TestCase):
             def update_rollback(self, expected):
                 return None
 
+            def pair_snapshot(self): return pair_snapshot()
+            def pair_prepare(self, *args): return pair_snapshot('prepared')
+            def pair_begin_trial(self, *args): return pair_snapshot('trial')
+            def pair_mark_runtime_healthy(self, *args): return True
+            def pair_confirm(self, *args): return True
+            def pair_request_rollback(self, *args): return pair_snapshot('rollback')
+            def pair_complete_rollback(self, *args): return True
+
             def recovery_boot_begin(self): return 0
             def recovery_snapshot(self):
                 return {
@@ -85,7 +105,7 @@ class V3PlatformContractTests(unittest.TestCase):
                 return V3PlatformContractTests().example()
 
         platform = Platform(Provider())
-        self.assertEqual(platform.capabilities()['abi_version'], 5)
+        self.assertEqual(platform.capabilities()['abi_version'], 6)
         self.assertEqual(platform.update_snapshot()['running_label'], 'ota_1')
         Provider.ABI_VERSION = 3
         with self.assertRaisesRegex(PlatformContractError, 'ABI'):
@@ -105,7 +125,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_native_storage_must_be_complete(self):
         class Provider:
-            ABI_VERSION = 5
+            ABI_VERSION = 6
 
             def capabilities(self):
                 return V3PlatformContractTests().example()
@@ -140,7 +160,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_native_update_snapshot_fails_closed_on_inconsistent_state(self):
         class Provider:
-            ABI_VERSION = 5
+            ABI_VERSION = 6
 
             def capabilities(self):
                 return V3PlatformContractTests().example()
@@ -166,6 +186,13 @@ class V3PlatformContractTests(unittest.TestCase):
                 }
             def update_confirm(self, expected): return True
             def update_rollback(self, expected): return None
+            def pair_snapshot(self): return pair_snapshot()
+            def pair_prepare(self, *args): return pair_snapshot('prepared')
+            def pair_begin_trial(self, *args): return pair_snapshot('trial')
+            def pair_mark_runtime_healthy(self, *args): return True
+            def pair_confirm(self, *args): return True
+            def pair_request_rollback(self, *args): return pair_snapshot('rollback')
+            def pair_complete_rollback(self, *args): return True
             def recovery_boot_begin(self): return 0
             def recovery_snapshot(self):
                 return {
@@ -183,7 +210,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_recovery_and_native_jobs_are_bounded(self):
         class Provider:
-            ABI_VERSION = 5
+            ABI_VERSION = 6
             def capabilities(self): return V3PlatformContractTests().example()
             def storage_open(self, namespace): return 1
             def storage_close(self, handle): return None
@@ -203,6 +230,13 @@ class V3PlatformContractTests(unittest.TestCase):
                         'can_confirm': False, 'can_rollback': False}
             def update_confirm(self, expected): return True
             def update_rollback(self, expected): return None
+            def pair_snapshot(self): return pair_snapshot()
+            def pair_prepare(self, *args): return pair_snapshot('prepared')
+            def pair_begin_trial(self, *args): return pair_snapshot('trial')
+            def pair_mark_runtime_healthy(self, *args): return True
+            def pair_confirm(self, *args): return True
+            def pair_request_rollback(self, *args): return pair_snapshot('rollback')
+            def pair_complete_rollback(self, *args): return True
             def recovery_boot_begin(self): return 2
             def recovery_snapshot(self):
                 return {'requested': True, 'reason': 'test',

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.10 - 2026-09-05
+
+- Advance the native platform boundary to ABI 6 with an encrypted paired-update
+  journal binding the release sequence, platform partition and runtime slot.
+- Require the runtime trial to report healthy before the native platform can
+  confirm the ESP-IDF OTA image; journal rollback intent before restoring the
+  runtime slot and requesting bootloader rollback.
+- Reconcile paired update state from the frozen recovery supervisor and preserve
+  the previous runtime selection across interrupted activation or rollback.
+- Add side-effect-free shadow comparison, the production v3 composition root,
+  generation-safe migration staging and a complete 13-variant v2-to-v3 driver
+  declaration bridge.
+- Surface all nine greenfield implementation gates separately from their HIL
+  qualification state. Active-v3 cutover remains fail-closed until the release
+  evidence ledger and native qualification capabilities pass.
+
 ## 3.0.0-alpha.9 - 2026-09-05
 
 - Advance the native platform boundary to ABI 5 with physical GPIO, ADC, UART,

@@ -2,10 +2,17 @@
 
 from .platform import EXPECTED_ABI_VERSION, Platform, PlatformContractError
 from .paired_update import PairedUpdateCoordinator, PairedUpdateError
+from .native_pair import NativePairCoordinator, NativePairError
 from .storage import TransactionalNamespace, StorageContractError, StorageConflict
 from .configuration import ConfigurationError, migrate_configuration
 from .identity import IdentityError, IdentityLifecycleService
 from .production_identity import OpaqueHandleRegistry, ProductionIdentityAdapter
+from .production_migration import ProductionMigrationStaging
+from .production_drivers import (
+    translate_v2_modules, validate_complete_driver_catalog,
+)
+from .integration import ProductionComposition
+from .shadow import ShadowRuntime
 from .fleet import FleetError, FleetPolicyService
 from .migration import MigrationError, V2MigrationCoordinator
 from .drivers import DriverError, DriverService, build_driver_factories
@@ -28,10 +35,14 @@ from .transport_contracts import (
 __all__ = (
     'EXPECTED_ABI_VERSION', 'Platform', 'PlatformContractError',
     'PairedUpdateCoordinator', 'PairedUpdateError', 'TransactionalNamespace',
+    'NativePairCoordinator', 'NativePairError',
     'StorageContractError', 'StorageConflict', 'ConfigurationError',
     'migrate_configuration', 'ApplicationKernel', 'KernelError',
     'IdentityError', 'IdentityLifecycleService', 'OpaqueHandleRegistry',
     'ProductionIdentityAdapter', 'FleetError',
+    'ProductionMigrationStaging', 'translate_v2_modules',
+    'validate_complete_driver_catalog', 'ProductionComposition',
+    'ShadowRuntime',
     'FleetPolicyService', 'MigrationError', 'V2MigrationCoordinator',
     'DriverError', 'DriverService', 'build_driver_factories',
     'ResourceConflict', 'ResourceError', 'ResourceManager',

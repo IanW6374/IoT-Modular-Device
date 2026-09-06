@@ -513,12 +513,35 @@ def render_release_qualification_page(token, status=None):
                 '; qualification remains separate</small>'
                 '</div></div>'
             )
+        implementation_rows = []
+        for gate in status.get('implementation_gates', ()):
+            implemented = gate.get('implemented') is True
+            qualified = gate.get('qualified') is True
+            implementation_rows.append(
+                '<div class="metric' + (' good' if qualified else
+                (' warn' if implemented else ' bad')) + '"><span>' +
+                html_escape(gate.get('name', '')) + '</span><strong>' +
+                ('Qualified' if qualified else
+                 ('Implemented' if implemented else 'Unavailable')) +
+                '</strong><small>' +
+                ('Hardware evidence accepted' if qualified else
+                 ('Awaiting qualification evidence' if implemented else
+                  html_escape(gate.get('error', 'Mechanism unavailable')))) +
+                '</small></div>'
+            )
+        implementation_content = (
+            '<h3>Greenfield implementation gates</h3>'
+            '<p class="muted">Implemented means the production path exists. '
+            'Qualified remains fail-closed until hardware evidence passes.</p>'
+            '<div class="metrics">' + ''.join(implementation_rows) + '</div>'
+            if implementation_rows else ''
+        )
         content = (
             '<div class="notice"><strong>' +
             html_escape(status.get('summary', 'Not started')) +
             '</strong> — promotion remains closed until every gate has observed '
             'evidence and passes.</div><div class="metrics">' +
-            ''.join(rows) + '</div>' + native_content
+            ''.join(rows) + '</div>' + implementation_content + native_content
         )
     body = (
         portal_ui.page_heading(

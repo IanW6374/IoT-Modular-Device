@@ -42,13 +42,19 @@ that region undefined, so its magic, format and CRC are always validated. An
 atomic `.boot-state.json` checkpoint is retained as the fallback and durable
 record.
 
-V3 platform ABI 5 retains ABI 4's separate bounded recovery record in encrypted
+V3 platform ABI 6 retains ABI 4's separate bounded recovery record in encrypted
 NVS. The frozen supervisor advances it after handling any explicit factory
 reset and before importing replaceable product code. The record contains only
 request state, a bounded reason, boot/failure counters, a pending-health marker
 and the ESP-IDF reset reason. Reaching application health clears the pending
 marker and failure count; three consecutive incomplete normal boots select the
 signed frozen recovery path.
+
+ABI 6 also keeps an encrypted paired-release journal. The frozen supervisor
+reconciles its prepared, trial or rollback phase before loading replaceable
+product code. Native OTA confirmation requires the journal's expected runtime
+slot to have reached the health gate. Rollback intent is durable before the
+runtime slot is restored and the platform partition is rolled back.
 
 ## Device states
 

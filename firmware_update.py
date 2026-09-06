@@ -364,6 +364,20 @@ def confirm_update():
     if state.get('status') != 'trial':
         return False
     esp32.Partition.mark_app_valid_cancel_rollback()
+    return _commit_confirmed_state(state)
+
+
+def confirm_after_native_pair():
+    """Persist component metadata after ABI 6 confirmed the OTA partition."""
+    state = boot_status()
+    if state.get('status') != 'trial':
+        return False
+    if _partition_label(_running_partition()) != state.get('target'):
+        raise ValueError('native confirmed firmware partition changed')
+    return _commit_confirmed_state(state)
+
+
+def _commit_confirmed_state(state):
     temp = VERSION_PATH + '.tmp'
     with open(temp, 'w') as stream:
         stream.write(str(state.get('version', '')))

@@ -63,12 +63,21 @@ claiming peripherals. Production identity
 records continue to expose metadata and opaque integers only; the adapter's
 locator mapping is held in encrypted transactional storage.
 
-Later platform milestones will add:
+Alpha 10 advances the native platform contract to ABI 6. The update capability
+map declares `native_pair_journal`, and the runtime adapter exposes bounded
+prepare, begin-trial, runtime-healthy, confirm, rollback-request and
+rollback-complete operations. Pair snapshots contain identifiers, partition and
+runtime-slot labels, health and bounded failure text; they never contain an OTA
+handle. Confirmation fails unless the running partition and healthy runtime
+match the persisted pair. Implementation presence remains separate from
+release-bound qualification evidence.
 
-- native-owned credential and migration activation handles;
-- network-interface lifecycle;
-- native update staging and atomic paired platform/runtime ownership; and
-- richer native watchdog and boot-health event snapshots.
+Later qualification milestones must prove:
+
+- power-loss-safe paired ownership and rollback on hardware;
+- native recovery, job, resource and driver fault matrices;
+- transport, identity, fleet and migration interoperability; and
+- controlled active-v3 cutover with persistent compatibility fallback.
 
 Schema files document values for host tools and tests. The native module and
 MicroPython adapter will use generated/shared constants where practical rather

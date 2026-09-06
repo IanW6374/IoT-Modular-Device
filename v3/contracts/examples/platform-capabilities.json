@@ -1,5 +1,5 @@
 {
-  "abi_version": 5,
+  "abi_version": 6,
   "board": {
     "target": "esp32-s3",
     "revision": "devkitc-n8r8"
@@ -7,7 +7,7 @@
   "runtime": {
     "engine": "micropython",
     "version": "1.29.0",
-    "platform_abi": 5
+    "platform_abi": 6
   },
   "security": {
     "secure_boot": true,
@@ -35,6 +35,7 @@
   },
   "updates": {
     "paired_manifest": true,
+    "native_pair_journal": true,
     "native_trial_observation": true,
     "native_trial_control": true,
     "paired_trial": false,

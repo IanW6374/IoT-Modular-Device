@@ -4,15 +4,15 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.9` advances the native boundary to ABI 5 and the runtime
-configuration contract to version 4. It adds physical GPIO, ADC, UART, I2C and
-SPI construction, safe shared-bus rules, interrupt cleanup and peripheral
-recovery; production bridges for Wi-Fi, MQTT, HTTPS, mTLS API and syslog; and a
-real certificate/trust inventory bridge with persistent opaque handles. These
-are implemented mechanisms, not completed qualification claims. Physical
-resources, production adapters and identity integration remain gated pending
-hardware and interoperability evidence, and the proven v2.5 product runtime
-remains the active compatibility payload.
+Version `3.0.0-alpha.10` advances the native boundary to ABI 6. Its encrypted
+paired-update journal binds a universal release to the running platform
+partition and selected MicroPython runtime slot. The frozen supervisor,
+production composition root, side-effect-free shadow runtime, fleet/migration
+staging and complete driver-declaration bridge now represent all nine
+greenfield implementation gates. These are implemented mechanisms, not
+completed qualification claims. Native capability booleans and the
+release-bound evidence ledger remain fail-closed, and the proven v2.5 product
+runtime remains the active compatibility payload.
 
 The rewrite keeps the proven product requirements while establishing the
 native ESP-IDF platform and MicroPython application boundary before porting
@@ -47,8 +47,9 @@ wholesale.
 Read the [target architecture](../docs/V3_ARCHITECTURE.md),
 [requirements](../docs/V3_REQUIREMENTS.md) and
 [roadmap](../docs/V3_ROADMAP.md) before adding implementation code. The
-[Alpha 9 test note](../docs/V3_ALPHA9.md) defines its exact scope and safe test
-procedure. The [Alpha 8 note](../docs/V3_ALPHA8.md),
+[Alpha 10 test note](../docs/V3_ALPHA10.md) defines its exact scope and safe
+test procedure. The [Alpha 9 note](../docs/V3_ALPHA9.md),
+[Alpha 8 note](../docs/V3_ALPHA8.md),
 [Alpha 7 note](../docs/V3_ALPHA7.md), [Alpha 6 note](../docs/V3_ALPHA6.md),
 [Alpha 5 note](../docs/V3_ALPHA5.md),
 [Alpha 4 note](../docs/V3_ALPHA4.md),

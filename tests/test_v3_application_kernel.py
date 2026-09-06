@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class KernelProvider:
-    ABI_VERSION = 5
+    ABI_VERSION = 6
 
     def __init__(self):
         self.resources = {}
@@ -98,6 +98,18 @@ class KernelProvider:
     def update_confirm(self, expected): return True
 
     def update_rollback(self, expected): return None
+
+    def pair_snapshot(self):
+        return {'phase': 'idle', 'sequence': 0, 'pair_id': '',
+                'platform_label': '', 'runtime_slot': '',
+                'previous_runtime_slot': '', 'runtime_healthy': False,
+                'failure': ''}
+    def pair_prepare(self, *args): return self.pair_snapshot()
+    def pair_begin_trial(self, *args): return self.pair_snapshot()
+    def pair_mark_runtime_healthy(self, *args): return True
+    def pair_confirm(self, *args): return True
+    def pair_request_rollback(self, *args): return self.pair_snapshot()
+    def pair_complete_rollback(self, *args): return True
 
     def recovery_boot_begin(self): return 0
     def recovery_snapshot(self):
@@ -298,7 +310,7 @@ class V3ApplicationKernelTests(unittest.TestCase):
         ).read_text())
         Draft202012Validator(schema).validate(snapshot)
         support = kernel.support_snapshot()
-        self.assertEqual(support['platform_abi'], 5)
+        self.assertEqual(support['platform_abi'], 6)
         self.assertNotIn('settings', json.dumps(support).lower())
 
 

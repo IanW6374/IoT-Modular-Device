@@ -99,7 +99,65 @@ class AlphaQualificationService:
             'available': True, 'summary': summary, 'error': '',
             'counts': counts, 'evidence': evidence,
             'native_update': self._native_update_status(),
+            'implementation_gates': self._implementation_gates(),
         }
+
+    def _implementation_gates(self):
+        """Report mechanisms separately from recorded production evidence."""
+        if self.platform is None:
+            return []
+        try:
+            capabilities = self.platform.capabilities()
+            from v3.runtime.iotmd_next.production_drivers import (
+                validate_complete_driver_catalog,
+            )
+            catalog = validate_complete_driver_catalog()
+            mechanisms = (
+                ('Native paired updates', bool(
+                    capabilities['updates']['native_pair_journal'] and
+                    capabilities['updates']['native_trial_control'])),
+                ('Independent recovery', bool(
+                    capabilities['recovery']['product_independent'] and
+                    capabilities['recovery']['signed_release'])),
+                ('Native jobs and events', bool(
+                    capabilities['jobs']['async_worker'])),
+                ('Physical resource management', bool(
+                    capabilities['resources']['physical'] and
+                    capabilities['resources']['recovery'])),
+                ('Production transport adapters', True),
+                ('Production identity integration', True),
+                ('Fleet and migration integration', True),
+                ('Production driver migration', catalog['variants'] == 13),
+                ('Live cutover integration', True),
+            )
+            return [
+                {'name': name, 'implemented': implemented,
+                 'qualified': self._mechanism_qualified(index, capabilities)}
+                for index, (name, implemented) in enumerate(mechanisms, 1)
+            ]
+        except Exception as exc:
+            return [{
+                'name': 'Implementation inventory', 'implemented': False,
+                'qualified': False,
+                'error': str(exc)[:96] or exc.__class__.__name__,
+            }]
+
+    @staticmethod
+    def _mechanism_qualified(index, capabilities):
+        if index == 1:
+            return bool(
+                capabilities['updates']['paired_trial'] and
+                capabilities['updates']['native_rollback']
+            )
+        if index == 2:
+            return bool(capabilities['recovery']['qualified'])
+        if index == 3:
+            return bool(capabilities['jobs']['qualified'])
+        if index == 4:
+            return bool(capabilities['resources']['qualified'])
+        # Gates 5–9 are qualified by the release-bound evidence ledger, not
+        # the presence of Python classes or successful host tests.
+        return False
 
     def _native_update_status(self):
         if self.platform is None:
@@ -109,6 +167,7 @@ class AlphaQualificationService:
             updates = capabilities['updates']
             resources = capabilities['resources']
             snapshot = self.platform.update_snapshot()
+            pair = self.platform.pair_snapshot()
             return {
                 'available': bool(updates['native_trial_observation']),
                 'control_available': bool(
@@ -140,6 +199,10 @@ class AlphaQualificationService:
                 'resources_qualified': bool(resources['qualified']),
                 'resource_kinds': tuple(resources['kinds']),
                 'snapshot': snapshot,
+                'pair_journal_available': bool(
+                    updates['native_pair_journal']
+                ),
+                'pair': pair,
                 'recovery': self.platform.recovery_snapshot(),
             }
         except Exception as exc:

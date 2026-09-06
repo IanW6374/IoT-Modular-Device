@@ -60,10 +60,12 @@ def _write_state(state):
 def _state_from_manifest(manifest, firmware_required, application_required):
     firmware = _component(manifest, 'firmware')
     application = _component(manifest, 'application')
+    sequence = int(manifest.get('release_sequence', 0))
     return {
         'status': 'ready',
         'version': str(manifest.get('version', '')),
-        'release_sequence': int(manifest.get('release_sequence', 0)),
+        'release_sequence': sequence,
+        'pair_id': ('iotmd-' + str(sequence))[:64],
         'firmware_version': str(firmware.get('version', '')),
         'firmware_sequence': int(firmware.get('release_sequence', 0)),
         'application_version': str(application.get('version', '')),
@@ -501,6 +503,16 @@ def activate_pending(maintenance_allowed=True):
         raise ValueError('universal application is not ready')
     if firmware_required and firmware_update.update_status().get('status') != 'ready':
         raise ValueError('universal core firmware is not ready')
+    previous_runtime_slot = app_update.active_slot()
+    state['previous_runtime_slot'] = previous_runtime_slot
+    state['runtime_slot'] = (
+        ('b' if previous_runtime_slot == 'a' else 'a')
+        if application_required else previous_runtime_slot
+    )
+    state['platform_label'] = (
+        str(firmware_update.update_status().get('target', ''))
+        if firmware_required else ''
+    )
     for component in state.get('activation_order', ('application', 'firmware')):
         if component == 'application' and application_required:
             app_update.configure_pending_update({})
@@ -512,6 +524,105 @@ def activate_pending(maintenance_allowed=True):
         'universal', 'trial', state.get('version', '')
     )
     return state
+
+
+def _native_platform():
+    try:
+        from v3.runtime.iotmd_next.platform import Platform
+        return Platform()
+    except Exception:
+        return None
+
+
+def begin_native_pair_trial():
+    """Reconcile the native journal after the new core/runtime are selected."""
+    state = update_status()
+    if state.get('status') != 'activating':
+        return False
+    platform = _native_platform()
+    if platform is None:
+        return False
+    pair_id = str(state.get('pair_id', ''))
+    runtime_slot = str(state.get('runtime_slot', ''))
+    previous = str(state.get('previous_runtime_slot', ''))
+    update = platform.update_snapshot()
+    running_label = str(update.get('running_label', ''))
+    pair = platform.pair_snapshot()
+    if pair['phase'] in ('idle', 'confirmed', 'rolled-back'):
+        platform.prepare_pair(
+            pair_id, int(state.get('release_sequence', 0)), running_label,
+            runtime_slot, previous
+        )
+        pair = platform.pair_snapshot()
+    if pair['pair_id'] != pair_id:
+        raise RuntimeError('native paired-update journal belongs to another release')
+    application_state = app_update.update_status()
+    running_runtime = (
+        str(application_state.get('target_slot', ''))
+        if application_state.get('status') in ('activating', 'trial', 'committing')
+        else app_update.active_slot()
+    )
+    if pair['phase'] == 'prepared':
+        if running_runtime != runtime_slot:
+            raise RuntimeError('runtime trial slot does not match universal release')
+        platform.begin_pair_trial(pair_id, runtime_slot)
+        return True
+    if pair['phase'] == 'trial':
+        if running_runtime == runtime_slot:
+            return True
+        platform.request_pair_rollback(
+            pair_id, 'runtime slot changed during universal trial'
+        )
+    if platform.pair_snapshot()['phase'] == 'rollback':
+        app_update.rollback_update()
+        restored = app_update.active_slot()
+        platform.complete_pair_rollback(pair_id, restored)
+        return False
+    return pair['phase'] == 'trial'
+
+
+def confirm_native_pair():
+    state = update_status()
+    if state.get('status') != 'activating':
+        return False
+    platform = _native_platform()
+    if platform is None:
+        return False
+    pair = platform.pair_snapshot()
+    pair_id = str(state.get('pair_id', ''))
+    application_state = app_update.update_status()
+    runtime_slot = (
+        str(application_state.get('target_slot', ''))
+        if application_state.get('status') in ('trial', 'committing')
+        else app_update.active_slot()
+    )
+    if pair['pair_id'] != pair_id:
+        return False
+    if runtime_slot != str(state.get('runtime_slot', '')):
+        raise RuntimeError('confirmed runtime slot does not match paired journal')
+    if pair['phase'] == 'confirmed':
+        return True
+    if pair['phase'] != 'trial':
+        return False
+    platform.mark_pair_runtime_healthy(pair_id, runtime_slot)
+    return platform.confirm_pair(pair_id)
+
+
+def rollback_native_pair(reason):
+    state = update_status()
+    platform = _native_platform()
+    if platform is None or state.get('status') != 'activating':
+        return False
+    pair = platform.pair_snapshot()
+    pair_id = str(state.get('pair_id', ''))
+    if pair['phase'] in ('prepared', 'trial'):
+        platform.request_pair_rollback(pair_id, str(reason)[:160])
+    if platform.pair_snapshot()['phase'] == 'rollback':
+        app_update.rollback_update()
+        return platform.complete_pair_rollback(
+            pair_id, app_update.active_slot()
+        )
+    return False
 
 
 def trial_timeout_ms(default_ms=180000):

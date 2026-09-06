@@ -110,6 +110,10 @@ Alpha 9 advances this report to ABI 5 and adds physical resource mechanism and
 qualification fields. Resource inventory exposes only bounded claim metadata,
 sharing configuration and constructed state; ESP-IDF pointers and physical
 credential locators never enter the API.
+Alpha 10 advances the report to ABI 6 and adds a bounded native paired-journal
+snapshot plus nine implementation-gate records. `implemented` reports code
+presence; `qualified` reports observed production evidence. Clients must not
+infer the latter from the former.
 Alpha 6 reports each release-qualification gate as a bounded name/status pair;
 full measurements remain in the on-device Maintenance view and qualification
 evidence file rather than expanding routine API polling payloads.

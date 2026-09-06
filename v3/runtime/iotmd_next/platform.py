@@ -1,6 +1,6 @@
 """Validated MicroPython adapter for the versioned native v3 platform ABI."""
 
-EXPECTED_ABI_VERSION = 5
+EXPECTED_ABI_VERSION = 6
 
 
 class PlatformContractError(RuntimeError):
@@ -111,7 +111,7 @@ def validate_capabilities(value):
 
     updates = _exact_keys(
         value['updates'], 'updates',
-        ('paired_manifest', 'native_trial_observation',
+        ('paired_manifest', 'native_pair_journal', 'native_trial_observation',
          'native_trial_control', 'paired_trial', 'native_rollback')
     )
     for key in updates:
@@ -216,6 +216,14 @@ class Platform:
                     'native update provider is incomplete'
                 )
         for operation in (
+                'pair_snapshot', 'pair_prepare', 'pair_begin_trial',
+                'pair_mark_runtime_healthy', 'pair_confirm',
+                'pair_request_rollback', 'pair_complete_rollback'):
+            if not hasattr(provider, operation):
+                raise PlatformContractError(
+                    'native paired-update provider is incomplete'
+                )
+        for operation in (
                 'recovery_boot_begin', 'recovery_snapshot',
                 'recovery_request', 'recovery_mark_healthy', 'recovery_clear'):
             if not hasattr(provider, operation):
@@ -260,6 +268,85 @@ class Platform:
     def rollback_update(self, expected_running_label):
         _bounded_string(expected_running_label, 'running OTA label', 16)
         return self._provider.update_rollback(expected_running_label)
+
+    @staticmethod
+    def _pair_snapshot(value):
+        if not isinstance(value, dict) or set(value) != {
+                'phase', 'sequence', 'pair_id', 'platform_label',
+                'runtime_slot', 'previous_runtime_slot', 'runtime_healthy',
+                'failure'}:
+            raise PlatformContractError('native paired-update snapshot is invalid')
+        if value['phase'] not in (
+                'idle', 'prepared', 'trial', 'rollback', 'confirmed',
+                'rolled-back'):
+            raise PlatformContractError('native paired-update phase is invalid')
+        if (not isinstance(value['sequence'], int) or
+                isinstance(value['sequence'], bool) or value['sequence'] < 0):
+            raise PlatformContractError('native paired-update sequence is invalid')
+        for key, maximum in (
+                ('pair_id', 64), ('platform_label', 16),
+                ('runtime_slot', 32), ('previous_runtime_slot', 32),
+                ('failure', 160)):
+            item = value[key]
+            if not isinstance(item, str) or len(item) > maximum:
+                raise PlatformContractError(
+                    'native paired-update ' + key + ' is invalid'
+                )
+        _boolean(value['runtime_healthy'], 'paired update runtime health')
+        if value['phase'] != 'idle' and not value['pair_id']:
+            raise PlatformContractError('native paired-update id is missing')
+        return dict(value)
+
+    def pair_snapshot(self):
+        return self._pair_snapshot(self._provider.pair_snapshot())
+
+    def prepare_pair(self, pair_id, sequence, platform_label, runtime_slot,
+                     previous_runtime_slot=''):
+        _bounded_string(pair_id, 'paired release id', 64)
+        if (not isinstance(sequence, int) or isinstance(sequence, bool) or
+                sequence < 1 or sequence > 2147483647):
+            raise PlatformContractError('paired release sequence is invalid')
+        _bounded_string(platform_label, 'paired platform label', 16)
+        _bounded_string(runtime_slot, 'paired runtime slot', 32)
+        if previous_runtime_slot:
+            _bounded_string(previous_runtime_slot, 'previous runtime slot', 32)
+        return self._pair_snapshot(self._provider.pair_prepare(
+            pair_id, sequence, platform_label, runtime_slot,
+            previous_runtime_slot
+        ))
+
+    def begin_pair_trial(self, pair_id, runtime_slot):
+        _bounded_string(pair_id, 'paired release id', 64)
+        _bounded_string(runtime_slot, 'paired runtime slot', 32)
+        return self._pair_snapshot(
+            self._provider.pair_begin_trial(pair_id, runtime_slot)
+        )
+
+    def mark_pair_runtime_healthy(self, pair_id, runtime_slot):
+        _bounded_string(pair_id, 'paired release id', 64)
+        _bounded_string(runtime_slot, 'paired runtime slot', 32)
+        return self._provider.pair_mark_runtime_healthy(
+            pair_id, runtime_slot
+        ) is True
+
+    def confirm_pair(self, pair_id):
+        _bounded_string(pair_id, 'paired release id', 64)
+        return self._provider.pair_confirm(pair_id) is True
+
+    def request_pair_rollback(self, pair_id, reason):
+        _bounded_string(pair_id, 'paired release id', 64)
+        _bounded_string(reason, 'paired rollback reason', 160)
+        return self._pair_snapshot(
+            self._provider.pair_request_rollback(pair_id, reason)
+        )
+
+    def complete_pair_rollback(self, pair_id, restored_runtime_slot=''):
+        _bounded_string(pair_id, 'paired release id', 64)
+        if restored_runtime_slot:
+            _bounded_string(restored_runtime_slot, 'restored runtime slot', 32)
+        return self._provider.pair_complete_rollback(
+            pair_id, restored_runtime_slot
+        ) is True
 
     def recovery_boot_begin(self):
         value = self._provider.recovery_boot_begin()

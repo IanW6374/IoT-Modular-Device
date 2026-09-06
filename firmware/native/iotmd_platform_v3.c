@@ -27,7 +27,7 @@
 #include "nvs.h"
 #include "sdkconfig.h"
 
-#define IOTMD_PLATFORM_V3_ABI_VERSION (5)
+#define IOTMD_PLATFORM_V3_ABI_VERSION (6)
 #define IOTMD_V3_STORAGE_HANDLES (4)
 #define IOTMD_V3_STORAGE_MAX_PAYLOAD (4096)
 #define IOTMD_V3_STORAGE_HEADER_BYTES (16)
@@ -43,6 +43,28 @@
 #define IOTMD_V3_EVENT_QUEUE_DEPTH (8)
 #define IOTMD_V3_JOB_STACK_BYTES (4096)
 #define IOTMD_V3_JOB_TIMEOUT_MS (5000)
+#define IOTMD_V3_PAIR_ID_BYTES (64)
+#define IOTMD_V3_PAIR_SLOT_BYTES (32)
+
+typedef enum {
+    IOTMD_V3_PAIR_IDLE = 0,
+    IOTMD_V3_PAIR_PREPARED = 1,
+    IOTMD_V3_PAIR_TRIAL = 2,
+    IOTMD_V3_PAIR_ROLLBACK = 3,
+    IOTMD_V3_PAIR_CONFIRMED = 4,
+    IOTMD_V3_PAIR_ROLLED_BACK = 5,
+} iotmd_v3_pair_phase_t;
+
+typedef struct {
+    iotmd_v3_pair_phase_t phase;
+    uint32_t sequence;
+    bool runtime_healthy;
+    char pair_id[IOTMD_V3_PAIR_ID_BYTES + 1];
+    char platform_label[17];
+    char runtime_slot[IOTMD_V3_PAIR_SLOT_BYTES + 1];
+    char previous_runtime_slot[IOTMD_V3_PAIR_SLOT_BYTES + 1];
+    char failure[IOTMD_V3_RECOVERY_REASON_BYTES + 1];
+} iotmd_v3_pair_record_t;
 
 typedef struct {
     bool used;
@@ -289,6 +311,394 @@ static void iotmd_v3_require_running_label(const esp_partition_t *running,
         mp_raise_ValueError(MP_ERROR_TEXT("running OTA partition changed"));
     }
 }
+
+static const char *iotmd_v3_pair_phase_name(iotmd_v3_pair_phase_t phase) {
+    switch (phase) {
+        case IOTMD_V3_PAIR_PREPARED:
+            return "prepared";
+        case IOTMD_V3_PAIR_TRIAL:
+            return "trial";
+        case IOTMD_V3_PAIR_ROLLBACK:
+            return "rollback";
+        case IOTMD_V3_PAIR_CONFIRMED:
+            return "confirmed";
+        case IOTMD_V3_PAIR_ROLLED_BACK:
+            return "rolled-back";
+        default:
+            return "idle";
+    }
+}
+
+static void iotmd_v3_pair_read_text(nvs_handle_t nvs, const char *key,
+        char *target, size_t capacity) {
+    size_t length = capacity;
+    if (nvs_get_str(nvs, key, target, &length) != ESP_OK) {
+        target[0] = '\0';
+    }
+}
+
+static void iotmd_v3_pair_load(nvs_handle_t nvs,
+        iotmd_v3_pair_record_t *record) {
+    memset(record, 0, sizeof(*record));
+    uint8_t phase = IOTMD_V3_PAIR_IDLE;
+    uint8_t runtime_healthy = 0;
+    nvs_get_u8(nvs, "phase", &phase);
+    nvs_get_u32(nvs, "sequence", &record->sequence);
+    nvs_get_u8(nvs, "runtime_ok", &runtime_healthy);
+    record->phase = phase <= IOTMD_V3_PAIR_ROLLED_BACK ?
+        (iotmd_v3_pair_phase_t)phase : IOTMD_V3_PAIR_IDLE;
+    record->runtime_healthy = runtime_healthy != 0;
+    iotmd_v3_pair_read_text(
+        nvs, "pair_id", record->pair_id, sizeof(record->pair_id)
+    );
+    iotmd_v3_pair_read_text(
+        nvs, "platform", record->platform_label,
+        sizeof(record->platform_label)
+    );
+    iotmd_v3_pair_read_text(
+        nvs, "runtime", record->runtime_slot, sizeof(record->runtime_slot)
+    );
+    iotmd_v3_pair_read_text(
+        nvs, "previous", record->previous_runtime_slot,
+        sizeof(record->previous_runtime_slot)
+    );
+    iotmd_v3_pair_read_text(
+        nvs, "failure", record->failure, sizeof(record->failure)
+    );
+}
+
+static esp_err_t iotmd_v3_pair_store(nvs_handle_t nvs,
+        const iotmd_v3_pair_record_t *record) {
+    esp_err_t error = nvs_set_u8(nvs, "phase", (uint8_t)record->phase);
+    if (error == ESP_OK) {
+        error = nvs_set_u32(nvs, "sequence", record->sequence);
+    }
+    if (error == ESP_OK) {
+        error = nvs_set_u8(nvs, "runtime_ok", record->runtime_healthy ? 1 : 0);
+    }
+    if (error == ESP_OK) {
+        error = nvs_set_str(nvs, "pair_id", record->pair_id);
+    }
+    if (error == ESP_OK) {
+        error = nvs_set_str(nvs, "platform", record->platform_label);
+    }
+    if (error == ESP_OK) {
+        error = nvs_set_str(nvs, "runtime", record->runtime_slot);
+    }
+    if (error == ESP_OK) {
+        error = nvs_set_str(nvs, "previous", record->previous_runtime_slot);
+    }
+    if (error == ESP_OK) {
+        error = nvs_set_str(nvs, "failure", record->failure);
+    }
+    return error == ESP_OK ? nvs_commit(nvs) : error;
+}
+
+static void iotmd_v3_pair_text(mp_obj_t value, char *target,
+        size_t capacity, mp_rom_error_text_t message, bool allow_empty) {
+    size_t length = 0;
+    const char *text = mp_obj_str_get_data(value, &length);
+    if ((!allow_empty && length == 0) || length >= capacity) {
+        mp_raise_ValueError(message);
+    }
+    iotmd_v3_copy_text(target, capacity, text, length);
+}
+
+static void iotmd_v3_pair_require_id(const iotmd_v3_pair_record_t *record,
+        mp_obj_t pair_id_in, nvs_handle_t nvs) {
+    size_t length = 0;
+    const char *pair_id = mp_obj_str_get_data(pair_id_in, &length);
+    if (length == 0 || length > IOTMD_V3_PAIR_ID_BYTES ||
+            strlen(record->pair_id) != length ||
+            memcmp(record->pair_id, pair_id, length) != 0) {
+        nvs_close(nvs);
+        mp_raise_ValueError(MP_ERROR_TEXT("paired release changed"));
+    }
+}
+
+static mp_obj_t iotmd_v3_pair_snapshot_value(
+        const iotmd_v3_pair_record_t *record) {
+    mp_obj_t result = mp_obj_new_dict(8);
+    const char *phase = iotmd_v3_pair_phase_name(record->phase);
+    iotmd_v3_dict_store(result, qstr_from_str("phase"),
+        mp_obj_new_str(phase, strlen(phase)));
+    iotmd_v3_dict_store(result, qstr_from_str("sequence"),
+        mp_obj_new_int_from_uint(record->sequence));
+    iotmd_v3_dict_store(result, qstr_from_str("pair_id"),
+        mp_obj_new_str(record->pair_id, strlen(record->pair_id)));
+    iotmd_v3_dict_store(result, qstr_from_str("platform_label"),
+        mp_obj_new_str(record->platform_label, strlen(record->platform_label)));
+    iotmd_v3_dict_store(result, qstr_from_str("runtime_slot"),
+        mp_obj_new_str(record->runtime_slot, strlen(record->runtime_slot)));
+    iotmd_v3_dict_store(result, qstr_from_str("previous_runtime_slot"),
+        mp_obj_new_str(record->previous_runtime_slot,
+            strlen(record->previous_runtime_slot)));
+    iotmd_v3_dict_store(result, qstr_from_str("runtime_healthy"),
+        mp_obj_new_bool(record->runtime_healthy));
+    iotmd_v3_dict_store(result, qstr_from_str("failure"),
+        mp_obj_new_str(record->failure, strlen(record->failure)));
+    return result;
+}
+
+static mp_obj_t iotmd_platform_v3_pair_snapshot(void) {
+    nvs_handle_t nvs;
+    iotmd_v3_pair_record_t record;
+    esp_err_t error = nvs_open("v3paired", NVS_READONLY, &nvs);
+    if (error == ESP_OK) {
+        iotmd_v3_pair_load(nvs, &record);
+        nvs_close(nvs);
+    } else if (error == ESP_ERR_NVS_NOT_FOUND) {
+        memset(&record, 0, sizeof(record));
+    } else {
+        mp_raise_OSError(error);
+    }
+    return iotmd_v3_pair_snapshot_value(&record);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(
+    iotmd_platform_v3_pair_snapshot_obj,
+    iotmd_platform_v3_pair_snapshot
+);
+
+static mp_obj_t iotmd_platform_v3_pair_prepare(size_t n_args,
+        const mp_obj_t *args) {
+    (void)n_args;
+    iotmd_v3_pair_record_t record;
+    memset(&record, 0, sizeof(record));
+    record.phase = IOTMD_V3_PAIR_PREPARED;
+    iotmd_v3_pair_text(args[0], record.pair_id, sizeof(record.pair_id),
+        MP_ERROR_TEXT("paired release id is invalid"), false);
+    iotmd_v3_pair_text(args[2], record.platform_label,
+        sizeof(record.platform_label),
+        MP_ERROR_TEXT("paired platform label is invalid"), false);
+    iotmd_v3_pair_text(args[3], record.runtime_slot,
+        sizeof(record.runtime_slot),
+        MP_ERROR_TEXT("paired runtime slot is invalid"), false);
+    iotmd_v3_pair_text(args[4], record.previous_runtime_slot,
+        sizeof(record.previous_runtime_slot),
+        MP_ERROR_TEXT("previous runtime slot is invalid"), true);
+    iotmd_v3_pair_record_t current;
+    nvs_handle_t nvs;
+    esp_err_t error = nvs_open("v3paired", NVS_READWRITE, &nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    iotmd_v3_pair_load(nvs, &current);
+    mp_int_t sequence = mp_obj_get_int(args[1]);
+    if (sequence < 1 || sequence > INT32_MAX) {
+        nvs_close(nvs);
+        mp_raise_ValueError(MP_ERROR_TEXT("paired release sequence is invalid"));
+    }
+    if (current.phase == IOTMD_V3_PAIR_PREPARED ||
+            current.phase == IOTMD_V3_PAIR_TRIAL ||
+            current.phase == IOTMD_V3_PAIR_ROLLBACK) {
+        nvs_close(nvs);
+        mp_raise_msg(&mp_type_RuntimeError,
+            MP_ERROR_TEXT("another paired update is pending"));
+    }
+    if (current.phase == IOTMD_V3_PAIR_CONFIRMED &&
+            (uint32_t)sequence <= current.sequence) {
+        nvs_close(nvs);
+        mp_raise_ValueError(MP_ERROR_TEXT("paired release sequence is not newer"));
+    }
+    record.sequence = (uint32_t)sequence;
+    error = iotmd_v3_pair_store(nvs, &record);
+    nvs_close(nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    return iotmd_v3_pair_snapshot_value(&record);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(
+    iotmd_platform_v3_pair_prepare_obj, 5, 5,
+    iotmd_platform_v3_pair_prepare
+);
+
+static mp_obj_t iotmd_platform_v3_pair_begin_trial(mp_obj_t pair_id_in,
+        mp_obj_t runtime_slot_in) {
+    char runtime_slot[IOTMD_V3_PAIR_SLOT_BYTES + 1];
+    iotmd_v3_pair_text(runtime_slot_in, runtime_slot, sizeof(runtime_slot),
+        MP_ERROR_TEXT("paired runtime slot is invalid"), false);
+    nvs_handle_t nvs;
+    iotmd_v3_pair_record_t record;
+    esp_err_t error = nvs_open("v3paired", NVS_READWRITE, &nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    iotmd_v3_pair_load(nvs, &record);
+    iotmd_v3_pair_require_id(&record, pair_id_in, nvs);
+    const esp_partition_t *running = iotmd_v3_running_partition();
+    if (record.phase != IOTMD_V3_PAIR_PREPARED ||
+            strcmp(record.runtime_slot, runtime_slot) != 0 ||
+            strcmp(record.platform_label, running->label) != 0) {
+        nvs_close(nvs);
+        mp_raise_msg(&mp_type_RuntimeError,
+            MP_ERROR_TEXT("paired trial components do not match"));
+    }
+    record.phase = IOTMD_V3_PAIR_TRIAL;
+    record.runtime_healthy = false;
+    record.failure[0] = '\0';
+    error = iotmd_v3_pair_store(nvs, &record);
+    nvs_close(nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    return iotmd_v3_pair_snapshot_value(&record);
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(
+    iotmd_platform_v3_pair_begin_trial_obj,
+    iotmd_platform_v3_pair_begin_trial
+);
+
+static mp_obj_t iotmd_platform_v3_pair_mark_runtime_healthy(
+        mp_obj_t pair_id_in, mp_obj_t runtime_slot_in) {
+    char runtime_slot[IOTMD_V3_PAIR_SLOT_BYTES + 1];
+    iotmd_v3_pair_text(runtime_slot_in, runtime_slot, sizeof(runtime_slot),
+        MP_ERROR_TEXT("paired runtime slot is invalid"), false);
+    nvs_handle_t nvs;
+    iotmd_v3_pair_record_t record;
+    esp_err_t error = nvs_open("v3paired", NVS_READWRITE, &nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    iotmd_v3_pair_load(nvs, &record);
+    iotmd_v3_pair_require_id(&record, pair_id_in, nvs);
+    if (record.phase != IOTMD_V3_PAIR_TRIAL ||
+            strcmp(record.runtime_slot, runtime_slot) != 0) {
+        nvs_close(nvs);
+        mp_raise_msg(&mp_type_RuntimeError,
+            MP_ERROR_TEXT("paired runtime cannot be confirmed"));
+    }
+    record.runtime_healthy = true;
+    error = iotmd_v3_pair_store(nvs, &record);
+    nvs_close(nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(
+    iotmd_platform_v3_pair_mark_runtime_healthy_obj,
+    iotmd_platform_v3_pair_mark_runtime_healthy
+);
+
+static mp_obj_t iotmd_platform_v3_pair_confirm(mp_obj_t pair_id_in) {
+    nvs_handle_t nvs;
+    iotmd_v3_pair_record_t record;
+    esp_err_t error = nvs_open("v3paired", NVS_READWRITE, &nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    iotmd_v3_pair_load(nvs, &record);
+    iotmd_v3_pair_require_id(&record, pair_id_in, nvs);
+    const esp_partition_t *running = NULL;
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    error = iotmd_v3_running_state(&running, &state);
+    if (error != ESP_OK || record.phase != IOTMD_V3_PAIR_TRIAL ||
+            !record.runtime_healthy ||
+            !iotmd_v3_label_matches(running, record.platform_label) ||
+            (state != ESP_OTA_IMG_PENDING_VERIFY &&
+             state != ESP_OTA_IMG_VALID)) {
+        nvs_close(nvs);
+        mp_raise_msg(&mp_type_RuntimeError,
+            MP_ERROR_TEXT("paired trial cannot be confirmed"));
+    }
+    if (state == ESP_OTA_IMG_PENDING_VERIFY) {
+        error = esp_ota_mark_app_valid_cancel_rollback();
+    }
+    if (error == ESP_OK) {
+        record.phase = IOTMD_V3_PAIR_CONFIRMED;
+        error = iotmd_v3_pair_store(nvs, &record);
+    }
+    nvs_close(nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(
+    iotmd_platform_v3_pair_confirm_obj,
+    iotmd_platform_v3_pair_confirm
+);
+
+static mp_obj_t iotmd_platform_v3_pair_request_rollback(
+        mp_obj_t pair_id_in, mp_obj_t reason_in) {
+    char reason[IOTMD_V3_RECOVERY_REASON_BYTES + 1];
+    iotmd_v3_pair_text(reason_in, reason, sizeof(reason),
+        MP_ERROR_TEXT("paired rollback reason is invalid"), false);
+    nvs_handle_t nvs;
+    iotmd_v3_pair_record_t record;
+    esp_err_t error = nvs_open("v3paired", NVS_READWRITE, &nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    iotmd_v3_pair_load(nvs, &record);
+    iotmd_v3_pair_require_id(&record, pair_id_in, nvs);
+    if (record.phase != IOTMD_V3_PAIR_PREPARED &&
+            record.phase != IOTMD_V3_PAIR_TRIAL) {
+        nvs_close(nvs);
+        mp_raise_msg(&mp_type_RuntimeError,
+            MP_ERROR_TEXT("paired release cannot roll back"));
+    }
+    record.phase = IOTMD_V3_PAIR_ROLLBACK;
+    record.runtime_healthy = false;
+    iotmd_v3_copy_text(
+        record.failure, sizeof(record.failure), reason, strlen(reason)
+    );
+    error = iotmd_v3_pair_store(nvs, &record);
+    nvs_close(nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    return iotmd_v3_pair_snapshot_value(&record);
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(
+    iotmd_platform_v3_pair_request_rollback_obj,
+    iotmd_platform_v3_pair_request_rollback
+);
+
+static mp_obj_t iotmd_platform_v3_pair_complete_rollback(
+        mp_obj_t pair_id_in, mp_obj_t runtime_slot_in) {
+    char runtime_slot[IOTMD_V3_PAIR_SLOT_BYTES + 1];
+    iotmd_v3_pair_text(runtime_slot_in, runtime_slot, sizeof(runtime_slot),
+        MP_ERROR_TEXT("restored runtime slot is invalid"), true);
+    nvs_handle_t nvs;
+    iotmd_v3_pair_record_t record;
+    esp_err_t error = nvs_open("v3paired", NVS_READWRITE, &nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    iotmd_v3_pair_load(nvs, &record);
+    iotmd_v3_pair_require_id(&record, pair_id_in, nvs);
+    if (record.phase != IOTMD_V3_PAIR_ROLLBACK ||
+            strcmp(record.previous_runtime_slot, runtime_slot) != 0) {
+        nvs_close(nvs);
+        mp_raise_msg(&mp_type_RuntimeError,
+            MP_ERROR_TEXT("paired rollback runtime does not match"));
+    }
+    record.phase = IOTMD_V3_PAIR_ROLLED_BACK;
+    error = iotmd_v3_pair_store(nvs, &record);
+    nvs_close(nvs);
+    if (error != ESP_OK) {
+        mp_raise_OSError(error);
+    }
+    const esp_partition_t *running = NULL;
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    error = iotmd_v3_running_state(&running, &state);
+    if (error == ESP_OK &&
+            iotmd_v3_label_matches(running, record.platform_label) &&
+            state == ESP_OTA_IMG_PENDING_VERIFY &&
+            esp_ota_check_rollback_is_possible()) {
+        error = esp_ota_mark_app_invalid_rollback_and_reboot();
+        if (error != ESP_OK) {
+            mp_raise_OSError(error);
+        }
+    }
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(
+    iotmd_platform_v3_pair_complete_rollback_obj,
+    iotmd_platform_v3_pair_complete_rollback
+);
 
 static mp_obj_t iotmd_platform_v3_update_snapshot(void) {
     const esp_partition_t *running = iotmd_v3_running_partition();
@@ -1590,8 +2000,11 @@ static mp_obj_t iotmd_platform_v3_capabilities(void) {
         MP_OBJ_NEW_SMALL_INT(IOTMD_V3_STORAGE_MAX_PAYLOAD)
     );
 
-    mp_obj_t updates = mp_obj_new_dict(5);
+    mp_obj_t updates = mp_obj_new_dict(6);
     iotmd_v3_dict_store(updates, MP_QSTR_paired_manifest, mp_const_true);
+    iotmd_v3_dict_store(
+        updates, qstr_from_str("native_pair_journal"), mp_const_true
+    );
     iotmd_v3_dict_store(updates, MP_QSTR_native_trial_observation, mp_const_true);
     iotmd_v3_dict_store(updates, MP_QSTR_native_trial_control, mp_const_true);
     // The mechanisms were introduced in ABI 4, but qualification remains a separate
@@ -1703,6 +2116,20 @@ static const mp_rom_map_elem_t iotmd_platform_v3_module_globals_table[] = {
       MP_ROM_PTR(&iotmd_platform_v3_update_confirm_obj) },
     { MP_ROM_QSTR(MP_QSTR_update_rollback),
       MP_ROM_PTR(&iotmd_platform_v3_update_rollback_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pair_snapshot),
+      MP_ROM_PTR(&iotmd_platform_v3_pair_snapshot_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pair_prepare),
+      MP_ROM_PTR(&iotmd_platform_v3_pair_prepare_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pair_begin_trial),
+      MP_ROM_PTR(&iotmd_platform_v3_pair_begin_trial_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pair_mark_runtime_healthy),
+      MP_ROM_PTR(&iotmd_platform_v3_pair_mark_runtime_healthy_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pair_confirm),
+      MP_ROM_PTR(&iotmd_platform_v3_pair_confirm_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pair_request_rollback),
+      MP_ROM_PTR(&iotmd_platform_v3_pair_request_rollback_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pair_complete_rollback),
+      MP_ROM_PTR(&iotmd_platform_v3_pair_complete_rollback_obj) },
     { MP_ROM_QSTR(MP_QSTR_recovery_boot_begin),
       MP_ROM_PTR(&iotmd_platform_v3_recovery_boot_begin_obj) },
     { MP_ROM_QSTR(MP_QSTR_recovery_snapshot),

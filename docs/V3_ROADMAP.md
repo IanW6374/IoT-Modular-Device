@@ -132,7 +132,7 @@ product, repeated incomplete boot, watchdog and OTA trial tests recover through
 the frozen core; queue saturation remains bounded; and controlled confirm and
 rollback tests produce correct events without selecting the wrong partition.
 
-Current status: `3.0.0-alpha.9` retains these mechanisms and host contracts.
+Current status: `3.0.0-alpha.10` retains these mechanisms and host contracts.
 The `paired_trial`, `native_rollback`, native recovery and native job
 qualification flags intentionally remain false pending the Alpha 7 HIL matrix.
 This release does not claim bare-ESP-IDF recovery from a corrupted confirmed
@@ -155,12 +155,33 @@ interrupt, failure and soft-restart tests; network fault tests establish service
 parity; and every enrollment/renewal/trust method passes recovery and
 interoperability tests without exposing key material.
 
-Current status: `3.0.0-alpha.9` implements and host-tests the mechanisms and
-compiles ABI 5 into the production-secure ESP32-S3 core. Resource,
+Current status: `3.0.0-alpha.10` retains and host-tests these mechanisms and
+compiles ABI 6 into the production-secure ESP32-S3 core. Resource,
 transport-adapter and identity qualification remain open until HIL and shadow
 parity evidence is recorded. The v2.5 compatibility runtime therefore remains
-active, and none of these mechanisms change the still-unqualified Alpha 1–2
-paired-update or independent-recovery gates.
+active.
+
+## Alpha 10 — remaining-gate integration
+
+- Bind the platform partition and runtime slot in an encrypted native paired
+  journal and reconcile it from frozen recovery.
+- Wire transport, identity, fleet, migration, drivers and qualification through
+  one production composition root.
+- Make shadow execution explicitly side-effect free.
+- Map every supported v2 module variant into bounded v3 physical-resource
+  declarations.
+- Display all nine implementation gates separately from observed qualification.
+
+Exit: a universal pair can be interrupted at every transition without
+confirming mixed components; independent recovery and bounded native jobs pass
+fault campaigns; all physical, transport, identity, fleet, migration and driver
+matrices pass; and controlled active cutover persistently falls back after a
+failed v3 boot.
+
+Current status: `3.0.0-alpha.10` implements the integration mechanisms and
+keeps every unobserved production qualification claim false. It is the HIL
+candidate for the remaining gates, not evidence that the Alpha 10 exit criteria
+have passed. Compatibility remains the default and active-v3 is still blocked.
 
 ## Beta — operational qualification
 

@@ -61,7 +61,9 @@ handles and atomic whole-namespace snapshots. ABI 3 added owner-scoped logical
 resource claims and bounded resource inventory. ABI 4 adds guarded OTA trial
 observation/control, encrypted native boot/recovery state, and a fixed-capacity
 native job/event queue. ABI 5 adds physical resource construction, safe bus
-sharing, interrupt ownership and peripheral recovery. The ABI follows these
+sharing, interrupt ownership and peripheral recovery. ABI 6 adds the encrypted
+paired-release journal which binds a release sequence, platform partition and
+runtime slot across trial, confirmation and rollback. The ABI follows these
 rules:
 
 - primitive values only: bounded strings, integers, booleans, bytes and maps;
@@ -100,6 +102,15 @@ ESP-IDF driver. Recovery tears down and rebuilds the physical instance, while
 GPIO edge observations enter the existing fixed-capacity event queue. Runtime
 resource-manager construction first invokes a native reset so a prior abrupt
 MicroPython restart cannot retain stale claims or peripheral drivers.
+
+ABI 6 is the atomic pair boundary. The frozen supervisor prepares and begins a
+pair only when the expected platform partition is running. The replaceable
+runtime marks its exact slot healthy; only then may native code confirm the
+ESP-IDF OTA image. A failed runtime records rollback intent before its previous
+slot is restored and native bootloader rollback is requested. The journal is
+re-read after interruption, so an incomplete transition cannot silently become
+a confirmed mixed pair. Production capability flags remain false until the
+power-cut HIL matrix demonstrates this behavior at every transition.
 
 ## Application kernel
 
@@ -152,6 +163,15 @@ their internal locators to stable opaque integers in encrypted transactional
 NVS, dispatches the established enrollment/renewal implementations and applies
 generation checks before trust removal. This is a shadow/integration boundary,
 not active-v3 cutover or a claim that private-key bytes have moved into NVS.
+
+Alpha 10 supplies the outer production composition root. It connects the
+transport, identity, fleet, migration, driver and qualification services to the
+cutover coordinator without moving policy into native code. Shadow mode uses a
+dedicated side-effect-free runtime: it validates configuration and compares
+bounded compatibility projections but cannot open sockets, publish state or
+claim peripherals. Active mode still fails closed until native qualification
+flags and all release-bound observed gates pass; a failed active boot latches
+the requested mode back to compatibility.
 
 The fleet service accepts only signed P-256 policy targeted to the device or
 its configured cohort. It rejects unknown fields, invalid time windows, replayed
@@ -207,12 +227,12 @@ component artifacts remain available for factory and recovery workflows, not as
 the ordinary operator upgrade sequence.
 
 The paired state contract distinguishes `staging`, `ready`, `trial`,
-`confirmed` and `rollback`. ABI 4 can observe the running OTA state and perform
-a confirm or rollback only when the caller supplies the still-current running
-partition label and that partition remains pending verification. It does not
-yet make application-slot and core-partition confirmation one atomic native
-transaction; paired-trial and rollback capabilities therefore remain false
-until the interruption matrix proves the complete mechanism.
+`confirmed` and `rollback`. ABI 6 adds a native journal below that runtime
+state, binds both selected components and permits native confirmation only after
+the expected runtime reaches its health gate. Runtime rollback is performed
+before native bootloader rollback. `paired_trial` and `native_rollback`
+capabilities nevertheless remain false until the interruption matrix proves the
+complete mechanism on hardware.
 
 ## Configuration migration
 
@@ -238,7 +258,7 @@ interrupt allocation. Compatible shared buses use one native instance; unsafe
 conflicts fail before a driver starts.
 
 ABI 3 introduced the ownership ledger for ADC, GPIO, I2C, SPI and UART
-identities. ABI 5 now constructs those physical resources, owns GPIO interrupt
+identities. ABI 5 constructs those physical resources, owns GPIO interrupt
 registration and cleanup, and provides bounded recovery after driver failure
 or a MicroPython service restart. Claims use opaque integer handles, are
 idempotent for the same owner, conflict across different owners, and can be
@@ -253,7 +273,10 @@ failed start and stop release the whole owner scope. Dynamic unsigned driver
 loading remains out of scope, and the catalog is a compatibility declaration—not
 evidence that every physical backend has passed v3 HIL qualification. The ABI
 5 constructors are likewise advertised as implemented but `qualified: false`
-until that complete matrix passes.
+until that complete matrix passes. Alpha 10 adds a checked translation from all
+13 supported v2 module variants into the v3 driver/resource declarations. The
+translation is not a substitute for exercising every injected physical backend
+on hardware.
 
 The initial target remains ESP32-S3 N8R8. A future production board should
 prefer 16 MB flash and 8 MB PSRAM, but larger hardware must not become an alpha

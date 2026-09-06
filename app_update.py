@@ -581,7 +581,7 @@ def _activate_pending_locked():
     return 'activated update ' + str(state.get('version', ''))
 
 
-def confirm_update():
+def confirm_update(prepare_only=False):
     state = update_status()
     if state.get('status') not in ('trial', 'committing'):
         return False
@@ -591,10 +591,10 @@ def confirm_update():
             raise ValueError('trial application slot failed integrity verification')
         state['status'] = 'committing'
         _write_json_atomic(STATE_PATH, state)
+    if prepare_only:
+        return True
     _finish_commit(state)
     return True
-
-
 def _finish_commit(state):
     target_slot = state.get('target_slot', '')
     if state.get('has_application'):

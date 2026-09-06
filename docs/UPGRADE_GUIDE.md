@@ -8,9 +8,12 @@ native/runtime boundaries are qualified. Use the release-specific test note,
 including its monotonically increasing sequence and open HIL gates, before
 installing one.
 
-Alpha 9 requires a universal install because it advances the frozen native
-platform to ABI 5 and runtime configuration to version 4. It adds physical
-resource construction/recovery plus production transport and identity bridges.
+Alpha 10 requires a universal install because it advances the frozen native
+platform to ABI 6 while retaining runtime configuration version 4. It adds the
+encrypted paired journal, frozen reconciliation and the remaining-gate
+production composition, shadow, migration and driver bridges. Alpha 9 added
+physical resource construction/recovery plus production transport and identity
+bridges.
 These mechanisms are visible under **Maintenance > Release qualification**, but
 remain explicitly unqualified until the Alpha 9 HIL and interoperability matrix
 passes. Alpha 7's guarded OTA trial controls, native recovery state and bounded
@@ -197,18 +200,18 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha9.state.json \
-  --evidence .qualification/alpha9.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.9 --sequence 2714 status
+  --state .qualification/alpha10.state.json \
+  --evidence .qualification/alpha10.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.10 --sequence 2715 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha9.state.json \
-  --evidence .qualification/alpha9.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.9 --sequence 2714 monitor \
+  --state .qualification/alpha10.state.json \
+  --evidence .qualification/alpha10.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.10 --sequence 2715 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \

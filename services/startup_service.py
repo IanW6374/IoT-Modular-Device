@@ -54,6 +54,77 @@ class StartupService:
                         recovery_boot):
         firmware_confirmed = False
         application_confirmed = False
+        universal_state = universal_update.update_status()
+        native_pair = universal_state.get('status') == 'activating'
+        if native_pair:
+            try:
+                application_required = bool(
+                    universal_state.get('application_required', True)
+                )
+                firmware_required = bool(
+                    universal_state.get('firmware_required', True)
+                )
+                application_already_confirmed = (
+                    application_required and
+                    app_update.update_status().get('status') == 'idle' and
+                    app_update.running_release_sequence() == int(
+                        universal_state.get('application_sequence', 0)
+                    )
+                )
+                application_prepared = True
+                if application_required and not application_already_confirmed:
+                    application_prepared = app_update.confirm_update(True)
+                if not application_prepared:
+                    raise RuntimeError('runtime trial is unavailable')
+                if application_required:
+                    self.log_output(
+                        'Local', 'Application update',
+                        {'log': 'Runtime slot passed local health check'}, 'INFO'
+                    )
+                if not universal_update.confirm_native_pair():
+                    raise RuntimeError('native paired trial is unavailable')
+                if firmware_required:
+                    firmware_committed = (
+                        firmware_update.confirm_after_native_pair() or
+                        firmware_update.running_release_sequence() == int(
+                            universal_state.get('firmware_sequence', 0)
+                        )
+                    )
+                    if not firmware_committed:
+                        raise RuntimeError('core confirmation metadata is unavailable')
+                    firmware_confirmed = True
+                if application_required and not application_already_confirmed:
+                    if not app_update.confirm_update():
+                        raise RuntimeError('runtime confirmation commit failed')
+                application_confirmed = application_required
+                self.log_output(
+                    'Local', 'Universal update',
+                    {'log': 'Native platform/runtime pair confirmed atomically'},
+                    'INFO'
+                )
+            except Exception as exc:
+                self.log_output(
+                    'Local', 'Universal update',
+                    {'log': 'Could not confirm native pair - ' + str(exc)},
+                    'ERROR'
+                )
+                try:
+                    universal_update.rollback_native_pair(
+                        'paired confirmation failed: ' + str(exc)
+                    )
+                except Exception:
+                    pass
+                return firmware_confirmed, application_confirmed
+            if universal_update.confirm_update():
+                self.log_output(
+                    'Local', 'Universal update',
+                    {'log': 'Core and application update confirmed healthy'},
+                    'INFO'
+                )
+            marker = getattr(recovery_boot, 'mark_application_healthy', None)
+            if marker:
+                marker()
+            return firmware_confirmed, application_confirmed
         try:
             if firmware_update.confirm_update():
                 firmware_confirmed = True

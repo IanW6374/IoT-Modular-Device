@@ -10,8 +10,16 @@ The runtime owns product behavior:
 - fleet, audit, support and operational diagnostics; and
 - transport-neutral request, response and event models.
 
-Alpha 9 consumes native platform ABI 5 and configuration contract version 4.
-Module resource declarations now carry bounded physical parameters and explicit
+Alpha 10 consumes native platform ABI 6 and configuration contract version 4.
+The runtime drives the native paired journal through opaque primitive calls,
+marks the expected runtime slot healthy before native confirmation and restores
+the prior slot before requesting rollback. A single production composition root
+wires transport, identity, fleet, migration and driver services to the existing
+fail-closed cutover coordinator. Shadow mode validates and compares only; it
+cannot bind listeners, publish MQTT state or construct physical resources.
+
+Alpha 9 introduced physical and production adapter integration. Module resource
+declarations carry bounded physical parameters and explicit
 shared-bus signatures. Production lifecycle bridges adapt Wi-Fi, MQTT, HTTPS,
 mTLS Device API and syslog implementations to the transport-independent v3
 services. The identity bridge reads the installed certificate inventory,
@@ -40,9 +48,9 @@ and unified connectivity diagnostics remain transport adapters around those
 domains. Alpha 3's service registry, resource adapter, reference sensor and
 bounded kernel snapshots remain the composition base. Alpha 2's fail-closed
 transactional-storage and paired-release adapters remain in place. The paired
-coordinator may describe and reconcile a pair, but cannot select partitions or
-claim native rollback; those mechanisms remain platform-owned and
-capability-gated off for production use until Alpha 7 HIL qualification.
+coordinator can now reconcile the native ABI 6 journal, but native paired-trial
+and rollback qualification claims remain false until the hardware
+power-interruption campaign passes.
 
 Runtime code consumes only the versioned platform ABI. It may request a
 platform operation but cannot access partitions, raw encrypted storage, native

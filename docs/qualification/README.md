@@ -10,3 +10,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.7 qualification plan](v3.0.0-alpha.7.md)
 - [v3.0.0-alpha.8 qualification plan](v3.0.0-alpha.8.md)
 - [v3.0.0-alpha.9 qualification plan](v3.0.0-alpha.9.md)
+- [v3.0.0-alpha.10 qualification plan](v3.0.0-alpha.10.md)
