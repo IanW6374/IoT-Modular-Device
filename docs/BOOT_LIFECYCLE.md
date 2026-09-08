@@ -105,6 +105,10 @@ logged. Only exhaustion of all three attempts latches the frozen recovery
 request, so a single transient radio or access-point delay after a power cycle
 does not strand an otherwise healthy remote device in recovery. A pending
 network-settings trial retains its rollback behavior if all attempts fail.
+Retry diagnostics are deliberately fail-safe: unsupported log severities are
+normalised and a logging callback failure cannot shorten or replace the retry
+policy. Recovery decisions therefore depend on association results, never on
+whether an informational event could be emitted.
 
 Universal activation is firmware-first, so the new recovery core must boot
 while the previous application generation is still mounted. Every

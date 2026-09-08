@@ -8,7 +8,11 @@ native/runtime boundaries are qualified. Use the release-specific test note,
 including its monotonically increasing sequence and open HIL gates, before
 installing one.
 
-Alpha 16 uses the Alpha 13 universal update path and makes a rejected file a
+Alpha 18 makes startup retry diagnostics fail-safe and retains bounded prior
+release qualification summaries without changing the rollback-compatible
+current ledger. Alpha 17 added the Alpha release channel and refined the
+file-specific upgrade workflow. Alpha 16 uses the Alpha 13 universal update
+path and makes a rejected file a
 terminal validation result: the working state stops, the rejected selection is
 cleared, and another file can be chosen without pressing Cancel. It also fixes
 the compact live-route dependency used by module calibration without changing
@@ -212,18 +216,18 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha17.state.json \
-  --evidence .qualification/alpha17.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.17 --sequence 2722 status
+  --state .qualification/alpha18.state.json \
+  --evidence .qualification/alpha18.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.18 --sequence 2723 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha17.state.json \
-  --evidence .qualification/alpha17.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.17 --sequence 2722 monitor \
+  --state .qualification/alpha18.state.json \
+  --evidence .qualification/alpha18.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.18 --sequence 2723 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \
@@ -235,6 +239,14 @@ Controlled events are explicit subcommands: `renewal`, `update`, `power`, or
 `validation --gate <name>`, each with a required success/failure outcome. The
 tool exits 2 while any gate remains open or failed and 0 only when promotion is
 ready. A connection failure is recorded as network-down evidence only.
+
+The installed device keeps the current release's automatic soak, health,
+storage, network, update and confirmation evidence across restart and power
+loss. A different release version or sequence intentionally starts a new
+campaign; Maintenance > Release qualification retains bounded summaries for
+the four preceding on-device campaigns. Controlled renewal, power, recovery,
+interoperability, migration and driver tests remain explicit HIL evidence and
+must not be inferred merely from an automatic restart or service observation.
 
 Release-specific reports are indexed in
 [`docs/qualification`](qualification/README.md).

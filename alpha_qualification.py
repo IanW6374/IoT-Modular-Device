@@ -1,6 +1,12 @@
 """Lazy bridge from the compatibility runtime to v3 qualification evidence."""
 
 
+DEVICE_OBSERVED_GATES = frozenset((
+    'soak', 'health', 'storage', 'network-recovery', 'paired-updates',
+    'canary-health', 'release-confirmation',
+))
+
+
 class AlphaQualificationService:
     """Keep v3 imports and native namespace allocation off the critical boot path."""
 
@@ -23,8 +29,12 @@ class AlphaQualificationService:
                 from v3.runtime.iotmd_next.qualification import OperationalQualification
                 self.platform = Platform()
                 namespace = TransactionalNamespace(self.platform, 'v3qual')
+                history_namespace = TransactionalNamespace(
+                    self.platform, 'v3qualhist'
+                )
                 self.recorder = OperationalQualification(
-                    namespace, self.clock, self.device_id, self.release_getter
+                    namespace, self.clock, self.device_id, self.release_getter,
+                    history_namespace=history_namespace
                 )
             else:
                 self.recorder = self.recorder_factory(
@@ -67,6 +77,25 @@ class AlphaQualificationService:
             self.error = str(exc)[:160] or exc.__class__.__name__
             return False
 
+    def record_renewal(self, successful):
+        return self._record('record_renewal', successful)
+
+    def record_power_recovery(self, successful):
+        return self._record('record_power_recovery', successful)
+
+    def record_validation(self, name, successful):
+        return self._record('record_validation', name, successful)
+
+    def _record(self, method, *values):
+        if not self.start():
+            return False
+        try:
+            getattr(self.recorder, method)(*values)
+            return True
+        except Exception as exc:
+            self.error = str(exc)[:160] or exc.__class__.__name__
+            return False
+
     def snapshot(self):
         if not self.start():
             return None
@@ -98,6 +127,17 @@ class AlphaQualificationService:
         return {
             'available': True, 'summary': summary, 'error': '',
             'counts': counts, 'evidence': evidence,
+            'gate_sources': {
+                gate.get('name'): (
+                    'device-observed'
+                    if gate.get('name') in DEVICE_OBSERVED_GATES else
+                    'controlled-test'
+                ) for gate in evidence.get('gates', ())
+            },
+            'history': (
+                self.recorder.history()
+                if callable(getattr(self.recorder, 'history', None)) else []
+            ),
             'native_update': self._native_update_status(),
             'implementation_gates': self._implementation_gates(),
         }

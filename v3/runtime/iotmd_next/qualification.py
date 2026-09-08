@@ -9,6 +9,7 @@ except ImportError:
 CONTRACT_VERSION = 1
 STATE_VERSION = 2
 MAX_COUNTER = 1000000
+MAX_RELEASE_HISTORY = 4
 GATE_NAMES = (
     'soak', 'health', 'storage', 'network-recovery', 'certificate-renewal',
     'paired-updates', 'power-recovery', 'canary-health',
@@ -171,6 +172,51 @@ def _bounded_increment(value):
     return min(MAX_COUNTER, int(value) + 1)
 
 
+def _validate_history(value):
+    if not isinstance(value, list) or len(value) > MAX_RELEASE_HISTORY:
+        raise QualificationError('qualification history is invalid')
+    required = {
+        'release_version', 'release_sequence', 'observed_at',
+        'promotion_ready', 'passed_gates', 'failed_gates',
+    }
+    for item in value:
+        if not isinstance(item, dict) or set(item) != required:
+            raise QualificationError('qualification history entry is invalid')
+        _text(item['release_version'], 'qualification history release', 48)
+        _integer(
+            item['release_sequence'], 'qualification history release sequence'
+        )
+        _integer(item['observed_at'], 'qualification history observation', 1)
+        if item['promotion_ready'] not in (True, False):
+            raise QualificationError('qualification history result is invalid')
+        for key in ('passed_gates', 'failed_gates'):
+            gates = item[key]
+            if (not isinstance(gates, list) or len(gates) > len(GATE_NAMES) or
+                    len(set(gates)) != len(gates) or
+                    any(name not in GATE_NAMES for name in gates)):
+                raise QualificationError('qualification history gates are invalid')
+
+
+def _empty_history():
+    return {'history_version': 1, 'current': None, 'releases': []}
+
+
+def _decode_history(payload):
+    if not payload:
+        return _empty_history()
+    try:
+        value = json.loads(payload.decode())
+    except Exception:
+        raise QualificationError('qualification history is invalid')
+    if (not isinstance(value, dict) or set(value) != set(_empty_history()) or
+            value['history_version'] != 1):
+        raise QualificationError('qualification history has invalid fields')
+    _validate_history(value['releases'])
+    if value['current'] is not None:
+        _validate_history([value['current']])
+    return value
+
+
 def _decode(payload):
     if not payload:
         return None
@@ -206,7 +252,8 @@ def _decode(payload):
 class OperationalQualification:
     """Record only observed evidence; never infer an unexecuted test passed."""
 
-    def __init__(self, namespace, now, device_id, release_getter, profile=None):
+    def __init__(self, namespace, now, device_id, release_getter, profile=None,
+                 history_namespace=None):
         if not callable(now) or not callable(release_getter):
             raise QualificationError('qualification providers are unavailable')
         self._namespace = namespace
@@ -215,6 +262,8 @@ class OperationalQualification:
         self._release_getter = release_getter
         self._profile = validate_profile(profile or beta_profile())
         self._state = None
+        self._history_namespace = history_namespace
+        self._history = _empty_history()
 
     def _save(self):
         generation, unused = self._namespace.snapshot()
@@ -225,6 +274,55 @@ class OperationalQualification:
         except TypeError:
             payload = json.dumps(self._state).encode()
         self._namespace.commit(generation, payload)
+
+    def _save_history(self):
+        if self._history_namespace is None:
+            return
+        generation, unused = self._history_namespace.snapshot()
+        try:
+            payload = json.dumps(
+                self._history, sort_keys=True, separators=(',', ':')
+            ).encode()
+        except TypeError:
+            payload = json.dumps(self._history).encode()
+        self._history_namespace.commit(generation, payload)
+
+    def _load_history(self):
+        if self._history_namespace is None:
+            self._history = _empty_history()
+            return
+        unused, payload = self._history_namespace.snapshot()
+        self._history = _decode_history(payload)
+
+    @staticmethod
+    def _summary(evidence):
+        return {
+            'release_version': evidence['release']['version'],
+            'release_sequence': evidence['release']['sequence'],
+            'observed_at': evidence['observed_at'],
+            'promotion_ready': evidence['promotion_ready'],
+            'passed_gates': [
+                gate['name'] for gate in evidence['gates']
+                if gate['status'] == 'passed'
+            ],
+            'failed_gates': [
+                gate['name'] for gate in evidence['gates']
+                if gate['status'] == 'failed'
+            ],
+        }
+
+    def _sync_history(self, evidence):
+        if self._history_namespace is None:
+            return
+        summary = self._summary(evidence)
+        current = self._history['current']
+        comparable = dict(summary)
+        comparable.pop('observed_at')
+        previous = dict(current or {})
+        previous.pop('observed_at', None)
+        if comparable != previous:
+            self._history['current'] = summary
+            self._save_history()
 
     def _release(self):
         release = self._release_getter()
@@ -245,6 +343,7 @@ class OperationalQualification:
         now = _integer(int(self._now()), 'qualification time', 1)
         release = self._release()
         unused, payload = self._namespace.snapshot()
+        self._load_history()
         self._state = _decode(payload) or _empty_state(
             now, release['version'], release['sequence']
         )
@@ -253,6 +352,23 @@ class OperationalQualification:
             self._state['release_sequence'] != release['sequence']
         )
         if changed_release:
+            current = self._history['current']
+            if current is None:
+                current = self._summary(self._snapshot_for_release({
+                    'version': self._state['release_version'],
+                    'sequence': self._state['release_sequence'],
+                    # Pre-history state did not retain this observation. Do
+                    # not manufacture a passed confirmation gate.
+                    'confirmed': False,
+                }, now))
+            if current is not None and (
+                    current['release_version'] == self._state['release_version'] and
+                    current['release_sequence'] == self._state['release_sequence']):
+                releases = list(self._history['releases'])
+                releases.append(current)
+                self._history['releases'] = releases[-MAX_RELEASE_HISTORY:]
+                self._history['current'] = None
+                self._save_history()
             self._state = _empty_state(
                 now, release['version'], release['sequence']
             )
@@ -268,6 +384,11 @@ class OperationalQualification:
         )
         self._save()
         return self.snapshot()
+
+    def history(self):
+        """Return bounded summaries for earlier releases on this device."""
+        self._require_started()
+        return [dict(item) for item in self._history['releases']]
 
     def _require_started(self):
         if self._state is None:
@@ -393,9 +514,23 @@ class OperationalQualification:
 
     def snapshot(self):
         self._require_started()
+        release = self._release()
+        if (
+            self._state['release_version'] != release['version'] or
+            self._state['release_sequence'] != release['sequence']
+        ):
+            raise QualificationError(
+                'qualification release changed; restart recorder'
+            )
+        return self._snapshot_for_release(release)
+
+    def _snapshot_for_release(self, release, observed_at=None):
+        """Evaluate the loaded state against an explicitly bound release."""
         now = max(
             self._state['last_sample_at'],
-            _integer(int(self._now()), 'qualification time', 1)
+            (_integer(int(self._now()), 'qualification time', 1)
+             if observed_at is None else
+             _integer(int(observed_at), 'qualification time', 1))
         )
         elapsed = max(0, now - self._state['started_at'])
         profile = self._profile
@@ -478,12 +613,6 @@ class OperationalQualification:
                 )
             )
             gates.append(self._gate(name, status, observed, profile[requirement]))
-        release = self._release()
-        if (
-            self._state['release_version'] != release['version'] or
-            self._state['release_sequence'] != release['sequence']
-        ):
-            raise QualificationError('qualification release changed; restart recorder')
         release_confirmed = release['confirmed']
         canary_status = (
             'failed' if self._state['canary_paused'] else
@@ -544,4 +673,5 @@ class OperationalQualification:
             'gates': gates,
             'promotion_ready': all(item['status'] == 'passed' for item in gates),
         }
+        self._sync_history(result)
         return result

@@ -108,6 +108,12 @@ class WebPortalTests(unittest.TestCase):
                 'name': 'power-recovery', 'status': 'not-run',
                 'observed': 0, 'required': 3,
             }]},
+            'gate_sources': {'power-recovery': 'controlled-test'},
+            'history': [{
+                'release_version': '3.0.0-alpha.16',
+                'promotion_ready': False,
+                'passed_gates': ['soak'], 'failed_gates': [],
+            }],
         })
         self.assertIn('Release qualification', page)
         self.assertIn('power recovery', page)
@@ -119,6 +125,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Native job queue', page)
         self.assertIn('Physical resources', page)
         self.assertIn('adc, gpio, i2c, spi, uart', page)
+        self.assertIn('Controlled qualification test', page)
+        self.assertIn('Previous release evidence', page)
+        self.assertIn('3.0.0-alpha.16', page)
         self.assertIn('/release-qualification', portal_ui.navigation(
             'release_qualification', 'csrf'
         ))

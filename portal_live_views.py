@@ -477,6 +477,7 @@ def render_release_qualification_page(token, status=None):
         )
     else:
         rows = []
+        gate_sources = status.get('gate_sources') or {}
         for gate in evidence.get('gates', ()):
             state = str(gate.get('status', 'not-run'))
             tone = {
@@ -488,8 +489,33 @@ def render_release_qualification_page(token, status=None):
                 html_escape(str(gate.get('name', '')).replace('-', ' ')) +
                 '</span><strong>' + html_escape(state) + '</strong>' +
                 '<small>' + html_escape(gate.get('observed', 0)) + ' / ' +
-                html_escape(gate.get('required', 0)) + '</small></div>'
+                html_escape(gate.get('required', 0)) + ' · ' +
+                ('Automatic device observation'
+                 if gate_sources.get(gate.get('name')) == 'device-observed'
+                 else 'Controlled qualification test') + '</small></div>'
             )
+        history_rows = []
+        for item in reversed(status.get('history') or ()):
+            passed = len(item.get('passed_gates') or ())
+            failed = len(item.get('failed_gates') or ())
+            tone = ' good' if item.get('promotion_ready') else (
+                ' bad' if failed else ' warn'
+            )
+            history_rows.append(
+                '<div class="metric' + tone + '"><span>' +
+                html_escape(item.get('release_version', 'Unknown release')) +
+                '</span><strong>' +
+                ('Qualified' if item.get('promotion_ready') else 'Incomplete') +
+                '</strong><small>' + html_escape(passed) +
+                ' passed · ' + html_escape(failed) + ' failed</small></div>'
+            )
+        history_content = (
+            '<h3>Previous release evidence</h3>'
+            '<p class="muted">The current release starts a new campaign. '
+            'These bounded summaries preserve the last four device records.</p>'
+            '<div class="metrics">' + ''.join(history_rows) + '</div>'
+            if history_rows else ''
+        )
         native = status.get('native_update') or {}
         snapshot = native.get('snapshot') or {}
         native_content = ''
@@ -563,7 +589,8 @@ def render_release_qualification_page(token, status=None):
             html_escape(status.get('summary', 'Not started')) +
             '</strong> — promotion remains closed until every gate has observed '
             'evidence and passes.</div><div class="metrics">' +
-            ''.join(rows) + '</div>' + implementation_content + native_content
+            ''.join(rows) + '</div>' + history_content +
+            implementation_content + native_content
         )
     body = (
         portal_ui.page_heading(

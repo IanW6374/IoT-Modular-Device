@@ -217,13 +217,19 @@ and persistently returns requested and effective ownership to compatibility. A
 subsequent v3 attempt therefore requires a new explicit operator request.
 
 Qualification is an evidence contract, not a derived marketing status. The
-ledger resets when release version or monotonic sequence changes. Offline
-probes contribute network observations but never fabricated service-health or
-storage samples. The beta profile also requires 2,400 health and storage
-observations during its 48-hour soak, so one late sample cannot qualify the
-period. Unexecuted tests remain `not-run`; observed failures are sticky until
-an explicit campaign reset. USB NCM is not a promotion dependency while the
-ESP32-S3 MicroPython integration remains unsupported.
+current ledger and soak start survive restart and power loss in an encrypted
+transactional namespace. It starts a fresh campaign when release version or
+monotonic sequence changes; before doing so, it retains a compact summary of
+the preceding campaign in a separate, rollback-compatible namespace. The four
+most recent release summaries are shown on-device while detailed exported
+evidence remains release-specific. Offline probes contribute network
+observations but never fabricated service-health or storage samples. The beta
+profile also requires 2,400 health and storage observations during its 48-hour
+soak, so one late sample cannot qualify the period. Unexecuted tests remain
+`not-run`; observed failures are sticky until an explicit campaign reset.
+Portal labels distinguish automatic device observations from controlled HIL
+tests. USB NCM is not a promotion dependency while the ESP32-S3 MicroPython
+integration remains unsupported.
 
 Alpha 7 moves recovery intent and incomplete-boot counting into encrypted NVS
 and advances that record from the frozen boot supervisor before importing the

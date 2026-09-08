@@ -59,7 +59,7 @@ from device_api_inventory import DeviceInventory
 from runtime_health import HealthHistory
 from message_broker import BoundedPublishQueue, ModuleBroker
 from services.event_service import EventService
-from services.event_sinks import LegacyLogSink
+from services import event_sinks
 from services.module_runtime import ModuleRuntime
 from services.network_service import NetworkService, STARTUP_WIFI_TIMEOUT_S, connect_with_retries
 from services.messaging_service import MessagingService
@@ -515,13 +515,14 @@ class Style():
 
 # Function:  Log Output       
 def logOutput(mode, action, data, logtype):
+    logtype = event_sinks.normalise_legacy_log_level(logtype)
     utc_time = time.localtime()
     current_time = timezone_rules.localtime(name=timezone_name)
     
     timestamp = "{:04}{:02}{:02} {:02}{:02}{:02}".format(current_time[0], current_time[1], current_time[2], current_time[3], current_time[4], current_time[5])
     
     is_audit = data.get('audit') is True
-    if is_audit or data.get('force') or loglevels.index(logtype) <= loglevels.index(loglevel):
+    if is_audit or data.get('force') or event_sinks.should_emit_legacy_log(logtype, loglevel):
         
         log = timestamp + '  ' + mode + ': ' + action + ' - ' + data['log']
         
@@ -569,7 +570,7 @@ def record_upgrade_failure(kind, phase, exc, version=''):
     return detail
 
 
-event_service.add_sink(LegacyLogSink(logOutput))
+event_service.add_sink(event_sinks.LegacyLogSink(logOutput))
 
 
 def publish_logtype(msg):

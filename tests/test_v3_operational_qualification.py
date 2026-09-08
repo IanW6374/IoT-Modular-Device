@@ -56,13 +56,14 @@ class V3OperationalQualificationTests(unittest.TestCase):
     def setUp(self):
         self.now = [1000]
         self.namespace = MemoryNamespace()
+        self.history_namespace = MemoryNamespace()
         self.release = {
             'version': '3.0.0-alpha.6', 'sequence': 2711,
             'confirmed': True,
         }
         self.recorder = OperationalQualification(
             self.namespace, lambda: self.now[0], 'iot-md-001',
-            lambda: self.release, profile()
+            lambda: self.release, profile(), self.history_namespace
         )
         self.recorder.start()
 
@@ -87,7 +88,8 @@ class V3OperationalQualificationTests(unittest.TestCase):
         recorder = OperationalQualification(
             self.namespace, lambda: self.now[0], 'iot-md-001',
             lambda: self.release,
-            profile(minimum_health_samples=2, minimum_storage_samples=2)
+            profile(minimum_health_samples=2, minimum_storage_samples=2),
+            self.history_namespace
         )
         recorder.reset()
         self.now[0] = 1060
@@ -168,12 +170,25 @@ class V3OperationalQualificationTests(unittest.TestCase):
         self.recorder.sample('healthy', 200, True)
         restarted = OperationalQualification(
             self.namespace, lambda: self.now[0], 'iot-md-001',
-            lambda: self.release, profile()
+            lambda: self.release, profile(), self.history_namespace
         )
         self.assertEqual(restarted.start()['counters']['samples'], 1)
         self.now[0] = 999
         with self.assertRaisesRegex(QualificationError, 'backwards'):
             restarted.sample('healthy', 200, True)
+
+    def test_history_sidecar_does_not_change_current_state_contract(self):
+        self.recorder.sample('healthy', 200, True)
+        state = json.loads(self.namespace.payload.decode())
+        self.assertEqual(state['state_version'], 2)
+        self.assertNotIn('history', state)
+        self.assertNotEqual(self.history_namespace.payload, b'')
+        restarted = OperationalQualification(
+            self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), self.history_namespace
+        )
+        result = restarted.start()
+        self.assertEqual(result['counters']['samples'], 1)
 
     def test_new_release_starts_a_fresh_evidence_campaign(self):
         self.recorder.sample('healthy', 200, True)
@@ -181,11 +196,39 @@ class V3OperationalQualificationTests(unittest.TestCase):
         self.release['sequence'] = 2712
         restarted = OperationalQualification(
             self.namespace, lambda: self.now[0], 'iot-md-001',
-            lambda: self.release, profile()
+            lambda: self.release, profile(), self.history_namespace
         )
         result = restarted.start()
         self.assertEqual(result['release']['version'], '3.0.0-alpha.7')
         self.assertEqual(result['counters']['samples'], 0)
+        self.assertEqual(len(restarted.history()), 1)
+        self.assertEqual(
+            restarted.history()[0]['release_version'], '3.0.0-alpha.6'
+        )
+        self.assertIn(
+            'release-confirmation', restarted.history()[0]['passed_gates']
+        )
+
+    def test_previous_release_history_is_bounded_and_survives_restart(self):
+        recorder = self.recorder
+        for number in range(7, 13):
+            self.now[0] += 1
+            self.release['version'] = '3.0.0-alpha.' + str(number)
+            self.release['sequence'] += 1
+            recorder = OperationalQualification(
+                self.namespace, lambda: self.now[0], 'iot-md-001',
+                lambda: self.release, profile(), self.history_namespace
+            )
+            recorder.start()
+        history = recorder.history()
+        self.assertEqual(len(history), 4)
+        self.assertEqual(history[0]['release_version'], '3.0.0-alpha.8')
+        restarted = OperationalQualification(
+            self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), self.history_namespace
+        )
+        restarted.start()
+        self.assertEqual(restarted.history(), history)
 
 
 if __name__ == '__main__':

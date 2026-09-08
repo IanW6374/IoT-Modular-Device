@@ -8,6 +8,9 @@ class Recorder:
         self.started = 0
         self.samples = []
         self.updates = []
+        self.renewals = []
+        self.power = []
+        self.validations = []
 
     def start(self):
         self.started += 1
@@ -18,6 +21,22 @@ class Recorder:
 
     def record_update(self, outcome):
         self.updates.append(outcome)
+
+    def record_renewal(self, successful):
+        self.renewals.append(successful)
+
+    def record_power_recovery(self, successful):
+        self.power.append(successful)
+
+    def record_validation(self, name, successful):
+        self.validations.append((name, successful))
+
+    def history(self):
+        return [{
+            'release_version': '3.0.0-alpha.16',
+            'passed_gates': ['soak'], 'failed_gates': [],
+            'promotion_ready': False,
+        }]
 
     def snapshot(self):
         return {
@@ -40,8 +59,21 @@ class AlphaQualificationTests(unittest.TestCase):
         self.assertEqual(recorder.started, 1)
         service.observe('healthy', 1000, True)
         service.record_update('confirmed')
+        service.record_renewal(True)
+        service.record_power_recovery(True)
+        service.record_validation('driver-hardware', True)
         self.assertEqual(recorder.samples, [('healthy', 1000, True, False)])
         self.assertEqual(recorder.updates, ['confirmed'])
+        self.assertEqual(recorder.renewals, [True])
+        self.assertEqual(recorder.power, [True])
+        self.assertEqual(recorder.validations, [('driver-hardware', True)])
+        status = service.status()
+        self.assertEqual(status['gate_sources']['soak'], 'device-observed')
+        self.assertEqual(
+            status['gate_sources']['power-recovery'], 'controlled-test'
+        )
+        self.assertEqual(status['history'][0]['release_version'],
+                         '3.0.0-alpha.16')
 
     def test_unavailable_recorder_is_fail_closed(self):
         service = AlphaQualificationService(

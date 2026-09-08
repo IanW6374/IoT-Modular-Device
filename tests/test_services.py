@@ -5,10 +5,18 @@ from services.messaging_service import MessagingService
 from services.network_service import NetworkService, connect_with_retries
 from services.portal_service import PortalService
 from services.update_service import UpdateService
-from services.event_sinks import LegacyLogSink
+from services.event_sinks import (
+    LegacyLogSink, normalise_legacy_log_level, should_emit_legacy_log,
+)
 
 
 class ServiceBoundaryTests(unittest.TestCase):
+    def test_legacy_logging_accepts_warning_without_changing_user_levels(self):
+        self.assertEqual(normalise_legacy_log_level('warning'), 'WARNING')
+        self.assertTrue(should_emit_legacy_log('WARNING', 'INFO'))
+        self.assertFalse(should_emit_legacy_log('WARNING', 'ERROR'))
+        self.assertEqual(normalise_legacy_log_level('unexpected'), 'INFO')
+
     def test_structured_event_log_sink_maps_severity(self):
         entries = []
         LegacyLogSink(lambda *args: entries.append(args)).write({
@@ -16,7 +24,7 @@ class ServiceBoundaryTests(unittest.TestCase):
             'message': 'ready', 'severity': 'warning',
         })
         self.assertEqual(entries[0][0:2], ('Local', 'update verified'))
-        self.assertEqual(entries[0][3], 'INFO')
+        self.assertEqual(entries[0][3], 'WARNING')
 
     def test_network_and_messaging_adapters_copy_external_state(self):
         status = {'connected': True}
@@ -67,6 +75,26 @@ class ServiceBoundaryTests(unittest.TestCase):
             asyncio.run(connect_with_retries(
                 connector, sleeper, attempts=2, backoff=(0,),
             ))
+
+    def test_startup_retry_continues_when_diagnostic_callback_fails(self):
+        attempts = []
+
+        async def connector(quick=False):
+            attempts.append(quick)
+            if len(attempts) == 1:
+                raise OSError('temporary Wi-Fi failure')
+
+        async def sleeper(_delay):
+            return None
+
+        used = asyncio.run(connect_with_retries(
+            connector, sleeper, attempts=3, backoff=(0,),
+            on_retry=lambda *unused: (_ for _ in ()).throw(
+                ValueError('logger failed')
+            ),
+        ))
+        self.assertEqual(used, 2)
+        self.assertEqual(attempts, [True, True])
 
     def test_update_service_selects_only_declared_receivers(self):
         class Store:

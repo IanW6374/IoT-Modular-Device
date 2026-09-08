@@ -4,7 +4,7 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.17` retains native ABI 6 and Alpha 13's upgrade of activating
+Version `3.0.0-alpha.18` retains native ABI 6 and Alpha 13's upgrade of activating
 transactions written by older frozen coordinators before preparing the native
 pair, while correcting packaged calibration routing and rejected-upgrade
 recovery without adding a new architecture mechanism. Frozen

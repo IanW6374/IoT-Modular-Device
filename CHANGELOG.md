@@ -2,8 +2,21 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.18 - 2026-09-08
+
 - Add clear visual separation between the manual-upgrade filename state and
   the pre-selection artifact guidance.
+- Prevent a transient Wi-Fi association failure from falsely entering recovery:
+  warning events are now valid legacy log severities, unknown severities fall
+  back safely, and a failed diagnostic callback cannot abort bounded retries.
+- Keep the current release's qualification counters and soak start in the
+  existing rollback-compatible transactional record, and retain compact
+  summaries for the four preceding releases in a separate encrypted namespace.
+- Label each portal qualification gate as an automatic device observation or a
+  controlled qualification test, and expose the missing renewal, power and
+  validation recording methods through the runtime qualification bridge.
+- Retain native platform ABI 6 and all implemented greenfield mechanisms;
+  qualification and controlled cutover remain the only open architecture gates.
 
 ## 3.0.0-alpha.17 - 2026-09-08
 

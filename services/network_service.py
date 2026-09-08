@@ -24,7 +24,12 @@ async def connect_with_retries(connector, sleeper, quick=True,
                 raise
             delay = int(backoff[min(index, len(backoff) - 1)]) if backoff else 0
             if on_retry:
-                on_retry(completed, attempts, delay, exc)
+                try:
+                    on_retry(completed, attempts, delay, exc)
+                except Exception:
+                    # Diagnostics must never shorten the bounded recovery
+                    # policy or become the reason startup enters recovery.
+                    pass
             if delay > 0:
                 await sleeper(delay)
     raise last_error
