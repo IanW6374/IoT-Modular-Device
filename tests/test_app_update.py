@@ -658,6 +658,10 @@ class AppUpdateTests(unittest.TestCase):
             routes['portal_route_live.py'].decode()
         )
         self.assertIn(
+            'import portal_module_transport',
+            routes['portal_route_live.py'].decode()
+        )
+        self.assertIn(
             'async def handle_upload_routes(',
             routes['portal_route_upload.py'].decode()
         )

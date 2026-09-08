@@ -1329,8 +1329,7 @@ async def start_web_portal(portal):
                 request_keep_alive = False
                 await send_response(
                     writer, '500 Internal Server Error',
-                    'Portal request failed. See Maintenance > Device log for details.',
-                    'text/plain'
+                    render_request_error_page(csrf_token)
                 )
             except Exception:
                 pass

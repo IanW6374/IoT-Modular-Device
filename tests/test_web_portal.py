@@ -322,6 +322,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('href="/device-api" aria-label="Open Device API"', overview)
         self.assertIn('.metric-link:focus-visible{outline:3px solid', portal_ui.PORTAL_CSS)
         self.assertIn('.metric-link{color:inherit;text-decoration:none;cursor:pointer', portal_ui.PORTAL_CSS)
+        self.assertIn('transform:translateY(-1px);text-decoration:none', portal_ui.PORTAL_CSS)
+        self.assertIn('.metric-link:focus,.metric-link:focus-visible{text-decoration:none}', portal_ui.PORTAL_CSS)
     def test_http_request_parser_rejects_oversized_and_ambiguous_headers(self):
         class Reader:
             def __init__(self, lines):
@@ -1737,10 +1739,15 @@ class WebPortalTests(unittest.TestCase):
     def test_unhandled_portal_route_error_has_an_http_fallback(self):
         source = (Path(__file__).resolve().parents[1] / 'web_portal.py').read_text()
         self.assertIn("'500 Internal Server Error'", source)
-        self.assertIn(
-            'Portal request failed. See Maintenance > Device log for details.',
-            source,
-        )
+        self.assertIn('render_request_error_page(csrf_token)', source)
+
+    def test_request_error_uses_the_authenticated_portal_shell(self):
+        page = portal_live_views.render_request_error_page('csrf')
+
+        self.assertIn('<!doctype html>', page)
+        self.assertIn('<h1>Request could not be completed</h1>', page)
+        self.assertIn('href="/logging">Open device log</a>', page)
+        self.assertIn('history.back()', page)
 
     def test_response_sets_content_length(self):
         raw = response('200 OK', 'hello', 'text/plain')
@@ -2032,7 +2039,17 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('.upgrade-grid{display:grid;grid-template-columns:1fr;', portal_ui.PORTAL_CSS)
         self.assertIn('id="update-upload-form"', updates)
         self.assertIn('Upload and stage', updates)
-        self.assertIn('.iotuni recommended; component files are for recovery.', updates)
+        self.assertIn(
+            'Use a universal upgrade for routine updates. '
+            'Application and core files are intended for recovery.',
+            updates,
+        )
+        self.assertIn('function terminalFailure(text)', updates)
+        self.assertIn('fileSelection.hidden=false;cancelButton.disabled=true;', updates)
+        self.assertIn(
+            'id="update-primary" type="submit" disabled>Upload and stage',
+            updates,
+        )
         self.assertNotIn('Universal .iotuni upgrades are recommended;', updates)
         self.assertIn('name="release_channel"', updates)
         self.assertNotIn('id="update-progress"', updates)

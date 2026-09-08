@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.16 - 2026-09-08
+
+- Restore Grove AC Voltage calibration in compact release packages by making
+  the generated live-route module import its calibration transport explicitly.
+- Render unexpected authenticated request failures inside the normal portal
+  shell, with safe recovery actions and full detail retained in Device log.
+- Recover the manual-upgrade controls immediately after a rejected file: stop
+  the working state, clear the rejected selection, and allow another file to
+  be chosen without pressing Cancel.
+- Replace the terse manual-artifact guidance with plain-language universal and
+  recovery-file guidance.
+- Keep linked overview text unadorned on hover and keyboard focus so only the
+  tile outline, elevation and focus ring change.
+- Retain native platform ABI 6 and all implemented greenfield mechanisms;
+  qualification and controlled cutover remain the only open architecture gates.
+
 ## 3.0.0-alpha.15 - 2026-09-08
 
 - Simplify manual upgrade staging to one file-specific vertical workflow and

@@ -114,7 +114,7 @@ Alpha 10 advances the report to ABI 6 and adds a bounded native paired-journal
 snapshot plus nine implementation-gate records. `implemented` reports code
 presence; `qualified` reports observed production evidence. Clients must not
 infer the latter from the former.
-Alpha 15 retains that report contract. During a trial, the application version
+Alpha 16 retains that report contract. During a trial, the application version
 reports the slot actually executing; the active slot remains uncommitted until
 native core confirmation and application commit both succeed. A terminal
 universal state must use exact matching core and application release sequences.

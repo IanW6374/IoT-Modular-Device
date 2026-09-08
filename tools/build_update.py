@@ -225,6 +225,7 @@ PORTAL_ROUTE_IMPORTS = (
     "try:\n    import uasyncio as asyncio\nexcept ImportError:\n    import asyncio\n\n"
     "import web_portal_ui as portal_ui\n"
     "import portal_auth\n"
+    "import portal_module_transport\n"
     "from portal_http import *\n"
     "from portal_settings_views import *\n"
     "from portal_live_views import *\n"
