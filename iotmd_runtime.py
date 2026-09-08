@@ -2950,8 +2950,8 @@ application_context.seal((
 async def main(client):
     global watchdog, release_available, release_check_status
 
-    startup = StartupService(hardware_platform, boot_tracker,
-                             application_context.lifecycle, runtime_health, logOutput)
+    startup = StartupService(hardware_platform, boot_tracker, application_context.lifecycle,
+                             runtime_health, logOutput, qualification_service)
 
     application_context.lifecycle.transition('starting')
     application_context.state.set('phase', 'starting')

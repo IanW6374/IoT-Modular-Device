@@ -140,6 +140,10 @@ class BootStateStore:
         self.path = path
         self.platform = platform
         self.data = self._load()
+        # Retain the last durable boot only in memory.  Qualification can then
+        # distinguish a recovered power interruption from a first boot without
+        # changing the rollback-compatible on-flash record format.
+        self.previous_data = None
 
     def _load_flash(self):
         with open(self.path, 'r') as stream:
@@ -203,6 +207,7 @@ class BootStateStore:
         return backup_written or flash_written
 
     def begin(self, reset_cause='', update_state=''):
+        self.previous_data = self.snapshot()
         previous_incomplete = bool(self.data.get('incomplete'))
         failures = int(self.data.get('failure_count', 0) or 0)
         if previous_incomplete:
@@ -311,6 +316,11 @@ class BootStateStore:
 
     def snapshot(self):
         return json.loads(json.dumps(self.data))
+
+    def previous_snapshot(self):
+        if self.previous_data is None:
+            return None
+        return json.loads(json.dumps(self.previous_data))
 
     def clear(self):
         self.data = _empty()

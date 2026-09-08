@@ -19,3 +19,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.16 qualification plan](v3.0.0-alpha.16.md)
 - [v3.0.0-alpha.17 qualification plan](v3.0.0-alpha.17.md)
 - [v3.0.0-alpha.18 qualification plan](v3.0.0-alpha.18.md)
+- [v3.0.0-alpha.19 qualification plan](v3.0.0-alpha.19.md)

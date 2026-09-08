@@ -4,10 +4,10 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.18` retains native ABI 6 and Alpha 13's upgrade of activating
-transactions written by older frozen coordinators before preparing the native
-pair, while correcting packaged calibration routing and rejected-upgrade
-recovery without adding a new architecture mechanism. Frozen
+Version `3.0.0-alpha.19` retains native ABI 6 and Alpha 18's recovery and
+qualification-history protections. A genuine power-on boot now contributes
+power-recovery evidence only after a previously healthy device returns to the
+healthy running stage, without changing the durable boot-state contract. Frozen
 code prepares the native trial without importing an
 application-slot adapter, native confirmation precedes the durable application
 pointer, failures retain their exact phase, and a newer signed pair can replace
@@ -50,8 +50,10 @@ wholesale.
 Read the [target architecture](../docs/V3_ARCHITECTURE.md),
 [requirements](../docs/V3_REQUIREMENTS.md) and
 [roadmap](../docs/V3_ROADMAP.md) before adding implementation code. The
-[Alpha 16 test note](../docs/V3_ALPHA16.md) defines its exact scope and safe
-test procedure. The [Alpha 15 note](../docs/V3_ALPHA15.md),
+[Alpha 19 test note](../docs/V3_ALPHA19.md) defines its exact scope and safe
+test procedure. The [Alpha 18 note](../docs/V3_ALPHA18.md),
+[Alpha 16 test note](../docs/V3_ALPHA16.md),
+[Alpha 15 note](../docs/V3_ALPHA15.md),
 [Alpha 14 note](../docs/V3_ALPHA14.md),
 [Alpha 13 note](../docs/V3_ALPHA13.md),
 [Alpha 12 note](../docs/V3_ALPHA12.md),

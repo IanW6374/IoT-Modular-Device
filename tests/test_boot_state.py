@@ -61,6 +61,22 @@ class BootStateTests(unittest.TestCase):
         self.assertEqual(snapshot['failure_count'], 1)
         self.assertEqual(snapshot['reset_cause'], 'watchdog')
 
+    def test_begin_retains_previous_durable_snapshot_in_memory(self):
+        platform = MemoryPlatform()
+        first = boot_state.BootStateStore(platform=platform)
+        first.begin('pwron_reset')
+        first.healthy()
+
+        second = boot_state.BootStateStore(platform=platform)
+        second.begin('pwron_reset')
+
+        previous = second.previous_snapshot()
+        self.assertEqual(previous['boot_count'], 1)
+        self.assertTrue(previous['healthy'])
+        self.assertEqual(previous['stage'], 'running')
+        previous['healthy'] = False
+        self.assertTrue(second.previous_snapshot()['healthy'])
+
     def test_significant_transitions_are_mirrored_to_flash(self):
         platform = MemoryPlatform()
         store = boot_state.BootStateStore(platform=platform)

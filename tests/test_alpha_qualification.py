@@ -70,10 +70,49 @@ class AlphaQualificationTests(unittest.TestCase):
         status = service.status()
         self.assertEqual(status['gate_sources']['soak'], 'device-observed')
         self.assertEqual(
-            status['gate_sources']['power-recovery'], 'controlled-test'
+            status['gate_sources']['power-recovery'], 'device-observed'
         )
         self.assertEqual(status['history'][0]['release_version'],
                          '3.0.0-alpha.16')
+
+    def test_healthy_power_on_after_healthy_boot_is_recorded_once(self):
+        recorder = Recorder()
+        service = AlphaQualificationService(
+            'device', lambda: {}, lambda: 1,
+            lambda clock, device, release: recorder
+        )
+        previous = {
+            'boot_count': 7, 'reset_cause': 'soft_reset',
+            'healthy': True, 'stage': 'running',
+        }
+        current = {
+            'boot_count': 8, 'reset_cause': 'pwron_reset',
+            'healthy': True, 'stage': 'running',
+        }
+
+        self.assertTrue(service.record_successful_boot(current, previous))
+        self.assertFalse(service.record_successful_boot(current, previous))
+        self.assertEqual(recorder.power, [True])
+
+    def test_non_power_or_unhealthy_boot_is_not_qualification_evidence(self):
+        recorder = Recorder()
+        service = AlphaQualificationService(
+            'device', lambda: {}, lambda: 1,
+            lambda clock, device, release: recorder
+        )
+        previous = {'boot_count': 2, 'healthy': True, 'stage': 'running'}
+        current = {
+            'boot_count': 3, 'reset_cause': 'soft_reset',
+            'healthy': True, 'stage': 'running',
+        }
+        self.assertFalse(service.record_successful_boot(current, previous))
+        current['reset_cause'] = 'pwron_reset'
+        current['healthy'] = False
+        self.assertFalse(service.record_successful_boot(current, previous))
+        previous['healthy'] = False
+        current['healthy'] = True
+        self.assertFalse(service.record_successful_boot(current, previous))
+        self.assertEqual(recorder.power, [])
 
     def test_unavailable_recorder_is_fail_closed(self):
         service = AlphaQualificationService(

@@ -132,7 +132,7 @@ product, repeated incomplete boot, watchdog and OTA trial tests recover through
 the frozen core; queue saturation remains bounded; and controlled confirm and
 rollback tests produce correct events without selecting the wrong partition.
 
-Current status: `3.0.0-alpha.18` retains these mechanisms and host contracts.
+Current status: `3.0.0-alpha.19` retains these mechanisms and host contracts.
 The `paired_trial`, `native_rollback`, native recovery and native job
 qualification flags intentionally remain false pending the Alpha 7 HIL matrix.
 This release does not claim bare-ESP-IDF recovery from a corrupted confirmed
@@ -155,7 +155,7 @@ interrupt, failure and soft-restart tests; network fault tests establish service
 parity; and every enrollment/renewal/trust method passes recovery and
 interoperability tests without exposing key material.
 
-Current status: `3.0.0-alpha.18` retains and host-tests these mechanisms and
+Current status: `3.0.0-alpha.19` retains and host-tests these mechanisms and
 compiles ABI 6 into the production-secure ESP32-S3 core. Resource,
 transport-adapter and identity qualification remain open until HIL and shadow
 parity evidence is recorded. The v2.5 compatibility runtime therefore remains
@@ -178,7 +178,7 @@ fault campaigns; all physical, transport, identity, fleet, migration and driver
 matrices pass; and controlled active cutover persistently falls back after a
 failed v3 boot.
 
-Current status: `3.0.0-alpha.18` retains Alpha 13's upgrade of activating state created by older
+Current status: `3.0.0-alpha.19` retains Alpha 13's upgrade of activating state created by older
 frozen coordinators before preparing the native pair through a frozen direct ABI
 adapter. It confirms the native core before committing the application pointer,
 persists the precise confirmation phase/error and permits a newer signed pair

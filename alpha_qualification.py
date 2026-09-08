@@ -3,7 +3,7 @@
 
 DEVICE_OBSERVED_GATES = frozenset((
     'soak', 'health', 'storage', 'network-recovery', 'paired-updates',
-    'canary-health', 'release-confirmation',
+    'power-recovery', 'canary-health', 'release-confirmation',
 ))
 
 
@@ -18,6 +18,7 @@ class AlphaQualificationService:
         self.recorder = None
         self.platform = None
         self.error = ''
+        self._power_boot_recorded = False
 
     def start(self):
         if self.recorder is not None:
@@ -82,6 +83,36 @@ class AlphaQualificationService:
 
     def record_power_recovery(self, successful):
         return self._record('record_power_recovery', successful)
+
+    def record_successful_boot(self, current, previous):
+        """Record one genuine power recovery after the runtime is healthy.
+
+        The current and previous snapshots come from ``BootStateStore``.  The
+        previous snapshot is deliberately transient, which preserves the v2
+        durable boot-state schema while still preventing first boots, software
+        resets and repeated calls in one runtime from becoming evidence.
+        """
+        if self._power_boot_recorded:
+            return False
+        if not isinstance(current, dict) or not isinstance(previous, dict):
+            return False
+        if str(current.get('reset_cause', '')).lower() != 'pwron_reset':
+            return False
+        if not current.get('healthy') or current.get('stage') != 'running':
+            return False
+        if not previous.get('healthy') or previous.get('stage') != 'running':
+            return False
+        try:
+            current_boot = int(current.get('boot_count', 0) or 0)
+            previous_boot = int(previous.get('boot_count', 0) or 0)
+        except (TypeError, ValueError):
+            return False
+        if current_boot <= 0 or current_boot != previous_boot + 1:
+            return False
+        if not self.record_power_recovery(True):
+            return False
+        self._power_boot_recorded = True
+        return True
 
     def record_validation(self, name, successful):
         return self._record('record_validation', name, successful)

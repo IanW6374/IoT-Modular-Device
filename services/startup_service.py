@@ -4,12 +4,14 @@ from application.boot_health import evaluate
 
 
 class StartupService:
-    def __init__(self, platform, boot, lifecycle, health, log_output):
+    def __init__(self, platform, boot, lifecycle, health, log_output,
+                 qualification=None):
         self.platform = platform
         self.boot = boot
         self.lifecycle = lifecycle
         self.health = health
         self.log_output = log_output
+        self.qualification = qualification
 
     def start_watchdog(self, factory, timeout_ms, progress_callback=None,
                        progress_setter=None):
@@ -182,4 +184,12 @@ class StartupService:
             self.boot.degrade(reason)
             return 'degraded'
         self.boot.healthy()
+        previous = getattr(self.boot, 'previous_snapshot', lambda: None)()
+        if self.qualification and self.qualification.record_successful_boot(
+                self.boot.snapshot(), previous):
+            self.health.record_event(
+                'power_recovery_qualified',
+                'Power-on boot recovered to a healthy running state',
+                force=True, component='qualification'
+            )
         return 'running'

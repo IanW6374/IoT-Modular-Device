@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.19 - 2026-09-08
+
+- Record a successful physical power recovery automatically once a genuine
+  `pwron_reset` boot following a healthy boot reaches the healthy `running`
+  stage.
+- Exclude first boots, software resets, failed or degraded starts and repeated
+  observations of the same runtime from power-recovery qualification evidence.
+- Retain the preceding durable boot snapshot in memory without changing the
+  rollback-compatible boot-state record format.
+- Add a persistent `power_recovery_qualified` health event and identify the
+  power-recovery qualification gate as device-observed in the portal.
+- Retain native platform ABI 6 and all Alpha 18 recovery and qualification
+  history protections.
+
 ## 3.0.0-alpha.18 - 2026-09-08
 
 - Add clear visual separation between the manual-upgrade filename state and

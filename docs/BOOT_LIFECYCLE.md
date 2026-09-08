@@ -110,6 +110,18 @@ normalised and a logging callback failure cannot shorten or replace the retry
 policy. Recovery decisions therefore depend on association results, never on
 whether an informational event could be emitted.
 
+After a physical power interruption, qualification evidence is recorded only
+when the reset cause is `pwron_reset`, the preceding durable boot record was
+healthy and the new boot reaches the healthy `running` stage. First boots,
+software resets, incomplete boots and degraded starts do not qualify. The
+preceding snapshot is retained only for the duration of the new boot, so this
+check does not change the rollback-compatible durable boot-state format.
+
+Events emitted before NTP synchronisation can carry the MicroPython epoch while
+later events from the same boot carry wall-clock time. A transition from a
+year-2000 timestamp to the correct date is therefore a clock correction, not a
+second restart; a second boot is present only when another `boot` event exists.
+
 Universal activation is firmware-first, so the new recovery core must boot
 while the previous application generation is still mounted. Every
 project-local module imported by the frozen recovery layer is therefore part
