@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add clear visual separation between the manual-upgrade filename state and
+  the pre-selection artifact guidance.
+
 ## 3.0.0-alpha.17 - 2026-09-08
 
 - Present the active manual-upgrade operation as one prominent **Current

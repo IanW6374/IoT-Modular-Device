@@ -2066,6 +2066,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('overallLabel.textContent=flow[index][1]', updates)
         self.assertIn('id="update-file-guidance"', updates)
         self.assertIn('fileGuidance.hidden=!!selected', updates)
+        self.assertIn('.file-name+.file-guidance{margin-left:1.25rem}', portal_ui.PORTAL_CSS)
         self.assertIn('Prepare and hash file', updates)
         self.assertIn('Pair verified components', updates)
         self.assertIn('renderWorkflow(workflowKind(selected))', updates)
