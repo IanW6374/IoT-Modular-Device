@@ -573,6 +573,26 @@ class UpdateSecurityTests(unittest.TestCase):
             (descriptor,),
         )
 
+    def test_alpha_release_channel_is_signed_and_accepted(self):
+        source = Path('source.py')
+        source.write_text('VALUE=1')
+        build_bundle(
+            Path('alpha.iotapp'), '3.0.0-alpha.17', [('iotmd.py', source)],
+            signing_key=self.private_key, release_sequence=30117,
+        )
+        descriptor_path, _, descriptor = publish_release(
+            'alpha.iotapp', 'site', 'https://updates.example/iotmd',
+            'alpha', self.private_key, 'Alpha release',
+            '2026-09-08T08:00:00Z',
+        )
+        self.assertEqual(descriptor_path, Path('site/alpha/latest.json').resolve())
+        update_security.validate_release_descriptor(descriptor, 'alpha')
+        channel = json.loads(descriptor_path.read_text())
+        self.assertEqual(
+            release_update.release_descriptors(channel, 'alpha'),
+            (descriptor,),
+        )
+
     def test_release_notes_include_signed_source_revision(self):
         revision = '1' * 40
         notes = notes_with_source('RC1 hardening', revision)

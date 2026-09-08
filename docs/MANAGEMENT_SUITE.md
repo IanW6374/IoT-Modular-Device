@@ -11,7 +11,7 @@ The public `HA-IoT-MD-Management-Suite` Home Assistant add-on combines:
 - signed fleet policy and queued command coordination;
 - staged rollouts and device result tracking;
 - synchronization and verification of tagged GitHub Release assets;
-- a verified release inventory with explicit Stable/Beta promotion;
+- a verified release inventory with explicit Stable/Beta/Alpha promotion;
 - a TLS release endpoint for `.iotapp`, `.iotcore` and `.iotuni` artifacts;
 - Home Assistant Ingress for the management UI and release administration.
 
@@ -48,7 +48,7 @@ single global certificate.
 ```text
 IoT Certificate Authority -> server/client certificates -> /ssl and devices
 offline IoT-MD signing key  -> signed release artifacts -> Management Suite
-Management Suite key         -> fleet policy + Stable/Beta index -> IoT-MD devices
+Management Suite key         -> fleet policy + release channel index -> IoT-MD devices
 IoT-MD devices              -> TLS syslog events        -> IoT Syslog
 Management Suite           <-> mTLS fleet API          <-> IoT-MD devices
 ```

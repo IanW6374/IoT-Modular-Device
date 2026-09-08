@@ -212,8 +212,8 @@ def validate(config, require_provisioned=False):
     credential_security.validate_password_strength(recovery.get('ap_password', ''))
     credential_security.parse_password_verifier(portal.get('password_verifier', ''))
     credential_security.parse_password_verifier(recovery.get('password_verifier', ''))
-    if release.get('channel') not in ('stable', 'beta'):
-        raise ValueError('release channel must be stable or beta')
+    if release.get('channel') not in ('stable', 'beta', 'alpha'):
+        raise ValueError('release channel must be stable, beta or alpha')
     if release.get('install_mode') not in ('download', 'upload'):
         raise ValueError('application installation mode is invalid')
     if preferences.get('loglevel') not in ('ERROR', 'INFO', 'DEBUG'):

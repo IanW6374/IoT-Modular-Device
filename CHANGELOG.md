@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.17 - 2026-09-08
+
+- Present the active manual-upgrade operation as one prominent **Current
+  task** label without duplicating the step number already shown by the
+  vertical workflow.
+- Preserve each file type's detailed workflow after verification, including
+  all eight universal stages through activation and reboot.
+- Hide artifact-type guidance once a file is selected so it cannot run into
+  the selected filename.
+- Add the Alpha automatic-upgrade channel throughout portal preferences,
+  credential validation, signed catalog validation/schema and release
+  publishing.
+- Align the Management Suite 2.2.3 release catalog, promotion selector,
+  storage paths and HTTPS endpoint with the new Alpha channel.
+- Retain native platform ABI 6 and all implemented greenfield mechanisms;
+  qualification and controlled cutover remain the only open architecture gates.
+
 ## 3.0.0-alpha.16 - 2026-09-08
 
 - Restore Grove AC Voltage calibration in compact release packages by making

@@ -592,7 +592,7 @@ def validate_release_descriptor(
     if str(descriptor.get('target_board', '')) != TARGET_BOARD:
         raise ValueError('release target board is not supported')
     release_channel = str(descriptor.get('channel', ''))
-    if release_channel not in ('stable', 'beta'):
+    if release_channel not in ('stable', 'beta', 'alpha'):
         raise ValueError('release descriptor channel is invalid')
     if channel and release_channel != str(channel):
         raise ValueError('release descriptor channel does not match the request')

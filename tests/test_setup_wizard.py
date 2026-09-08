@@ -847,6 +847,13 @@ class SetupWizardTests(unittest.TestCase):
             credential_store.load(require_provisioned=True)['release']['channel'],
             'stable'
         )
+        credential_store.update_operational_settings({
+            'release_channel': 'alpha'
+        })
+        self.assertEqual(
+            credential_store.load(require_provisioned=True)['release']['channel'],
+            'alpha'
+        )
 
     def test_portal_port_is_optional_persisted_and_reserves_enrollment_port(self):
         config = credential_store.build_configuration(

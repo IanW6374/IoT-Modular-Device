@@ -219,12 +219,12 @@ def publish_release(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Create a static, signed IoT-MD stable/beta release tree'
+        description='Create a static, signed IoT-MD stable/beta/alpha release tree'
     )
     parser.add_argument('--bundle', required=True)
     parser.add_argument('--output-root', required=True)
     parser.add_argument('--base-url', required=True)
-    parser.add_argument('--channel', required=True, choices=('stable', 'beta'))
+    parser.add_argument('--channel', required=True, choices=('stable', 'beta', 'alpha'))
     parser.add_argument('--signing-key', required=True)
     parser.add_argument('--notes', default='')
     parser.add_argument('--published-at', default='')

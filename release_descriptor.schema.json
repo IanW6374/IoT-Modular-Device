@@ -13,7 +13,7 @@
   "properties": {
     "format_version": {"const": 2},
     "target_board": {"const": "esp32-s3"},
-    "channel": {"enum": ["stable", "beta"]},
+    "channel": {"enum": ["stable", "beta", "alpha"]},
     "type": {"enum": ["application", "firmware"]},
     "version": {"type": "string", "minLength": 1, "maxLength": 64},
     "release_sequence": {"type": "integer", "minimum": 1},

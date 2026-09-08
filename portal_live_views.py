@@ -827,7 +827,8 @@ def render_update_preferences(csrf, settings):
         html_escape(csrf) + '"><div class="grid"><label class="field">Release channel<select '
         'name="release_channel"><option value="stable"' +
         (' selected' if channel == 'stable' else '') + '>Stable</option><option value="beta"' +
-        (' selected' if channel == 'beta' else '') + '>Beta</option></select></label>'
+        (' selected' if channel == 'beta' else '') + '>Beta</option><option value="alpha"' +
+        (' selected' if channel == 'alpha' else '') + '>Alpha</option></select></label>'
         '<label class="field">Automatic check schedule<select id="release-check-schedule" '
         'name="release_check_schedule"><option value="disabled"' +
         (' selected' if schedule == 'disabled' else '') + '>Disabled</option>'
@@ -846,7 +847,7 @@ def render_update_preferences(csrf, settings):
         '<label class="field">Release server URL<input name="release_base_url" type="url" '
         'required value="' + html_escape(release_base_url) + '" '
         'placeholder="https://iot-upgrade.home.arpa:8443">'
-        '<span class="field-hint">HTTPS server origin only. The Stable or Beta catalog path is '
+        '<span class="field-hint">HTTPS server origin only. The selected channel catalog path is '
         'added automatically; its certificate must cover this hostname.</span></label>'
         '<p class="muted">Scheduled checks use the device time zone configured under Time / Date. '
         'Opening this page does not initiate a check.</p>'
@@ -877,6 +878,7 @@ def update_upload_script():
         'var uploadForm=document.getElementById("update-upload-form"),csrfToken=uploadForm.dataset.csrf,'
         'cancelButton=document.getElementById("update-cancel"),primaryButton=document.getElementById('
         '"update-primary"),fileSelection=document.getElementById("update-file-selection"),'
+        'fileGuidance=document.getElementById("update-file-guidance"),'
         'activeRequest=null,updateCancelled=false,pollTimer=null,stageList='
         'document.getElementById("update-stage-list"),workflows={application:[["prepare","Prepare and hash file"],'
         '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
@@ -898,11 +900,13 @@ def update_upload_script():
         'box=document.getElementById("update-overall"),out=document.getElementById("update-result");document.getElementById('
         '"update-file-name").textContent=selected?selected.name:"No file selected";cancelButton.disabled=!selected;'
         'primaryButton.disabled=!selected;primaryButton.textContent="Upload and stage";renderWorkflow(workflowKind(selected));'
+        'fileGuidance.hidden=!!selected;'
         'if(selected){box.hidden=true;box.classList.remove("complete","failed");out.className="portal-status";'
         'out.textContent="";}};'
         'cancelButton.onclick=function(){updateCancelled=true;if(pollTimer)clearTimeout(pollTimer);'
         'if(activeRequest)activeRequest.abort();uploadForm.reset();document.getElementById("update-file-name").textContent='
         '"No file selected";cancelButton.disabled=true;primaryButton.disabled=true;primaryButton.textContent="Upload and stage";'
+        'fileGuidance.hidden=false;'
         'renderWorkflow("");fileSelection.hidden=false;var box=document.getElementById("update-overall");box.hidden=true;'
         'box.classList.remove("complete","failed");document.getElementById("update-result").className="portal-status";'
         'document.getElementById("update-result").textContent="";};'
@@ -926,12 +930,12 @@ def update_upload_script():
         '(itemIndex===index?"active":"");});var value=Math.round((index+fraction)*100/flow.length);'
         'var taskValue=Math.round(fraction*100);overallFill.style.width=taskValue+"%";'
         'overallBar.setAttribute("aria-valuenow",String(taskValue));'
-        'overallLabel.textContent="Step "+(index+1)+" of "+flow.length+" · "+flow[index][1];}'
+        'overallLabel.textContent=flow[index][1];}'
         'function failure(text){out.className="portal-status error";out.textContent=text;}'
         'function terminalFailure(text){finished=true;if(pollTimer)clearTimeout(pollTimer);'
         'box.classList.add("failed");box.hidden=false;label.textContent="Failed";failure(text);'
         'input.value="";document.getElementById("update-file-name").textContent="No file selected";'
-        'fileSelection.hidden=false;cancelButton.disabled=true;primaryButton.disabled=true;'
+        'fileGuidance.hidden=false;fileSelection.hidden=false;cancelButton.disabled=true;primaryButton.disabled=true;'
         'primaryButton.textContent="Upload and stage";}'
         'if(!firmware&&!application&&!universal){terminalFailure("Choose a .iotapp, .iotcore or .iotuni upgrade bundle.");'
         'renderWorkflow("");return;}'
@@ -1050,13 +1054,24 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
     automatic_action = render_release_check_html(status, token)
     script = update_preferences_script()
     if activation:
-        ready_steps = (
-            'Inspect signed release', 'Upload components',
-            'Verify components', 'Pair core and application', 'Activate and reboot'
-        ) if status.get('universal_update_status') == 'ready' else (
-            'Select signed file', 'Upload release', 'Verify and stage',
-            'Activate and reboot'
-        )
+        if status.get('universal_update_status') == 'ready':
+            ready_steps = (
+                'Inspect paired manifest', 'Upload core firmware',
+                'Write core firmware', 'Verify core firmware',
+                'Upload application', 'Verify and stage application',
+                'Pair verified components', 'Activate and reboot',
+            )
+        elif status.get('firmware_update_status') == 'ready':
+            ready_steps = (
+                'Prepare and hash file', 'Upload core firmware',
+                'Write core firmware', 'Verify core firmware',
+                'Activate and reboot',
+            )
+        else:
+            ready_steps = (
+                'Prepare and hash file', 'Upload application',
+                'Verify and stage application', 'Activate and reboot',
+            )
         manual_content = (
             '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">'
             '<ol class="upgrade-stage-list">' + ''.join(
@@ -1079,11 +1094,11 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
             '<div id="update-file-selection"><input id="update-bundle" class="file-input-hidden" type="file" required '
             'accept=".iotapp,.iotcore,.iotuni"><label class="button secondary file-button" for="update-bundle">'
             'Choose upgrade file</label> <span id="update-file-name" class="file-name">No file selected</span>'
-            '<span class="file-guidance"> Use a universal upgrade for routine updates. '
+            '<span id="update-file-guidance" class="file-guidance"> Use a universal upgrade for routine updates. '
             'Application and core files are intended for recovery.</span></div>'
             '<div id="update-overall" class="upgrade-overall" hidden>'
-            '<div class="upgrade-overall-head"><strong>Current task</strong>'
-            '<span id="update-overall-label">Waiting to start</span></div>'
+            '<div class="upgrade-overall-head"><strong>Current task: '
+            '<span id="update-overall-label">Waiting to start</span></strong></div>'
             '<div id="update-overall-bar" class="upgrade-overall-track" role="progressbar" '
             'aria-label="Current upgrade task progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
             '<span id="update-overall-fill" class="upgrade-overall-fill"></span></div></div>' +
