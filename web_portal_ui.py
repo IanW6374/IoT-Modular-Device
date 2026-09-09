@@ -53,6 +53,10 @@ PORTAL_CSS = (
     '.nav-subgroup.open>.nav-submenu{display:grid}.nav-submenu .nav-link{font-size:.84rem}'
     '.nav-menu-trigger{border:0;background:transparent;color:var(--muted);font-weight:650}'
     '.nav-menu-trigger:hover,.nav-menu-trigger[aria-current="page"]{background:var(--bg);color:var(--ink)}'
+    '.device-status-dot{width:.62rem;height:.62rem;flex:0 0 .62rem;border-radius:50%;'
+    'background:var(--warn);box-shadow:0 0 0 2px rgba(164,103,8,.14)}'
+    '.device-status-dot.good{background:var(--good);box-shadow:0 0 0 2px rgba(24,135,84,.14)}'
+    '.device-status-dot.bad{background:var(--bad);box-shadow:0 0 0 2px rgba(181,51,51,.14)}'
     '.identity-menu{margin-left:6px}.identity-menu>.portal-identity{border:1px solid var(--accent);'
     'background:var(--bg);color:var(--accent2)}.identity-menu>.portal-identity:after{content:none}'
     '.identity-dropdown{min-width:15rem;padding:12px}.identity-details{display:grid;gap:2px;'
@@ -473,6 +477,19 @@ def identity_details(username, role):
     )
 
 
+def device_status_indicator(status):
+    """Render a compact, accessible overall-state LED for the main menu."""
+    state = str((status or {}).get('device_state', 'unknown')).lower()
+    tone = ' good' if state in ('running', 'healthy') else (
+        ' bad' if state in ('failed', 'error', 'safe') else ''
+    )
+    return (
+        '<span class="device-status-dot' + tone + '" role="img" '
+        'aria-label="Device status: ' + escape(state) + '" title="Device status: ' +
+        escape(state) + '"></span>'
+    )
+
+
 def _attribute(tag, name):
     """Return a quoted HTML attribute from a trusted renderer tag."""
     marker = str(name) + '='
@@ -572,7 +589,7 @@ def restrict_actions(page, role):
     return page
 
 
-def personalise_page(page, username, role):
+def personalise_page(page, username, role, status=None):
     """Add request-local identity and permission presentation to portal HTML."""
     page = str(page).replace(
         '<!--portal-identity-->', identity_badge(username, role), 1
@@ -580,6 +597,7 @@ def personalise_page(page, username, role):
     page = page.replace(
         '<!--portal-identity-details-->', identity_details(username, role), 1
     )
+    page = page.replace('<!--device-status-->', device_status_indicator(status), 1)
     return restrict_actions(page, role)
 
 
@@ -623,7 +641,8 @@ def navigation(active, csrf):
             )
         links.append(
             '<div class="nav-group"><button class="nav-link nav-menu-trigger" type="button" '
-            'aria-haspopup="true" aria-expanded="false"' + current + '>' + escape(label) + '</button>'
+            'aria-haspopup="true" aria-expanded="false"' + current + '>' +
+            ('<!--device-status-->' if key == 'status' else '') + escape(label) + '</button>'
             '<div class="nav-dropdown" role="menu" aria-label="' + escape(label) +
             ' submenu">' + ''.join(child_links) + '</div></div>'
         )

@@ -67,6 +67,8 @@ from services.home_assistant_service import HomeAssistantService
 from services.portal_service import PortalService
 from services.update_service import UpdateService
 from services.startup_service import StartupService
+from services.certificate_renewal_service import CertificateRenewalService
+from services.mqtt_startup_service import MQTTStartupService
 from portal_contracts import PortalDependencies
 from portal_view_models import enrich_runtime_status, module_summaries as build_module_summaries
 from application import ApplicationContext, RuntimeState
@@ -284,18 +286,15 @@ pending_configuration_import = None
 pending_secure_configuration_import = None
 pending_restart_reasons = []
 
-
 def ticks_ms():
     if hasattr(time, 'ticks_ms'):
         return time.ticks_ms()
     return int(time.time() * 1000)
 
-
 def ticks_diff(end, start):
     if hasattr(time, 'ticks_diff'):
         return time.ticks_diff(end, start)
     return end - start
-
 
 def wall_time_text(epoch=None):
     current = timezone_rules.localtime(epoch, name=timezone_name)
@@ -303,7 +302,6 @@ def wall_time_text(epoch=None):
         current[0], current[1], current[2],
         current[3], current[4], current[5]
     )
-
 
 def modules_have_issues():
     """Return True when any loaded module reports an attention state."""
@@ -340,7 +338,6 @@ def set_main_device_error():
         status_led(1)
     except Exception:
         pass
-
 
 def service_password_calculation(active):
     """Keep the watchdog alive and expose long authentication work on the LED."""
@@ -1343,7 +1340,7 @@ def installed_certificate_details():
         migration_pending = os.stat(API_SERVER_MIGRATION_MARKER)[6] >= 0
     except OSError:
         migration_pending = False
-    return certificate_status.installed_details(
+    details = certificate_status.installed_details(
         certificate_manager, {
             'portal': web_portal_cert_path, 'api_server': api_server_cert_path,
             'mqtt_ca': mqtt_ca_cert_path, 'release_ca': release_ca_cert_path,
@@ -1351,6 +1348,10 @@ def installed_certificate_details():
             fleet_management.FLEET_VERIFICATION_KEY_PATH,
         }, api_client_ca_store, api_client_registry, certificate_config,
         migration_pending)
+    renewal = certificate_renewal_service.operation()
+    if renewal:
+        details['enrollment_operation'] = dict(renewal)
+    return details
 
 async def certificate_alert_monitor():
     await certificate_status.alert_monitor(
@@ -1603,10 +1604,21 @@ def schedule_certificate_identity_reload():
     if device_api_enabled:
         start_task('device_api_certificate_reload', reload_device_api_listener())
 
+
+certificate_renewal_service = CertificateRenewalService(
+    certificate_config, {
+        'trust-ca': mqtt_ca_cert_path, 'portal-cert': web_portal_cert_path,
+        'portal-key': web_portal_key_path, 'api-server-cert': api_server_cert_path,
+        'api-server-key': api_server_key_path,
+    }, certificate_lifecycle.renew_now, qualification_service.record_renewal,
+    runtime_health, schedule_portal_certificate_reload,
+    schedule_certificate_identity_reload, start_portal_task, portal_tasks)
+
 certificate_portal_actions.configure(
     api_client_ca_store, schedule_portal_certificate_reload,
     schedule_certificate_identity_reload, lambda: start_task(
-        'api_trust_reload', reload_device_api_listener()), mark_restart_required)
+        'api_trust_reload', reload_device_api_listener()), mark_restart_required,
+    certificate_renewal_service.request)
 
 def validate_uploaded_certificates():
     staged_ca = mqtt_ca_cert_path + '.manual'
@@ -2525,8 +2537,8 @@ async def start_admin_portal():
             'network.scan': wifi_recovery.cached_wifi_networks,
             'factory_reset.request': request_factory_default,
             'users.list': portal_auth.list_users,
-            'users.add': portal_auth.add_user,
-            'users.update': portal_auth.update_user,
+            'users.add': portal_auth.add_user_from_form,
+            'users.update': portal_auth.update_user_from_form,
             'users.remove': portal_auth.remove_user,
             'restart.status': pending_restart_status,
             'restart.request': request_pending_restart,
@@ -2945,8 +2957,6 @@ application_context.seal((
     'home_assistant'
 ))
 
-
-
 async def main(client):
     global watchdog, release_available, release_check_status
 
@@ -3123,7 +3133,8 @@ async def main(client):
             'trust-ca': mqtt_ca_cert_path, 'portal-cert': web_portal_cert_path, 'portal-key': web_portal_key_path,
             'api-server-cert': api_server_cert_path, 'api-server-key': api_server_key_path,
         }, logOutput, schedule_portal_certificate_reload,
-        schedule_certificate_identity_reload
+        schedule_certificate_identity_reload,
+        qualification_service.record_renewal
     ))
     start_task('release_qualification', qualification_service.monitor(
         lambda: ('failed' if main_device_error else
@@ -3135,18 +3146,7 @@ async def main(client):
 
     mqtt_started = False
     if mqtt_configured and mqtt_tls_ready:
-        try:
-            await client.connect()
-            client.up.clear()
-            start_task('mqtt_publish_worker', mqtt_publish_worker(), main_device_task=True)
-            await configure_mqtt_connection(client)
-            mqtt_started = True
-        except ValueError as exc:
-            logOutput('MQTT', 'Connect', {'log': 'SSL error: ' + ssl_error_message(exc)}, 'ERROR')
-            set_main_device_error()
-        except OSError as exc:
-            logOutput('MQTT', 'Connect', {'log': 'Connection error: ' + str(exc)}, 'ERROR')
-            set_main_device_error()
+        mqtt_started = await mqtt_startup.connect()
     elif not mqtt_configured:
         logOutput(
             'MQTT', 'Connect',
@@ -3159,12 +3159,7 @@ async def main(client):
             {'log': 'Not started; install a trusted CA in Maintenance > Certificates'},
             'ERROR'
         )
-        set_main_device_error()
-
-    if mqtt_started:
-        application_context.state.set('mqtt', 'online')
-        for coroutine in (up, messages):
-            start_task(coroutine.__name__, coroutine(client), main_device_task=True)
+        application_context.state.set('mqtt', 'degraded')
 
     if release_manifest_url:
         start_task('release_monitor', release_monitor())
@@ -3277,6 +3272,11 @@ def trace_mqtt_queue_put(topic, payload, retained):
 
 mqtt_queue_put = client.queue.put
 client.queue.put = trace_mqtt_queue_put
+
+mqtt_startup = MQTTStartupService(
+    client, configure_mqtt_connection, mqtt_publish_worker, (up, messages),
+    start_task, application_context.state, logOutput, asyncio.sleep,
+    ssl_error_message)
 
 
 # Helper for drivers to publish via main publish_message

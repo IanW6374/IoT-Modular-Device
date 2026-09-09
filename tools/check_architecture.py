@@ -62,6 +62,7 @@ REQUIRED_APPLICATION_MODULES = (
     'iotmd_runtime.py', 'portal_server.py', 'alpha_qualification.py',
     'certificate_status.py', 'portal_http.py', 'portal_live_views.py', 'portal_presenters.py',
     'portal_settings_views.py', 'services/home_assistant_service.py',
+    'services/certificate_renewal_service.py', 'services/mqtt_startup_service.py',
 )
 REQUIRED_FROZEN_MODULES = (
     'application_storage.py', 'boot_state.py', 'certificate_codec.py', 'credential_schema.py',

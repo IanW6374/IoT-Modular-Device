@@ -273,6 +273,9 @@ class UpdateSecurityTests(unittest.TestCase):
                 'users': [{
                     'username': 'admin', 'password_verifier': verifier,
                     'role': 'administrator', 'enabled': True,
+                    'max_retries': 5, 'failed_attempts': 0,
+                    'locked': False, 'session_timeout_s': 3600,
+                    'password_change_required': False,
                 }],
             },
             'recovery': {'ap_password': 'Access-Point-Cedar-47!', 'password_verifier': verifier},

@@ -8,9 +8,93 @@ from services.update_service import UpdateService
 from services.event_sinks import (
     LegacyLogSink, normalise_legacy_log_level, should_emit_legacy_log,
 )
+from services.certificate_renewal_service import CertificateRenewalService
+from services.mqtt_startup_service import MQTTStartupService
 
 
 class ServiceBoundaryTests(unittest.TestCase):
+    def test_managed_certificate_renewal_records_and_reloads_identity(self):
+        outcomes = []
+        events = []
+        reloads = []
+
+        async def renew(config, paths, progress):
+            progress('Renewing identity')
+            self.assertEqual(paths['portal-cert'], 'portal.pem')
+            return {'portal_not_after': '2030-01-01'}
+
+        class Health:
+            def record_event(self, *args, **kwargs):
+                events.append((args, kwargs))
+
+        service = CertificateRenewalService(
+            {'mode': 'iot_ca'}, {'portal-cert': 'portal.pem'}, renew,
+            outcomes.append, Health(), lambda: reloads.append('portal'),
+            lambda: reloads.append('identities'), lambda *_args: None, {}
+        )
+        result = asyncio.run(service.run())
+        self.assertIn('2030-01-01', result)
+        self.assertEqual(outcomes, [True])
+        self.assertEqual(reloads, ['identities'])
+        self.assertEqual(events[0][0][0], 'certificate_renewed')
+
+    def test_mqtt_startup_retries_without_latching_device_failure(self):
+        started = []
+        configured = []
+
+        class Event:
+            def clear(self):
+                return None
+
+        class Client:
+            def __init__(self):
+                self.attempts = 0
+                self.connected = False
+                self.up = Event()
+
+            def isconnected(self):
+                return self.connected
+
+            async def connect(self):
+                self.attempts += 1
+                if self.attempts == 1:
+                    raise OSError('broker unavailable')
+                self.connected = True
+
+        class State:
+            def __init__(self):
+                self.values = {}
+
+            def set(self, key, value):
+                self.values[key] = value
+
+        async def configure(_client):
+            configured.append(True)
+
+        async def worker():
+            return None
+
+        async def sleeper(_delay):
+            return None
+
+        def start_task(name, coroutine, **_kwargs):
+            if name == 'mqtt_startup_retry':
+                started.append(coroutine)
+            else:
+                coroutine.close()
+
+        state = State()
+        client = Client()
+        service = MQTTStartupService(
+            client, configure, worker, (), start_task, state,
+            lambda *_args: None, sleeper, str
+        )
+        self.assertFalse(asyncio.run(service.connect()))
+        self.assertEqual(state.values['mqtt'], 'retrying')
+        asyncio.run(started[0])
+        self.assertEqual(state.values['mqtt'], 'online')
+        self.assertEqual(configured, [True])
+
     def test_legacy_logging_accepts_warning_without_changing_user_levels(self):
         self.assertEqual(normalise_legacy_log_level('warning'), 'WARNING')
         self.assertTrue(should_emit_legacy_log('WARNING', 'INFO'))

@@ -8,6 +8,7 @@ except ImportError:
 
 CONTRACT_VERSION = 1
 STATE_VERSION = 2
+CAMPAIGN_STATE_VERSION = 1
 MAX_COUNTER = 1000000
 MAX_RELEASE_HISTORY = 4
 GATE_NAMES = (
@@ -26,6 +27,22 @@ VALIDATION_COUNTERS = {
     'migration-rollback': 'migration_rollbacks',
     'driver-hardware': 'driver_checks',
 }
+
+CAMPAIGN_COUNTERS = (
+    'renewal_attempts', 'renewal_successes', 'renewal_failures',
+    'update_trials', 'update_confirmations', 'update_failures',
+    'update_rollbacks', 'power_interruptions', 'power_recoveries',
+    'power_failures', 'native_recoveries_attempts',
+    'native_recoveries_successes', 'native_recoveries_failures',
+    'watchdog_recoveries_attempts', 'watchdog_recoveries_successes',
+    'watchdog_recoveries_failures', 'identity_transactions_attempts',
+    'identity_transactions_successes', 'identity_transactions_failures',
+    'fleet_transactions_attempts', 'fleet_transactions_successes',
+    'fleet_transactions_failures', 'migration_rollbacks_attempts',
+    'migration_rollbacks_successes', 'migration_rollbacks_failures',
+    'driver_checks_attempts', 'driver_checks_successes',
+    'driver_checks_failures',
+)
 
 
 class QualificationError(RuntimeError):
@@ -168,6 +185,15 @@ def _empty_state(started_at, release_version='', release_sequence=0):
     }
 
 
+def _empty_campaign(campaign_id, started_at):
+    return {
+        'state_version': CAMPAIGN_STATE_VERSION,
+        'campaign_id': campaign_id,
+        'started_at': started_at,
+        'counters': {key: 0 for key in CAMPAIGN_COUNTERS},
+    }
+
+
 def _bounded_increment(value):
     return min(MAX_COUNTER, int(value) + 1)
 
@@ -249,11 +275,35 @@ def _decode(payload):
     return value
 
 
+def _decode_campaign(payload):
+    if not payload:
+        return None
+    try:
+        value = json.loads(payload.decode())
+    except Exception:
+        raise QualificationError('qualification campaign state is invalid')
+    template = _empty_campaign('campaign', 1)
+    if not isinstance(value, dict) or set(value) != set(template):
+        raise QualificationError('qualification campaign has invalid fields')
+    if value['state_version'] != CAMPAIGN_STATE_VERSION:
+        raise QualificationError('qualification campaign version is unsupported')
+    _text(value['campaign_id'], 'qualification campaign id', 48)
+    _integer(value['started_at'], 'qualification campaign start', 1)
+    counters = value['counters']
+    if not isinstance(counters, dict) or set(counters) != set(CAMPAIGN_COUNTERS):
+        raise QualificationError('qualification campaign counters are invalid')
+    for key in counters:
+        _integer(counters[key], 'qualification campaign counter ' + key,
+                 0, MAX_COUNTER)
+    return value
+
+
 class OperationalQualification:
     """Record only observed evidence; never infer an unexecuted test passed."""
 
     def __init__(self, namespace, now, device_id, release_getter, profile=None,
-                 history_namespace=None):
+                 history_namespace=None, campaign_namespace=None,
+                 campaign_id='v3-platform-abi-6'):
         if not callable(now) or not callable(release_getter):
             raise QualificationError('qualification providers are unavailable')
         self._namespace = namespace
@@ -264,6 +314,11 @@ class OperationalQualification:
         self._state = None
         self._history_namespace = history_namespace
         self._history = _empty_history()
+        self._campaign_namespace = campaign_namespace
+        self._campaign_id = _text(
+            str(campaign_id), 'qualification campaign id', 48
+        )
+        self._campaign = None
 
     def _save(self):
         generation, unused = self._namespace.snapshot()
@@ -286,6 +341,36 @@ class OperationalQualification:
         except TypeError:
             payload = json.dumps(self._history).encode()
         self._history_namespace.commit(generation, payload)
+
+    def _save_campaign(self):
+        if self._campaign_namespace is None:
+            return
+        generation, unused = self._campaign_namespace.snapshot()
+        try:
+            payload = json.dumps(
+                self._campaign, sort_keys=True, separators=(',', ':')
+            ).encode()
+        except TypeError:
+            payload = json.dumps(self._campaign).encode()
+        self._campaign_namespace.commit(generation, payload)
+
+    def _load_campaign(self, now):
+        if self._campaign_namespace is None:
+            self._campaign = None
+            return
+        unused, payload = self._campaign_namespace.snapshot()
+        campaign = _decode_campaign(payload)
+        if campaign is None or campaign['campaign_id'] != self._campaign_id:
+            campaign = _empty_campaign(self._campaign_id, now)
+            # Adopt evidence recorded before campaign-scoped persistence was
+            # introduced. This is a one-time migration, not manufactured data.
+            if self._state is not None:
+                for key in CAMPAIGN_COUNTERS:
+                    campaign['counters'][key] = self._state['counters'][key]
+            self._campaign = campaign
+            self._save_campaign()
+        else:
+            self._campaign = campaign
 
     def _load_history(self):
         if self._history_namespace is None:
@@ -347,6 +432,7 @@ class OperationalQualification:
         self._state = _decode(payload) or _empty_state(
             now, release['version'], release['sequence']
         )
+        self._load_campaign(now)
         changed_release = (
             self._state['release_version'] != release['version'] or
             self._state['release_sequence'] != release['sequence']
@@ -377,13 +463,24 @@ class OperationalQualification:
         return self.snapshot()
 
     def reset(self):
+        """Explicitly reset release observations and the active ABI campaign."""
         release = self._release()
         self._state = _empty_state(
             _integer(int(self._now()), 'qualification time', 1),
             release['version'], release['sequence']
         )
         self._save()
+        if self._campaign_namespace is not None:
+            self._campaign = _empty_campaign(
+                self._campaign_id,
+                _integer(int(self._now()), 'qualification time', 1)
+            )
+            self._save_campaign()
         return self.snapshot()
+
+    def reset_campaign(self):
+        """Explicitly clear cross-release evidence for the active ABI campaign."""
+        return self.reset()
 
     def history(self):
         """Return bounded summaries for earlier releases on this device."""
@@ -475,6 +572,7 @@ class OperationalQualification:
         }[outcome]
         counters[key] = _bounded_increment(counters[key])
         self._save()
+        self._record_campaign(('update_trials', key))
 
     def record_power_recovery(self, successful):
         self._record_boolean('power', successful)
@@ -491,6 +589,7 @@ class OperationalQualification:
         outcome = prefix + ('_successes' if successful else '_failures')
         counters[outcome] = _bounded_increment(counters[outcome])
         self._save()
+        self._record_campaign((prefix + '_attempts', outcome))
 
     def _record_boolean(self, kind, successful):
         self._require_started()
@@ -505,6 +604,24 @@ class OperationalQualification:
             counters[success_key if successful else failure_key]
         )
         self._save()
+        self._record_campaign((
+            attempt_key, success_key if successful else failure_key
+        ))
+
+    def _record_campaign(self, keys):
+        if self._campaign is None:
+            return
+        counters = self._campaign['counters']
+        for key in keys:
+            counters[key] = _bounded_increment(counters[key])
+        self._save_campaign()
+
+    def _evidence_counters(self):
+        counters = dict(self._state['counters'])
+        if self._campaign is not None:
+            for key in CAMPAIGN_COUNTERS:
+                counters[key] = self._campaign['counters'][key]
+        return counters
 
     def _gate(self, name, status, observed, required):
         return {
@@ -534,7 +651,8 @@ class OperationalQualification:
         )
         elapsed = max(0, now - self._state['started_at'])
         profile = self._profile
-        counters = self._state['counters']
+        release_counters = self._state['counters']
+        counters = self._evidence_counters()
         soak_passed = elapsed >= profile['minimum_soak_s']
         gates = [self._gate(
             'soak', 'passed' if soak_passed else 'in-progress', elapsed,
@@ -595,7 +713,7 @@ class OperationalQualification:
             ('certificate-renewal', 'renewal_successes',
              ('renewal_failures',), 'required_renewals'),
             ('paired-updates', 'update_confirmations',
-             ('update_failures', 'update_rollbacks'),
+             ('update_failures',),
              'required_update_confirmations'),
             ('power-recovery', 'power_recoveries',
              ('power_failures',), 'required_power_recoveries'),
@@ -616,11 +734,12 @@ class OperationalQualification:
         release_confirmed = release['confirmed']
         canary_status = (
             'failed' if self._state['canary_paused'] else
-            ('passed' if counters['update_confirmations'] else 'not-run')
+            ('passed' if release_counters['update_confirmations'] else 'not-run')
         )
         gates.append(self._gate(
             'canary-health', canary_status,
-            0 if self._state['canary_paused'] else counters['update_confirmations'],
+            (0 if self._state['canary_paused'] else
+             release_counters['update_confirmations']),
             1
         ))
         gates.append(self._gate(
@@ -669,6 +788,9 @@ class OperationalQualification:
                 'minimum_storage_free_bytes': minimum_free,
                 'maximum_network_recovery_s': maximum_recovery,
                 'network_outage_open': self._state['network_up'] is False,
+                'maximum_consecutive_unhealthy': unhealthy,
+                'maximum_allowed_consecutive_unhealthy':
+                    profile['maximum_consecutive_unhealthy'],
             },
             'gates': gates,
             'promotion_ready': all(item['status'] == 'passed' for item in gates),

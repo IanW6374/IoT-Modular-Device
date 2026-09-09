@@ -515,7 +515,8 @@ class AppUpdateTests(unittest.TestCase):
             'services/home_assistant_service.py',
             'services/update_service.py', 'services/event_service.py',
             'services/event_sinks.py', 'services/module_runtime.py',
-            'services/startup_service.py',
+            'services/startup_service.py', 'services/certificate_renewal_service.py',
+            'services/mqtt_startup_service.py',
             'application/__init__.py',
             'application/context.py', 'application/lifecycle.py',
             'application/boot_health.py'

@@ -38,6 +38,15 @@ async def handle(method, route, path, writer, reader, headers, form, csrf,
             '/certificates', csrf, message, inventory() if inventory else {}
         ))
         return True
+    if method == 'POST' and route == '/renew-certificate':
+        result = apply_portal_action(
+            'renew-certificate', path, actions, log_output, form
+        )
+        message = result.get('message', '') if isinstance(result, dict) else result
+        await send_response(writer, '202 Accepted', _render_certificate_route(
+            '/certificates', csrf, message, inventory() if inventory else {}
+        ))
+        return True
     if method == 'POST' and path.startswith('/certificate-upload'):
         if upload is None:
             await send_response(writer, '503 Service Unavailable', 'Certificate upload is unavailable', 'text/plain')

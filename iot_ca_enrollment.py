@@ -461,17 +461,22 @@ async def renew(config, paths, validate, progress=None):
         raise
 
 
-async def renewal_monitor(config, paths, validate, log_output, reset_device, interval_s=900):
+async def renewal_monitor(config, paths, validate, log_output, reset_device,
+                          interval_s=900, outcome=None):
     while True:
         if renewal_due(paths):
             try:
                 state = await renew(config, paths, validate)
             except Exception as exc:
+                if outcome:
+                    outcome(False)
                 log_output(
                     'Local', 'IoT CA certificate renewal',
                     {'log': 'Failed - ' + str(exc)}, 'ERROR'
                 )
             else:
+                if outcome:
+                    outcome(True)
                 log_output(
                     'Local', 'IoT CA certificate renewal',
                     {'log': 'Renewed public portal and private Device API identities until ' +

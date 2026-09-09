@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.20 - 2026-09-09
+
+- Preserve paired-upgrade, certificate-renewal, power-recovery and controlled
+  validation evidence across release changes within the native ABI 6
+  qualification campaign, while restarting release-specific soak and health
+  sampling for each build.
+- Keep expected paired-update rollback diagnostic without treating rollback
+  itself as a failed qualification, and expose the worst consecutive unhealthy
+  run behind the Health gate result.
+- Recover a configured MQTT service through bounded background retries instead
+  of permanently latching an otherwise healthy device into the failed state.
+- Add per-user failed-sign-in limits, encrypted account lockout, administrator
+  unlock, individual inactive-session timeouts and forced password replacement
+  for administrator-issued credentials.
+- Return expired sessions to a signed-out login page and make long-running
+  portal requests handle session expiry consistently.
+- Add immediate managed certificate renewal using the currently selected
+  enrollment method and record its observed qualification result.
+- Correct certificate distinguished-name escaping on MicroPython so apostrophes
+  are never rendered as literal HTML entities in any certificate view.
+- Present existing and new portal users as equal fixed-width cards in one
+  section, and add a compact green/amber/red device-state LED before the Status
+  menu.
+
 ## 3.0.0-alpha.19 - 2026-09-08
 
 - Record a successful physical power recovery automatically once a genuine

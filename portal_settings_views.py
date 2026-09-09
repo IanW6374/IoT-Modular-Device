@@ -46,11 +46,11 @@ def render_operational(route, token, current_settings, message='', error=False,
         )
     return renderer(token, current_settings, message, error)
 
-def render_login_page(username='', error=''):
+def render_login_page(username='', error='', message=''):
     body = (
         '<section class="auth-card card"><span class="eyebrow">Secure device portal</span>'
         '<h1>Welcome back</h1><p class="lead">Sign in to manage this IoT-MD device.</p>' +
-        _notice(error, True) +
+        _notice(message) + _notice(error, True) +
         '<form id="login-form" action="/login" method="post">'
         '<label class="field">Username<input name="username" autocomplete="username" value="' +
         html_escape(username) + '" required maxlength="64" autofocus></label>'
@@ -74,7 +74,7 @@ def render_login_page(username='', error=''):
 def render_password_change_form(csrf, error='', required=False):
     return (
         '<section class="card"><div class="section-title"><h2>' +
-        ('Set administrator password' if required else 'Change password') +
+        ('Set a new password' if required else 'Change password') +
         '</h2></div>' + _notice(error, True) +
         '<form method="post" action="/user?action=password">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
@@ -91,8 +91,8 @@ def render_password_change_form(csrf, error='', required=False):
 
 def render_password_change_page(csrf, error='', required=False):
     message = (
-        'Replace the one-time password before using the portal.'
-        if required else 'Manage the administrator identity and password for this device.'
+        'Replace your temporary password before using the portal.'
+        if required else 'Change the password for your signed-in portal account.'
     )
     body = (
         portal_ui.page_heading('User', 'Account', message) +
@@ -234,7 +234,8 @@ def render_settings_page(csrf, settings, message='', error=False):
         'wifiSelect.onchange=function(){if(this.value==="__manual__")manualWifi();};wifiDetected.onclick=detectedWifi;'
         'function scanWifi(){wifiRescan.disabled=true;'
         'portalStatus(wifiStatus,"","Scanning for nearby networks…");fetch("/api/wifi-networks",{cache:"no-store",'
-        'credentials:"same-origin"}).then(function(response){if(!response.ok)throw new Error("HTTP "+response.status);'
+        'credentials:"same-origin"}).then(function(response){if(response.status===401){location.replace('
+        '"/login?reason=expired");throw new Error("Session expired");}if(!response.ok)throw new Error("HTTP "+response.status);'
         'return response.json();}).then(function(networks){var current=wifiSelect.hidden?wifiInput.value:'
         '(wifiSelect.value||wifiSelect.dataset.current),seen=[];'
         'wifiSelect.replaceChildren();if(!current)wifiSelect.appendChild(wifiOption("","Select a detected network…"));'
@@ -282,11 +283,12 @@ def render_portal_settings_page(csrf, settings, message='', error=False):
         '>HTTP (unencrypted)</option></select></label>'
         '<label class="field">Portal port<input name="portal_port" type="number" min="1" max="65535" '
         'required value="' + html_escape(port_value) + '"></label>'
-        '<label class="field">Inactive session timeout (minutes)<input '
+        '<label class="field">Default inactive session timeout (minutes)<input '
         'name="portal_session_timeout_minutes" type="number" min="5" max="1440" required value="' +
         html_escape(session_timeout_minutes) + '"></label></div>'
         '<p class="muted">HTTPS defaults to port 8443 and explicit HTTP defaults to 8080. Port 80 is reserved for '
-        'certificate enrollment and recovery.</p><div class="actions"><span></span>'
+        'certificate enrollment and recovery. Per-user timeouts are managed under User / Portal users.</p>'
+        '<div class="actions"><span></span>'
         '<button type="submit">Save changes</button></div></section></form>'
     )
     return portal_ui.shell('IoT-MD portal settings', 'portal_settings', body, csrf)
@@ -468,11 +470,21 @@ def render_user_settings_page(
     users=None, current_user=''
 ):
     settings = settings or {}
+    default_timeout_minutes = max(5, min(
+        1440, (int(settings.get('portal_session_timeout_s', 3600) or 3600) + 59) // 60
+    ))
     user_rows = []
     for user in users or ():
         name = str(user.get('username', ''))
         enabled = bool(user.get('enabled'))
         role = str(user.get('role', 'viewer'))
+        max_retries = max(1, min(20, int(user.get('max_retries', 5) or 5)))
+        failures = max(0, int(user.get('failed_attempts', 0) or 0))
+        locked = bool(user.get('locked'))
+        change_required = bool(user.get('password_change_required'))
+        timeout_minutes = max(5, min(
+            1440, (int(user.get('session_timeout_s', 3600) or 3600) + 59) // 60
+        ))
         role_labels = {
             'viewer': 'Viewer', 'operator': 'Operator',
             'administrator': 'Administrator'
@@ -484,15 +496,28 @@ def render_user_settings_page(
         )
         user_rows.append(
             '<article class="module-card portal-user-card"><div class="module-card-title"><strong>' +
-            html_escape(name) + '</strong></div><form action="/user/update" method="post">'
+            html_escape(name) + '</strong>' +
+            ('<span class="badge error">Locked</span>' if locked else '') +
+            '</div><form action="/user/update" method="post">'
             '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
             '<input type="hidden" name="username" value="' + html_escape(name) + '">'
             '<label class="field">Username<input name="new_username" required maxlength="32" value="' +
             html_escape(name) + '"></label>'
             '<label class="field">Role<select name="role">' + options + '</select></label>'
+            '<label class="field">Maximum failed sign-in attempts<input name="max_retries" '
+            'type="number" min="1" max="20" required value="' + html_escape(max_retries) + '"></label>'
+            '<label class="field">Inactive session timeout (minutes)<input name="session_timeout_minutes" '
+            'type="number" min="5" max="1440" required value="' + html_escape(timeout_minutes) + '"></label>'
+            '<p class="muted">Failed sign-in attempts: ' + html_escape(failures) + ' of ' +
+            html_escape(max_retries) + '.</p>'
             '<label class="check"><input type="checkbox" name="enabled" value="true"' +
-            (' checked' if enabled else '') + '>Enabled</label><div class="actions"><span></span>'
-            '<button class="secondary" type="submit">Update user</button></div></form>' +
+            (' checked' if enabled else '') + '>Enabled</label>'
+            '<label class="check"><input type="checkbox" name="password_change_required" value="true"' +
+            (' checked' if change_required else '') + '>Require password change at next sign-in</label>'
+            '<div class="actions"><span></span>'
+            '<button class="secondary" type="submit">Update user</button>' +
+            ('<button type="submit" name="reset_lockout" value="true">Unlock account</button>'
+             if locked else '') + '</div></form>' +
             ('' if name == current_user else (
                 '<form action="/user/remove" method="post"><input type="hidden" name="csrf" value="' +
                 html_escape(csrf) + '"><input type="hidden" name="username" value="' +
@@ -500,24 +525,34 @@ def render_user_settings_page(
                 '<button class="danger" type="submit">Remove user</button></div></form>'
             )) + '</article>'
         )
+    new_user = (
+        '<article class="module-card portal-user-card"><div class="module-card-title">'
+        '<strong>New portal user</strong></div>'
+        '<form action="/user/add" method="post" autocomplete="off">'
+        '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
+        '<label class="field">Username<input name="username" required maxlength="32"></label>'
+        '<label class="field">Role<select name="role"><option value="viewer">Viewer</option>'
+        '<option value="operator">Operator</option><option value="administrator">Administrator</option>'
+        '</select></label><label class="field">Maximum failed sign-in attempts<input name="max_retries" '
+        'type="number" min="1" max="20" required value="5"></label>'
+        '<label class="field">Inactive session timeout (minutes)<input name="session_timeout_minutes" '
+        'type="number" min="5" max="1440" required value="' +
+        html_escape(default_timeout_minutes) + '"></label>'
+        '<label class="field">Initial password<input type="password" name="password" '
+        'minlength="16" maxlength="256" required autocomplete="new-password"></label>'
+        '<label class="check"><input type="checkbox" name="password_change_required" '
+        'value="true" checked>Require password change at first sign-in</label>'
+        '<div class="actions"><span></span><button type="submit">Add new user</button></div>'
+        '</form></article>'
+    )
     body = (
         portal_ui.page_heading(
             'User', 'Portal users',
             'Manage portal usernames, roles and access. Change your own password from the avatar menu.'
         ) + _notice(message, error) + _notice(password_message, password_error) +
-        '<section class="card"><div class="section-title"><h2>Existing portal users</h2>'
+        '<section class="card"><div class="section-title"><h2>Portal users</h2>'
         '<span class="badge">Maximum 8</span></div><div class="module-grid portal-user-grid">' +
-        ''.join(user_rows) + '</div></section>'
-        '<section class="card"><div class="section-title"><h2>New portal user</h2></div>'
-        '<form action="/user/add" method="post" autocomplete="off">'
-        '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '"><div class="grid">'
-        '<label class="field">Username<input name="username" required maxlength="32"></label>'
-        '<label class="field">Role<select name="role"><option value="viewer">Viewer</option>'
-        '<option value="operator">Operator</option><option value="administrator">Administrator</option>'
-        '</select></label><label class="field">Initial password<input type="password" name="password" '
-        'minlength="16" maxlength="256" required autocomplete="new-password"></label></div>'
-        '<div class="actions"><span></span><button type="submit">Add portal user</button></div>'
-        '</form></section>'
+        ''.join(user_rows) + new_user + '</div></section>'
     )
     return portal_ui.shell('IoT-MD portal users', 'user_settings', body, csrf)
 
@@ -749,7 +784,8 @@ def render_certificate_page(csrf, message='', certificates=None):
         '"Content-Type","application/octet-stream");x.setRequestHeader("X-CSRF-Token",csrf);'
         'x.setRequestHeader("X-Certificate-Kind",kind);x.upload.onprogress=function(p){if(p.lengthComputable){'
         'label.textContent="Uploading "+index+" of "+total+" · "+Math.round(p.loaded*100/p.total)+"%";}};'
-        'x.onload=function(){if(x.status>=200&&x.status<300)resolve(x.responseText);else reject(new Error('
+        'x.onload=function(){if(x.status===401){location.replace("/login?reason=expired");reject(new Error('
+        '"Session expired"));return;}if(x.status>=200&&x.status<300)resolve(x.responseText);else reject(new Error('
         'x.responseText||"Certificate upload failed"));};x.onerror=function(){reject(new Error('
         '"Connection lost during certificate upload"));};x.send(file);});}'
         'document.getElementById("certificate-upload").onclick=async function(){var out=document.getElementById('
@@ -769,6 +805,7 @@ def render_certificate_page(csrf, message='', certificates=None):
         'label.textContent="Validating certificate set…";var done=await fetch('
         '"/validate-certificates",{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+encodeURIComponent(csrf)});'
+        'if(done.status===401){location.replace("/login?reason=expired");return;}'
         'if(!done.ok)throw new Error(await done.text());box.classList.add("complete");label.textContent='
         '"Certificate installation complete";document.open();document.write(await done.text());document.close();}'
         'catch(e){portalStatus(out,"error",e.message);box.classList.add("failed");'
@@ -894,7 +931,8 @@ def render_configuration_backup_page(csrf, message=''):
         '"X-CSRF-Token",csrf);x.upload.onprogress=function(p){if(p.lengthComputable)label.textContent='
         '"Uploading backup "+Math.round(p.loaded*100/p.total)+"%";};x.upload.onload=function(){'
         'startValidationProgress(label);};x.onload=function(){stopValidationProgress();label.textContent='
-        '"Validating configuration · 100%";if(x.status>=200&&x.status<300)resolve(x.responseText);'
+        '"Validating configuration · 100%";if(x.status===401){location.replace("/login?reason=expired");'
+        'reject(new Error("Session expired"));return;}if(x.status>=200&&x.status<300)resolve(x.responseText);'
         'else reject(new Error(x.responseText||"Configuration validation failed"));};x.onerror=function(){'
         'stopValidationProgress();reject('
         'new Error("Connection lost during configuration upload"));};x.ontimeout=function(){'
@@ -957,7 +995,8 @@ def render_configuration_backup_page(csrf, message=''):
         '"Applying configuration…";try{var endpoint=importEncrypted?'
         '"/secure-configuration-import-apply":"/configuration-import-apply",r=await fetch(endpoint,{method:"POST",'
         'credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":csrf},'
-        'body:JSON.stringify({token:importToken})});if(!r.ok)throw new Error(await r.text());document.open();'
+        'body:JSON.stringify({token:importToken})});if(r.status===401){location.replace('
+        '"/login?reason=expired");return;}if(!r.ok)throw new Error(await r.text());document.open();'
         'document.write(await r.text());document.close();}catch(e){portalStatus(document.getElementById('
         '"configuration-import-result"),"error",e.message);box.classList.add("failed");'
         'label.textContent="Import failed";this.disabled=false;}}'

@@ -36,6 +36,24 @@ class CertificateLifecycleTests(unittest.TestCase):
         self.assertIn('Automatic renewal is unavailable', logs[0][2]['log'])
         self.assertTrue(logs[0][2]['force'])
 
+    def test_renew_now_uses_current_managed_method(self):
+        progress = []
+        with mock.patch.object(
+            certificate_lifecycle.iot_ca_enrollment, 'renew',
+            new_callable=mock.AsyncMock, return_value={'portal_not_after': 'later'}
+        ) as renew:
+            result = asyncio.run(certificate_lifecycle.renew_now(
+                {'mode': 'iot_ca'}, {'trust-ca': 'root.der'}, progress.append
+            ))
+        self.assertEqual(result['portal_not_after'], 'later')
+        renew.assert_awaited_once()
+
+    def test_manual_method_cannot_be_force_renewed(self):
+        with self.assertRaisesRegex(ValueError, 'cannot be renewed'):
+            asyncio.run(certificate_lifecycle.renew_now(
+                {'mode': 'manual'}, {}, None
+            ))
+
 
 if __name__ == '__main__':
     unittest.main()

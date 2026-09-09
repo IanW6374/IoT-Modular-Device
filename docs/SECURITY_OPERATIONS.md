@@ -48,6 +48,23 @@ the API-client certificate/CA and fingerprint registration. IoT-MD currently
 uses server-authenticated TLS plus optional username/password for MQTT; it does
 not present an MQTT client certificate.
 
+## Portal accounts and sessions
+
+Each portal user has an independent role, enabled state, failed-sign-in limit
+and inactive-session timeout. Failed attempts are stored in encrypted,
+transactional configuration; reaching the configured limit locks the account
+until an administrator explicitly unlocks it. A successful sign-in clears the
+failure counter. Keep at least two administrator accounts where operationally
+appropriate so one administrator can recover another without factory reset.
+
+Administrators can require a user to replace an administrator-issued password
+at the next sign-in. The resulting session can access only logout and password
+replacement until the user supplies the current password and sets a valid new
+one. Successful replacement clears both the forced-change and lockout state.
+Expired browser sessions discard their cookie and return to the sign-in page
+with a signed-out notice; background refreshes follow the same path instead of
+leaving stale status visible.
+
 ## Incident response
 
 1. Disable automatic activation and stop rollouts.

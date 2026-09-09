@@ -24,7 +24,8 @@ def _paths():
 def apply(action, params):
     if not _dependencies:
         raise RuntimeError('certificate portal actions are not configured')
-    api_ca_store, reload_portal, reload_identities, reload_api, mark_restart = _dependencies
+    (api_ca_store, reload_portal, reload_identities, reload_api, mark_restart,
+     renew_certificate) = _dependencies
     if action == 'remove-certificate-trust':
         # Certificate administration is not part of the normal startup path.
         # Keep its implementation out of the heap until an administrator uses
@@ -48,4 +49,6 @@ def apply(action, params):
             params.get('method'), params, _paths(), reload_portal,
             reload_identities
         )
+    if action == 'renew-certificate':
+        return renew_certificate()
     return None

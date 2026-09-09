@@ -181,9 +181,14 @@ class StartupService:
         if degraded:
             reason = '; '.join(degraded)
             self.lifecycle.degrade(reason)
+            # External services may be unavailable while the local runtime is
+            # nevertheless healthy and fully recoverable. Close the boot
+            # transaction before retaining the degraded detail so a later
+            # power-cycle can be counted as a successful recovery.
+            self.boot.healthy('degraded')
             self.boot.degrade(reason)
-            return 'degraded'
-        self.boot.healthy()
+        else:
+            self.boot.healthy()
         previous = getattr(self.boot, 'previous_snapshot', lambda: None)()
         if self.qualification and self.qualification.record_successful_boot(
                 self.boot.snapshot(), previous):
@@ -192,4 +197,4 @@ class StartupService:
                 'Power-on boot recovered to a healthy running state',
                 force=True, component='qualification'
             )
-        return 'running'
+        return 'degraded' if degraded else 'running'

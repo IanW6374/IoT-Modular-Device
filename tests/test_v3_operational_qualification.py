@@ -57,13 +57,15 @@ class V3OperationalQualificationTests(unittest.TestCase):
         self.now = [1000]
         self.namespace = MemoryNamespace()
         self.history_namespace = MemoryNamespace()
+        self.campaign_namespace = MemoryNamespace()
         self.release = {
             'version': '3.0.0-alpha.6', 'sequence': 2711,
             'confirmed': True,
         }
         self.recorder = OperationalQualification(
             self.namespace, lambda: self.now[0], 'iot-md-001',
-            lambda: self.release, profile(), self.history_namespace
+            lambda: self.release, profile(), self.history_namespace,
+            self.campaign_namespace
         )
         self.recorder.start()
 
@@ -143,11 +145,18 @@ class V3OperationalQualificationTests(unittest.TestCase):
             for item in self.recorder.snapshot()['gates']
         }
         self.assertEqual(states['certificate-renewal'], 'failed')
-        self.assertEqual(states['paired-updates'], 'failed')
+        self.assertEqual(states['paired-updates'], 'in-progress')
+        self.assertEqual(
+            self.recorder.snapshot()['counters']['update_rollbacks'], 1
+        )
         self.assertEqual(states['power-recovery'], 'failed')
         self.assertEqual(states['driver-hardware'], 'failed')
         reset = self.recorder.reset()
         self.assertEqual(reset['counters']['samples'], 0)
+        self.assertEqual(
+            next(item for item in reset['gates']
+                 if item['name'] == 'power-recovery')['status'], 'not-run'
+        )
 
     def test_network_recovery_time_and_open_outage_are_measured(self):
         self.recorder.sample('healthy', 200, True)
@@ -196,7 +205,8 @@ class V3OperationalQualificationTests(unittest.TestCase):
         self.release['sequence'] = 2712
         restarted = OperationalQualification(
             self.namespace, lambda: self.now[0], 'iot-md-001',
-            lambda: self.release, profile(), self.history_namespace
+            lambda: self.release, profile(), self.history_namespace,
+            self.campaign_namespace
         )
         result = restarted.start()
         self.assertEqual(result['release']['version'], '3.0.0-alpha.7')
@@ -207,6 +217,32 @@ class V3OperationalQualificationTests(unittest.TestCase):
         )
         self.assertIn(
             'release-confirmation', restarted.history()[0]['passed_gates']
+        )
+
+    def test_cross_release_evidence_survives_while_samples_restart(self):
+        self.recorder.record_update('confirmed')
+        self.recorder.record_power_recovery(True)
+        self.recorder.record_renewal(True)
+        self.release.update(version='3.0.0-alpha.7', sequence=2712)
+        restarted = OperationalQualification(
+            self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release,
+            profile(required_update_confirmations=2,
+                    required_power_recoveries=2),
+            self.history_namespace, self.campaign_namespace
+        )
+        result = restarted.start()
+        self.assertEqual(result['counters']['samples'], 0)
+        self.assertEqual(result['counters']['update_confirmations'], 1)
+        self.assertEqual(result['counters']['power_recoveries'], 1)
+        self.assertEqual(result['counters']['renewal_successes'], 1)
+        states = {item['name']: item['status'] for item in result['gates']}
+        self.assertEqual(states['paired-updates'], 'in-progress')
+        self.assertEqual(states['canary-health'], 'not-run')
+        restarted.record_update('confirmed')
+        self.assertEqual(
+            next(item for item in restarted.snapshot()['gates']
+                 if item['name'] == 'paired-updates')['status'], 'passed'
         )
 
     def test_previous_release_history_is_bounded_and_survives_restart(self):

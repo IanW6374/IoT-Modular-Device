@@ -88,6 +88,40 @@ class RemainingGateTests(unittest.TestCase):
     def _startup():
         return StartupService(None, None, None, None, lambda *unused: None)
 
+    def test_external_service_degradation_closes_healthy_boot(self):
+        calls = []
+
+        class Boot:
+            def healthy(self, state='running'):
+                calls.append(('healthy', state))
+            def degrade(self, reason):
+                calls.append(('degraded', reason))
+            def snapshot(self):
+                return {'healthy': True, 'stage': 'running'}
+            def previous_snapshot(self):
+                return {'healthy': True, 'stage': 'running'}
+
+        lifecycle = SimpleNamespace(
+            transition=lambda state: calls.append(('transition', state)),
+            degrade=lambda reason: calls.append(('lifecycle-degraded', reason)),
+        )
+        state = SimpleNamespace(set=lambda key, value: calls.append((key, value)))
+        qualification = SimpleNamespace(
+            record_successful_boot=lambda current, previous:
+                calls.append(('qualification', current['stage'])) or False
+        )
+        service = StartupService(
+            None, Boot(), lifecycle, SimpleNamespace(record_event=lambda *args, **kwargs: None),
+            lambda *unused: None, qualification
+        )
+        self.assertEqual(
+            service.finalise(state, True, False, None, True, False),
+            'degraded'
+        )
+        self.assertIn(('healthy', 'degraded'), calls)
+        self.assertIn(('degraded', 'MQTT unavailable'), calls)
+        self.assertIn(('qualification', 'running'), calls)
+
     def test_native_pair_requires_runtime_health_before_confirmation(self):
         platform = PairPlatform()
         slots = RuntimeSlots()

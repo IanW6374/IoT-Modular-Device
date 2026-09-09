@@ -44,6 +44,12 @@ from web_portal import (
 
 
 class WebPortalTests(unittest.TestCase):
+    def test_html_escape_order_is_stable_for_certificate_names(self):
+        self.assertEqual(
+            portal_http.html_escape("C=US, O=Let's Encrypt, CN=E2"),
+            'C=US, O=Let&#39;s Encrypt, CN=E2'
+        )
+
     def test_update_progress_reporter_exposes_live_byte_progress(self):
         record = {'phase': 'verification', 'percent': 0}
         report = web_portal.update_progress_reporter(record)
@@ -173,7 +179,7 @@ class WebPortalTests(unittest.TestCase):
         api_trust = web_portal.render_certificate_route('/api-client-trust', 'csrf')
 
         self.assertIn('name="portal_session_timeout_minutes"', portal)
-        self.assertIn('Inactive session timeout (minutes)', portal)
+        self.assertIn('Default inactive session timeout (minutes)', portal)
         self.assertIn('value="60"', portal)
         self.assertIn('value="8443"', portal)
         self.assertIn('name="timezone_name"', ntp)
@@ -470,6 +476,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('maxlength="64" autofocus', html)
         password = html.split('name="password"', 1)[1].split('</label>', 1)[0]
         self.assertNotIn('autofocus', password)
+
+    def test_login_page_explains_an_expired_session(self):
+        html = render_login_page(
+            message='You have been signed out because your session expired.'
+        )
+        self.assertIn(
+            'You have been signed out because your session expired.', html
+        )
 
     def test_json_backup_body_is_not_parsed_as_a_form(self):
         body = b'{"ciphertext":"a+b%2Fc","nested":{"value":"x=y&z"}}'
@@ -788,9 +802,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<a href="/device-api">Device</a>', mqtt)
         self.assertIn('<h1>Portal users</h1>', user)
         self.assertNotIn('<h2>Administrator identity</h2>', user)
-        self.assertIn('<h2>Existing portal users</h2>', user)
-        self.assertIn('<h2>New portal user</h2>', user)
+        self.assertIn('<h2>Portal users</h2>', user)
+        self.assertIn('<strong>New portal user</strong>', user)
+        self.assertIn('Add new user', user)
         self.assertIn('name="new_username"', user)
+        self.assertIn('name="max_retries"', user)
+        self.assertIn('name="session_timeout_minutes"', user)
+        self.assertIn('Require password change at next sign-in', user)
+        self.assertIn('Require password change at first sign-in', user)
         self.assertIn('.portal-user-card .actions button{width:10rem}', portal_ui.PORTAL_CSS)
         self.assertIn('.portal-user-grid{grid-template-columns:repeat(auto-fill,30rem)', portal_ui.PORTAL_CSS)
         self.assertIn('.portal-user-card form+form{margin-top:12px', portal_ui.PORTAL_CSS)
@@ -996,8 +1015,6 @@ class WebPortalTests(unittest.TestCase):
              'Portal access', 'Save changes'),
             (web_portal.render_ntp_settings_page('csrf', settings),
              'Time synchronisation', 'Save changes'),
-            (web_portal.render_user_settings_page('csrf', settings),
-             'New portal user', 'Add portal user'),
         )
         for html, heading, action in pages:
             card = html.split('<h2>' + heading + '</h2>', 1)[1].split(
@@ -1365,7 +1382,7 @@ class WebPortalTests(unittest.TestCase):
                 )
                 self.assertIn('400 Bad Request', normal_wrong)
                 self.assertIn('<h1>Portal users</h1>', normal_wrong)
-                self.assertIn('<h2>Existing portal users</h2>', normal_wrong)
+                self.assertIn('<h2>Portal users</h2>', normal_wrong)
                 self.assertIn('<h2>Change password</h2>', normal_wrong)
                 self.assertIn('Current password is incorrect.', normal_wrong)
 
@@ -1433,7 +1450,21 @@ class WebPortalTests(unittest.TestCase):
                     ('GET / HTTP/1.1\r\nCookie: iotmd_session=' + session_id +
                      '\r\n\r\n').encode()
                 )
-                self.assertIn('401 Unauthorized', expired)
+                self.assertIn('303 See Other', expired)
+                self.assertIn('Location: /login?reason=expired', expired)
+                self.assertIn('Max-Age=0', expired)
+                signed_out = await request(
+                    b'GET /login?reason=expired HTTP/1.1\r\n\r\n'
+                )
+                self.assertIn(
+                    'You have been signed out because your session expired.',
+                    signed_out
+                )
+                background_expired = await request(
+                    ('GET /api/overview HTTP/1.1\r\nCookie: iotmd_session=' +
+                     session_id + '\r\nSec-Fetch-Mode: cors\r\n\r\n').encode()
+                )
+                self.assertIn('401 Unauthorized', background_expired)
 
                 relogin_body = b'username=admin&password=New-Secure-Cedar-48%21'
                 relogin = await request(
@@ -1608,7 +1639,8 @@ class WebPortalTests(unittest.TestCase):
                     ('GET /diagnostics HTTP/1.1\r\nCookie: iotmd_session=' +
                      viewer_session + '\r\n\r\n').encode()
                 )
-                self.assertIn('401 Unauthorized', viewer_expired)
+                self.assertIn('303 See Other', viewer_expired)
+                self.assertIn('Location: /login?reason=expired', viewer_expired)
             finally:
                 web_portal.asyncio.start_server = original_start_server
                 web_portal.make_tls_context = original_tls
@@ -1923,7 +1955,7 @@ class WebPortalTests(unittest.TestCase):
             'csrf'
         )
         personalised = portal_ui.personalise_page(
-            html, 'viewer&lt;unsafe', 'viewer'
+            html, 'viewer&lt;unsafe', 'viewer', {'device_state': 'running'}
         )
 
         self.assertIn('viewer&amp;lt;unsafe', personalised)
@@ -1932,6 +1964,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<span>Viewer privileges</span>', personalised)
         self.assertIn('<span aria-hidden="true">VU</span>', personalised)
         self.assertIn('class="portal-identity nav-menu-trigger"', personalised)
+        self.assertIn('class="device-status-dot good"', personalised)
+        self.assertIn('aria-label="Device status: running"', personalised)
         self.assertIn('<button disabled aria-disabled="true"', personalised)
         self.assertIn('>Download</a>', personalised)
         self.assertNotIn('href="/download-diagnostics"', personalised)

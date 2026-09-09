@@ -17,9 +17,10 @@ except ImportError:
     esp32 = None
 
 from credential_schema import (
-    MAX_PORTAL_USERS, MIN_PASSWORD_LENGTH, PORTAL_ROLES,
+    DEFAULT_PORTAL_MAX_RETRIES, MAX_PORTAL_USERS, MIN_PASSWORD_LENGTH, PORTAL_ROLES,
     SCHEMA_VERSION, SUPPORTED_TIMEZONES, _validate_wifi_ipv4, validate,
 )
+from credential_migrations import migrate as migrate_configuration
 
 
 NAMESPACE = 'iotmd_config'
@@ -117,53 +118,13 @@ def load(require_provisioned=False):
     for slot in candidates:
         try:
             config = json.loads(_read_blob(store, 'cfg' + str(slot)).decode())
-            if int(config.get('schema', 0)) == 4:
-                config = _migrate_v4(config)
-            if int(config.get('schema', 0)) == 5:
-                config = _migrate_v5(config)
-            if int(config.get('schema', 0)) == 6:
-                config = _migrate_v6(config)
+            config = migrate_configuration(config)
             return validate(config, require_provisioned)
         except Exception:
             continue
     if require_provisioned:
         raise RuntimeError('device setup is incomplete or unreadable')
     return {}
-
-
-def _migrate_v4(config):
-    config = json.loads(json.dumps(config))
-    config['schema'] = 5
-    config['api'] = {
-        'enabled': False,
-        'port': getattr(__import__('device_config'), 'DEVICE_API_PORT', 8444),
-        'auth': 'mtls',
-    }
-    return config
-
-
-def _migrate_v5(config):
-    config = json.loads(json.dumps(config))
-    config['schema'] = SCHEMA_VERSION
-    portal = config.setdefault('portal', {})
-    # RC4 and earlier stored eight hours as the implicit default. Preserve
-    # explicit non-default choices while moving untouched devices to 60 min.
-    if int(portal.get('session_timeout_s', 28800)) == 28800:
-        portal['session_timeout_s'] = 3600
-    return config
-
-
-def _migrate_v6(config):
-    config = json.loads(json.dumps(config))
-    config['schema'] = SCHEMA_VERSION
-    portal = config.setdefault('portal', {})
-    portal['users'] = [{
-        'username': portal.get('username', 'admin'),
-        'password_verifier': portal.get('password_verifier', ''),
-        'role': 'administrator',
-        'enabled': True,
-    }]
-    return config
 
 
 def save(config):
@@ -369,8 +330,11 @@ def build_configuration(values, portal_password, recovery_password):
             'users': [{
                 'username': values.get('portal_username', ''),
                 'password_verifier': portal_verifier,
-                'role': 'administrator',
-                'enabled': True,
+                'role': 'administrator', 'enabled': True,
+                'max_retries': DEFAULT_PORTAL_MAX_RETRIES,
+                'failed_attempts': 0, 'locked': False,
+                'session_timeout_s': int(values.get('portal_session_timeout_s', 3600)),
+                'password_change_required': False,
             }],
             'transport': values.get('portal_transport', 'auto'),
             'port': (
@@ -461,6 +425,8 @@ def update_portal_password(password):
     for user in config['portal'].get('users', ()):
         if str(user.get('username', '')).lower() == primary_name:
             user['password_verifier'] = config['portal']['password_verifier']
+            user['failed_attempts'], user['locked'] = 0, False
+            user['password_change_required'] = False
             break
     save(config)
     return config['portal']['password_verifier']

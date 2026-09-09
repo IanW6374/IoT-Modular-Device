@@ -182,6 +182,8 @@ def _parser():
 def main(argv=None):
     arguments = _parser().parse_args(argv)
     namespace = FileNamespace(arguments.state)
+    campaign_namespace = FileNamespace(arguments.state + '.campaign')
+    history_namespace = FileNamespace(arguments.state + '.history')
     release = {
         'version': arguments.version,
         'sequence': arguments.sequence,
@@ -189,7 +191,8 @@ def main(argv=None):
     }
     recorder = OperationalQualification(
         namespace, lambda: int(time.time()), arguments.device_id,
-        lambda: release
+        lambda: release, history_namespace=history_namespace,
+        campaign_namespace=campaign_namespace
     )
     recorder.start()
     command = arguments.command

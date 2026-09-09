@@ -70,7 +70,7 @@ class AlphaQualificationTests(unittest.TestCase):
         status = service.status()
         self.assertEqual(status['gate_sources']['soak'], 'device-observed')
         self.assertEqual(
-            status['gate_sources']['power-recovery'], 'device-observed'
+            status['gate_sources']['power-recovery'], 'automatic-campaign'
         )
         self.assertEqual(status['history'][0]['release_version'],
                          '3.0.0-alpha.16')

@@ -2,8 +2,12 @@
 
 
 DEVICE_OBSERVED_GATES = frozenset((
-    'soak', 'health', 'storage', 'network-recovery', 'paired-updates',
-    'power-recovery', 'canary-health', 'release-confirmation',
+    'soak', 'health', 'storage', 'network-recovery', 'canary-health',
+    'release-confirmation',
+))
+
+AUTOMATIC_CAMPAIGN_GATES = frozenset((
+    'certificate-renewal', 'paired-updates', 'power-recovery',
 ))
 
 
@@ -33,9 +37,13 @@ class AlphaQualificationService:
                 history_namespace = TransactionalNamespace(
                     self.platform, 'v3qualhist'
                 )
+                campaign_namespace = TransactionalNamespace(
+                    self.platform, 'v3qualcamp'
+                )
                 self.recorder = OperationalQualification(
                     namespace, self.clock, self.device_id, self.release_getter,
-                    history_namespace=history_namespace
+                    history_namespace=history_namespace,
+                    campaign_namespace=campaign_namespace
                 )
             else:
                 self.recorder = self.recorder_factory(
@@ -161,9 +169,16 @@ class AlphaQualificationService:
             'gate_sources': {
                 gate.get('name'): (
                     'device-observed'
-                    if gate.get('name') in DEVICE_OBSERVED_GATES else
-                    'controlled-test'
+                    if gate.get('name') in DEVICE_OBSERVED_GATES else (
+                        'automatic-campaign'
+                        if gate.get('name') in AUTOMATIC_CAMPAIGN_GATES else
+                        'controlled-campaign'
+                    )
                 ) for gate in evidence.get('gates', ())
+            },
+            'campaign': {
+                'id': 'v3-platform-abi-6',
+                'preserved_across_releases': True,
             },
             'history': (
                 self.recorder.history()

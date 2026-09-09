@@ -644,7 +644,8 @@ async def issue(directory_url, hostname, ca_path, shared_port_80=False, progress
                 await server.wait_closed()
 
 
-async def renewal_monitor(config, ca_path, log_output, reset_device, interval_s=900):
+async def renewal_monitor(config, ca_path, log_output, reset_device,
+                          interval_s=900, outcome=None):
     while True:
         if renewal_due():
             try:
@@ -652,8 +653,12 @@ async def renewal_monitor(config, ca_path, log_output, reset_device, interval_s=
                     config.get('directory_url', ''), config.get('hostname', ''), ca_path
                 )
             except Exception as exc:
+                if outcome:
+                    outcome(False)
                 log_output('Local', 'Certificate renewal', {'log': 'Failed - ' + str(exc)}, 'ERROR')
             else:
+                if outcome:
+                    outcome(True)
                 log_output(
                     'Local', 'Certificate renewal',
                     {'log': 'Renewed until ' + str(state.get('not_after', ''))}, 'INFO'
@@ -665,7 +670,7 @@ async def renewal_monitor(config, ca_path, log_output, reset_device, interval_s=
 
 
 async def self_signed_renewal_monitor(
-    config, log_output, reset_device, interval_s=900
+    config, log_output, reset_device, interval_s=900, outcome=None
 ):
     """Regenerate the managed local fallback after two-thirds of its lifetime."""
     while True:
@@ -673,11 +678,15 @@ async def self_signed_renewal_monitor(
             try:
                 state = install_self_signed(config.get('hostname', ''))
             except Exception as exc:
+                if outcome:
+                    outcome(False)
                 log_output(
                     'Local', 'Self-signed device certificate renewal',
                     {'log': 'Failed - ' + str(exc)}, 'ERROR'
                 )
             else:
+                if outcome:
+                    outcome(True)
                 log_output(
                     'Local', 'Self-signed device certificate renewal',
                     {'log': 'Renewed until ' + str(state.get('not_after', ''))},

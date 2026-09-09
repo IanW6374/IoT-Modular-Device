@@ -26,13 +26,71 @@ class PortalAuthTests(unittest.TestCase):
         identity = asyncio.run(portal_auth.authenticate(
             'viewer', 'Viewer-Cedar-47!River'
         ))
-        self.assertEqual(identity, {'username': 'viewer', 'role': 'viewer'})
+        self.assertEqual(identity['username'], 'viewer')
+        self.assertEqual(identity['role'], 'viewer')
+        self.assertEqual(identity['max_retries'], 5)
+        self.assertEqual(identity['session_timeout_s'], 3600)
+        self.assertFalse(identity['password_change_required'])
 
         portal_auth.update_user('viewer', role='operator', enabled=False)
         self.assertIsNone(asyncio.run(portal_auth.authenticate(
             'viewer', 'Viewer-Cedar-47!River'
         )))
         self.assertTrue(portal_auth.remove_user('viewer'))
+
+    def test_user_lockout_timeout_and_forced_password_change_are_persistent(self):
+        portal_auth.add_user(
+            'operator', 'Operator-Cedar-47!River', 'operator',
+            max_retries=2, session_timeout_s=900,
+            password_change_required=True
+        )
+        first = asyncio.run(portal_auth.authenticate(
+            'operator', 'Operator-Cedar-47!River'
+        ))
+        self.assertEqual(first['session_timeout_s'], 900)
+        self.assertTrue(first['password_change_required'])
+
+        self.assertIsNone(asyncio.run(portal_auth.authenticate('operator', 'wrong')))
+        self.assertIsNone(asyncio.run(portal_auth.authenticate('operator', 'wrong')))
+        locked = next(
+            user for user in portal_auth.list_users()
+            if user['username'] == 'operator'
+        )
+        self.assertEqual(locked['failed_attempts'], 2)
+        self.assertTrue(locked['locked'])
+        self.assertIsNone(asyncio.run(portal_auth.authenticate(
+            'operator', 'Operator-Cedar-47!River'
+        )))
+
+        portal_auth.update_user('operator', reset_lockout=True)
+        self.assertIsNotNone(asyncio.run(portal_auth.authenticate(
+            'operator', 'Operator-Cedar-47!River'
+        )))
+        changed = portal_auth.update_user(
+            'operator', password='Operator-Ash-82!Stone'
+        )
+        self.assertFalse(changed['locked'])
+        self.assertFalse(changed['password_change_required'])
+
+    def test_user_form_helpers_apply_security_policy(self):
+        added = portal_auth.add_user_from_form({
+            'username': 'form-user', 'password': 'Viewer-Cedar-47!River',
+            'role': 'viewer', 'max_retries': '3',
+            'session_timeout_minutes': '15',
+            'password_change_required': 'true',
+        })
+        self.assertEqual(added['max_retries'], 3)
+        self.assertEqual(added['session_timeout_s'], 900)
+        self.assertTrue(added['password_change_required'])
+        updated = portal_auth.update_user_from_form({
+            'username': 'form-user', 'new_username': 'renamed-user',
+            'role': 'operator', 'enabled': 'true', 'max_retries': '4',
+            'session_timeout_minutes': '30',
+        })
+        self.assertEqual(updated['previous_username'], 'form-user')
+        self.assertEqual(updated['username'], 'renamed-user')
+        self.assertEqual(updated['session_timeout_s'], 1800)
+        self.assertFalse(updated['password_change_required'])
 
     def test_cannot_remove_or_disable_last_administrator(self):
         with self.assertRaisesRegex(ValueError, 'administrator'):

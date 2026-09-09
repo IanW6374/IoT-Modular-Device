@@ -1,8 +1,13 @@
 """Validation schema for encrypted device configuration."""
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 MAX_PORTAL_USERS = 8
 PORTAL_ROLES = ('viewer', 'operator', 'administrator')
+DEFAULT_PORTAL_MAX_RETRIES = 5
+MIN_PORTAL_MAX_RETRIES = 1
+MAX_PORTAL_MAX_RETRIES = 20
+MIN_PORTAL_SESSION_TIMEOUT_S = 300
+MAX_PORTAL_SESSION_TIMEOUT_S = 86400
 MIN_PASSWORD_LENGTH = 16
 SUPPORTED_TIMEZONES = (
     'UTC', 'Europe/London', 'Europe/Paris', 'Europe/Athens',
@@ -181,7 +186,9 @@ def validate(config, require_provisioned=False):
     administrators = 0
     for user in users:
         if not isinstance(user, dict) or set(user) != {
-            'username', 'password_verifier', 'role', 'enabled'
+            'username', 'password_verifier', 'role', 'enabled',
+            'max_retries', 'failed_attempts', 'locked', 'session_timeout_s',
+            'password_change_required'
         }:
             raise ValueError('portal user record is invalid')
         user_name = _text(user.get('username', ''), 'portal username', 1, 32)
@@ -193,6 +200,28 @@ def validate(config, require_provisioned=False):
             raise ValueError('portal user role is invalid')
         if not isinstance(user.get('enabled'), bool):
             raise ValueError('portal user enabled state must be boolean')
+        max_retries = user.get('max_retries')
+        if (
+            not isinstance(max_retries, int) or isinstance(max_retries, bool) or
+            not MIN_PORTAL_MAX_RETRIES <= max_retries <= MAX_PORTAL_MAX_RETRIES
+        ):
+            raise ValueError('portal maximum retries must be between 1 and 20')
+        failed_attempts = user.get('failed_attempts')
+        if (
+            not isinstance(failed_attempts, int) or isinstance(failed_attempts, bool) or
+            not 0 <= failed_attempts <= MAX_PORTAL_MAX_RETRIES
+        ):
+            raise ValueError('portal failed attempts state is invalid')
+        if not isinstance(user.get('locked'), bool):
+            raise ValueError('portal account lock state must be boolean')
+        if not isinstance(user.get('password_change_required'), bool):
+            raise ValueError('portal password change state must be boolean')
+        user_timeout = user.get('session_timeout_s')
+        if (
+            not isinstance(user_timeout, int) or isinstance(user_timeout, bool) or
+            not MIN_PORTAL_SESSION_TIMEOUT_S <= user_timeout <= MAX_PORTAL_SESSION_TIMEOUT_S
+        ):
+            raise ValueError('portal user timeout must be between 300 and 86400 seconds')
         credential_security.parse_password_verifier(user.get('password_verifier', ''))
         if user.get('role') == 'administrator' and user.get('enabled'):
             administrators += 1
@@ -295,7 +324,7 @@ def validate(config, require_provisioned=False):
     session_timeout_s = portal.get('session_timeout_s', 3600)
     if (
         not isinstance(session_timeout_s, int) or isinstance(session_timeout_s, bool) or
-        not 300 <= session_timeout_s <= 86400
+        not MIN_PORTAL_SESSION_TIMEOUT_S <= session_timeout_s <= MAX_PORTAL_SESSION_TIMEOUT_S
     ):
         raise ValueError('portal timeout must be between 300 and 86400 seconds')
     if not isinstance(syslog.get('enabled', False), bool):

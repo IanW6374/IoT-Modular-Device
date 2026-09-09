@@ -478,21 +478,36 @@ def render_release_qualification_page(token, status=None):
     else:
         rows = []
         gate_sources = status.get('gate_sources') or {}
+        measurements = evidence.get('measurements') or {}
         for gate in evidence.get('gates', ()):
             state = str(gate.get('status', 'not-run'))
             tone = {
                 'passed': 'good', 'failed': 'bad',
                 'in-progress': 'warn', 'not-run': '',
             }.get(state, '')
+            source = gate_sources.get(gate.get('name'))
+            source_label = {
+                'device-observed': 'Current-release device observation',
+                'automatic-campaign': 'Automatic cross-release campaign',
+                'controlled-campaign': 'Controlled cross-release campaign',
+            }.get(source, 'Controlled qualification test')
+            detail = (
+                ' · worst unhealthy run ' + html_escape(
+                    measurements.get('maximum_consecutive_unhealthy', 0)
+                ) + ' / ' + html_escape(
+                    measurements.get(
+                        'maximum_allowed_consecutive_unhealthy', 0
+                    )
+                )
+                if gate.get('name') == 'health' else ''
+            )
             rows.append(
                 '<div class="metric ' + tone + '"><span>' +
                 html_escape(str(gate.get('name', '')).replace('-', ' ')) +
                 '</span><strong>' + html_escape(state) + '</strong>' +
                 '<small>' + html_escape(gate.get('observed', 0)) + ' / ' +
                 html_escape(gate.get('required', 0)) + ' · ' +
-                ('Automatic device observation'
-                 if gate_sources.get(gate.get('name')) == 'device-observed'
-                 else 'Controlled qualification test') + '</small></div>'
+                source_label + detail + '</small></div>'
             )
         history_rows = []
         for item in reversed(status.get('history') or ()):
@@ -511,8 +526,9 @@ def render_release_qualification_page(token, status=None):
             )
         history_content = (
             '<h3>Previous release evidence</h3>'
-            '<p class="muted">The current release starts a new campaign. '
-            'These bounded summaries preserve the last four device records.</p>'
+            '<p class="muted">Current-release soak and sampling restart for each '
+            'release. Cross-release platform evidence remains in the active ABI '
+            'campaign. These summaries preserve the last four release records.</p>'
             '<div class="metrics">' + ''.join(history_rows) + '</div>'
             if history_rows else ''
         )
@@ -651,7 +667,7 @@ def render_overview_page(token, status=None, modules=None, value_refresh_ms=5000
     interval = max(1000, int(value_refresh_ms or 5000))
     script = (
         'function refreshOverview(){fetch("/api/overview",{cache:"no-store",credentials:"same-origin"})'
-        '.then(function(r){if(r.status===401){location.replace("/login");return null;}return r.json();})'
+        '.then(function(r){if(r.status===401){location.replace("/login?reason=expired");return null;}return r.json();})'
         '.then(function(p){if(!p)return;document.getElementById("overview-status").outerHTML=p.status;'
         'document.getElementById("overview-modules").outerHTML=p.modules;})'
         '.catch(function(){});}setInterval(refreshOverview,' + str(interval) + ');'
@@ -696,7 +712,7 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'function nearBottom(e){return e.scrollHeight-e.scrollTop-e.clientHeight<48;}'
         'function refreshLogs(){if(logRefreshPaused)return;var e=document.getElementById("logs"),b=nearBottom(e);'
         'fetch("/logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
-        'if(r.status===401){location.replace("/login");return null;}return r.text();}).then(function(t){'
+        'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
         'if(t!==null&&t!==undefined&&e.textContent!==t){e.textContent=t;if(b)e.scrollTop=e.scrollHeight;}})'
         '.catch(function(){});}setInterval(refreshLogs,' + str(interval) + ');updateLogRefresh();'
     )
@@ -745,7 +761,7 @@ def render_audit_logging_page(token, logs, log_refresh_ms=5000):
         'function auditNearBottom(e){return e.scrollHeight-e.scrollTop-e.clientHeight<48;}'
         'function refreshAuditLogs(){if(auditRefreshPaused)return;var e=document.getElementById("audit-logs"),'
         'b=auditNearBottom(e);fetch("/audit-logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
-        'if(r.status===401){location.replace("/login");return null;}return r.text();}).then(function(t){'
+        'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
         'if(t!==null&&t!==undefined&&e.textContent!==t){e.textContent=t;if(b)e.scrollTop=e.scrollHeight;}})'
         '.catch(function(){});}setInterval(refreshAuditLogs,' + str(interval) + ');updateAuditRefresh();'
     )
@@ -821,7 +837,7 @@ def render_module_diagnostics_page(token, modules, value_refresh_ms=5000,
     script = (
         'function refreshModuleDiagnostics(){fetch("/api/module-diagnostics",'
         '{cache:"no-store",credentials:"same-origin"}).then(function(r){'
-        'if(r.status===401){location.replace("/login");return null;}return r.json();})'
+        'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.json();})'
         '.then(function(p){if(!p)return;document.getElementById("module-diagnostics").innerHTML='
         'p.modules;}).catch(function(){});}setInterval(refreshModuleDiagnostics,' +
         str(interval) + ');'
@@ -972,7 +988,7 @@ def update_upload_script():
         'var id="",polling=false,finished=false;function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
         'function startPolling(){if(polling)return;polling=true;poll();}function poll(){fetch("/update-progress?id="+encodeURIComponent(id),'
         '{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){location.replace('
-        '"/login");return null;}return r.json();}).then(function(s){if(!s)return;if(s.phase==="writing"){'
+        '"/login?reason=expired");return null;}return r.json();}).then(function(s){if(!s)return;if(s.phase==="writing"){'
         'label.textContent="Writing firmware "+(s.percent||0)+"%";setStage("write_core",(s.percent||0)/100);}'
         'else if(s.phase==="verification"){label.textContent="Verifying "+(s.percent||0)+"%";'
         'setStage(firmware?"verify_core":"verify_application",(s.percent||0)/100);}'
@@ -989,14 +1005,14 @@ def update_upload_script():
         'schedulePoll();}).catch(function(){schedulePoll();});}'
         'function jsonPost(url,value){return fetch(url,{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify(value)}).then(function(r){'
-        'if(r.status===401){location.replace("/login");throw new Error("Session expired");}if(!r.ok)return r.text().then(function(t){'
+        'if(r.status===401){location.replace("/login?reason=expired");throw new Error("Session expired");}if(!r.ok)return r.text().then(function(t){'
         'throw new Error(t||"Request failed");});return r.json();});}'
         'function uploadChunk(url,blob,base,total,prefix,stageKey){return new Promise(function(resolve,reject){var request=new XMLHttpRequest();activeRequest=request;'
         'request.open("POST",url,true);request.withCredentials=true;request.setRequestHeader("Content-Type","application/octet-stream");'
         'request.setRequestHeader("X-CSRF-Token",csrfToken);request.upload.onprogress=function(event){'
         'var percent=Math.min(99,Math.round((base+Math.max(0,Number(event.loaded||0)))*100/total));'
         'label.textContent=prefix+percent+"%";setStage(stageKey,percent/100);};'
-        'request.onload=function(){if(request.status===401){location.replace("/login");reject(new Error("Session expired"));return;}'
+        'request.onload=function(){if(request.status===401){location.replace("/login?reason=expired");reject(new Error("Session expired"));return;}'
         'if(request.status<200||request.status>=300){reject(new Error(request.responseText||"Chunk upload failed"));return;}'
         'try{resolve(JSON.parse(request.responseText));}catch(error){reject(new Error("Invalid upload response"));}};'
         'request.onerror=function(){reject(new Error("Chunk upload failed"));};request.onabort=function(){reject(new Error("Upgrade cancelled"));};'
@@ -1006,7 +1022,7 @@ def update_upload_script():
         'startPolling();'
         'return fetch("/resumable-upload-complete",{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify({id:id})}).then(function(r){'
-        'if(r.status===401){location.replace("/login");return;}if(r.status===202||r.ok){startPolling();return;}return r.text().then(function(t){'
+        'if(r.status===401){location.replace("/login?reason=expired");return;}if(r.status===202||r.ok){startPolling();return;}return r.text().then(function(t){'
         'throw new Error(t||"Verification failed");});});}var end=Math.min(offset+65536,f.size),url='
         '"/resumable-upload-chunk?id="+encodeURIComponent(id)+"&offset="+offset;return uploadChunk('
         'url,f.slice(offset,end),offset,f.size,"Uploading ",uploadStage).then(function(s){'
@@ -1016,6 +1032,7 @@ def update_upload_script():
         'function componentName(kind){return kind==="firmware"?"core firmware":"application";}'
         'function waitForComponent(uploadId,kind){return new Promise(function(resolve,reject){function check(){fetch('
         '"/update-progress?id="+encodeURIComponent(uploadId),{cache:"no-store",credentials:"same-origin"}).then(function(r){'
+        'if(r.status===401){location.replace("/login?reason=expired");throw new Error("Session expired");}'
         'if(!r.ok)throw new Error("Unable to read component progress");return r.json();}).then(function(s){var name=componentName(kind);'
         'if(s.phase==="verification"||s.phase==="application_verification"||s.phase==="firmware_verification")'
         '{label.textContent="Verifying signed "+name+" "+(s.percent||0)+"%";setStage(kind==="firmware"?'
@@ -1031,7 +1048,7 @@ def update_upload_script():
         'universal_plan:planId}).then(function(s){function chunk(offset){if(offset>=blob.size){label.textContent="Checking uploaded "+componentName(kind)+" bytes";'
         'return fetch("/resumable-upload-complete",{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify({id:uploadId})}).then(function(r){'
-        'if(r.status===401){location.replace("/login");throw new Error("Session expired");}if(r.status!==202&&!r.ok)'
+        'if(r.status===401){location.replace("/login?reason=expired");throw new Error("Session expired");}if(r.status!==202&&!r.ok)'
         'return r.text().then(function(t){throw new Error(t||"Component verification failed");});return waitForComponent(uploadId,kind);});}'
         'var end=Math.min(offset+65536,blob.size),url="/resumable-upload-chunk?id="+encodeURIComponent(uploadId)+'
         '"&offset="+offset,uploadStage=kind==="firmware"?"upload_core":"upload_application";return uploadChunk('

@@ -75,7 +75,8 @@ The portal provides:
 - status, module values and diagnostics;
 - network, portal, time, MQTT, Device API and logging settings;
 - module configuration, calibration and debug controls;
-- users and role-aware permissions;
+- users, role-aware permissions, per-user session expiry, sign-in lockout and
+  forced replacement of administrator-issued passwords;
 - application, core and universal upgrades;
 - certificates, ACME, backup/restore, health history, device/audit logs, and
   non-destructive restart, shutdown or factory reset controls.

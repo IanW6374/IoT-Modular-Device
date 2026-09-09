@@ -35,13 +35,33 @@ class PortalSessionTests(unittest.TestCase):
         self.assertEqual(self.sessions.count(), 0)
 
     def test_identity_update_keeps_active_sessions_coherent(self):
-        session = self.sessions.create({'username': 'admin', 'role': 'administrator'})
+        session = self.sessions.create({
+            'username': 'admin', 'role': 'administrator',
+            'password_change_required': True,
+        })
+        self.assertTrue(session['password_change_required'])
         self.assertEqual(
-            self.sessions.update_identity('admin', 'portal-admin', 'operator'), 1
+            self.sessions.update_identity(
+                'admin', 'portal-admin', 'operator', 60, False
+            ), 1
         )
         current = self.sessions.get(session['id'])
         self.assertEqual(current['username'], 'portal-admin')
         self.assertEqual(current['role'], 'operator')
+        self.assertFalse(current['password_change_required'])
+        self.now += 101
+        self.assertIsNotNone(self.sessions.get(session['id']))
+
+    def test_each_session_uses_its_own_inactivity_timeout(self):
+        short = self.sessions.create({
+            'username': 'short', 'role': 'viewer', 'session_timeout_s': 1,
+        })
+        long = self.sessions.create({
+            'username': 'long', 'role': 'viewer', 'session_timeout_s': 2,
+        })
+        self.now += 1001
+        self.assertIsNone(self.sessions.get(short['id']))
+        self.assertIsNotNone(self.sessions.get(long['id']))
 
 
 if __name__ == '__main__':

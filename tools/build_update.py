@@ -73,6 +73,8 @@ CORE_FILES = (
     'services/event_sinks.py',
     'services/module_runtime.py',
     'services/startup_service.py',
+    'services/certificate_renewal_service.py',
+    'services/mqtt_startup_service.py',
     'application/__init__.py',
     'application/context.py',
     'application/lifecycle.py',

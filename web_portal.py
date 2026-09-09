@@ -50,7 +50,7 @@ def _is_certificate_request(method, route, path):
         (method == 'GET' and route in _CERTIFICATE_ROUTES) or
         (method == 'POST' and route in (
             '/remove-certificate-trust', '/certificate-method',
-            '/validate-certificates'
+            '/validate-certificates', '/renew-certificate'
         )) or
         (method == 'POST' and str(path).startswith('/certificate-upload'))
     )
@@ -201,7 +201,6 @@ async def start_web_portal(portal):
             'text/plain',
             tuple(headers)
         )
-
     async def handle_client(reader, writer, remaining_requests=32):
         nonlocal login_failures
         nonlocal password_verifier, password_change_required
@@ -214,6 +213,7 @@ async def start_web_portal(portal):
         peer_address = request_peer_address(reader, writer)
         session_role = ''
         session_username = ''
+        session_password_change_required = False
         request_keep_alive = False
         response_keep_alive = False
         handed_off = False
@@ -224,7 +224,7 @@ async def start_web_portal(portal):
             nonlocal response_keep_alive
             if content_type.startswith('text/html') and session_username:
                 body = portal_ui.personalise_page(
-                    body, session_username, session_role
+                    body, session_username, session_role, status_snapshot.get()
                 )
             response_keep_alive = request_keep_alive
             await send_raw_response(
@@ -238,7 +238,7 @@ async def start_web_portal(portal):
         async def handle_access_routes():
             nonlocal login_failures, password_verifier
             nonlocal password_change_required, session, session_id
-            nonlocal csrf_token, session_role, session_username
+            nonlocal csrf_token, session_role, session_username, session_password_change_required
             if is_asset and method == 'GET':
                 asset = (
                     portal_ui.PORTAL_CSS
@@ -257,10 +257,13 @@ async def start_web_portal(portal):
                 if session_valid:
                     await send_redirect(
                         writer,
-                        '/user' if password_change_required else '/'
+                        '/user' if session_password_change_required else '/'
                     )
                 else:
-                    await send_response(writer, '200 OK', render_login_page())
+                    expired = parse_query(action_path).get('reason') == 'expired'
+                    await send_response(writer, '200 OK', render_login_page(message=
+                        'You have been signed out because your session expired.' if expired else ''),
+                        extra_headers=(('Set-Cookie', session_cookie('', secure_cookie, True)),) if expired else None)
             elif is_login and method == 'POST':
                 params = form_params
                 identity = (
@@ -275,11 +278,13 @@ async def start_web_portal(portal):
                     )
                 )
                 if identity:
+                    if password_change_required and str(identity.get('username', '')).lower() == str(username).lower(): identity['password_change_required'] = True
                     session = sessions.create(identity)
                     session_id = session['id']
                     csrf_token = session['csrf']
                     session_role = session['role']
                     session_username = session['username']
+                    session_password_change_required = session['password_change_required']
                     cookie = session_cookie(session_id, secure_cookie)
                     cached_page['body'] = None
                     login_failures = 0
@@ -301,7 +306,7 @@ async def start_web_portal(portal):
                             )
                     await send_redirect(
                         writer,
-                        '/user' if password_change_required else '/', (
+                        '/user' if session_password_change_required else '/', (
                             ('Set-Cookie', cookie),
                             ('Referrer-Policy', 'no-referrer')
                         )
@@ -323,9 +328,8 @@ async def start_web_portal(portal):
                         )
                     )
             elif not session_valid:
-                await send_response(
-                    writer, '401 Unauthorized', render_login_page()
-                )
+                if cookie_session_id and headers.get('sec-fetch-mode', 'navigate') == 'navigate': await send_redirect(writer, '/login?reason=expired', (('Set-Cookie', session_cookie('', secure_cookie, True)),))
+                else: await send_response(writer, '401 Unauthorized', render_login_page())
             elif csrf_error:
                 log_output(
                     'Local', 'Portal authorization',
@@ -364,6 +368,13 @@ async def start_web_portal(portal):
                     writer, '/login',
                     (('Set-Cookie', session_cookie('', secure_cookie, True)),)
                 )
+            elif session_password_change_required and not (
+                    method == 'POST' and is_password_change):
+                if method == 'GET' and is_user_settings:
+                    await send_response(writer, '200 OK', render_password_change_page(
+                        csrf_token, required=True))
+                else:
+                    await send_redirect(writer, '/user')
             elif method == 'GET' and route == '/api/restart-required':
                 status = (
                     restart_status_getter() if restart_status_getter else
@@ -411,7 +422,7 @@ async def start_web_portal(portal):
                     await send_response(writer, '400 Bad Request', (
                         render_password_change_page(
                             csrf_token, 'Current password is incorrect.', True
-                        ) if password_change_required else render_user_settings_page(
+                        ) if session_password_change_required else render_user_settings_page(
                             csrf_token, settings_getter() if settings_getter else {},
                             password_message='Current password is incorrect.', password_error=True,
                             users=portal_user_getter() if portal_user_getter else (), current_user=session_username
@@ -421,7 +432,7 @@ async def start_web_portal(portal):
                     await send_response(writer, '400 Bad Request', (
                         render_password_change_page(
                             csrf_token, 'New passwords do not match.', True
-                        ) if password_change_required else render_user_settings_page(
+                        ) if session_password_change_required else render_user_settings_page(
                             csrf_token, settings_getter() if settings_getter else {},
                             password_message='New passwords do not match.', password_error=True,
                             users=portal_user_getter() if portal_user_getter else (), current_user=session_username
@@ -439,7 +450,7 @@ async def start_web_portal(portal):
                         await send_response(writer, '400 Bad Request', (
                             render_password_change_page(
                                 csrf_token, str(exc), True
-                            ) if password_change_required else render_user_settings_page(
+                            ) if session_password_change_required else render_user_settings_page(
                                 csrf_token, settings_getter() if settings_getter else {},
                                 password_message=str(exc), password_error=True, users=(
                                     portal_user_getter() if portal_user_getter else ()),
@@ -447,11 +458,14 @@ async def start_web_portal(portal):
                             )
                         ))
                     else:
-                        was_password_change_required = password_change_required
-                        password_change_required = False
+                        was_password_change_required = session_password_change_required
+                        session_password_change_required = False
+                        if password_change_required and session_username.lower() == str(username).lower(): password_change_required = False
                         sessions.revoke_user(session_username)
                         session = sessions.create({
-                            'username': session_username, 'role': session_role
+                            'username': session_username, 'role': session_role,
+                            'session_timeout_s': current_identity.get('session_timeout_s'),
+                            'password_change_required': False
                         })
                         cookie = session_cookie(session['id'], secure_cookie)
                         cached_page['body'] = None
@@ -464,14 +478,6 @@ async def start_web_portal(portal):
                             writer, '/' if was_password_change_required else return_to,
                             (('Set-Cookie', cookie),)
                         )
-            elif password_change_required:
-                if method == 'GET' and is_user_settings:
-                    await send_response(
-                        writer, '200 OK',
-                        render_password_change_page(csrf_token, required=True)
-                    )
-                else:
-                    await send_redirect(writer, '/user')
             elif method == 'GET' and is_device_control:
                 await send_response(
                     writer, '200 OK',
@@ -547,22 +553,16 @@ async def start_web_portal(portal):
                     if route == '/user/add':
                         if portal_user_add is None:
                             raise RuntimeError('portal user management is unavailable')
-                        portal_user_add(
-                            form_params.get('username', ''),
-                            form_params.get('password', ''),
-                            form_params.get('role', 'viewer')
-                        )
+                        portal_user_add(form_params)
                     elif route == '/user/update':
                         if portal_user_update is None:
                             raise RuntimeError('portal user management is unavailable')
-                        original_username = form_params.get('username', '')
-                        result = portal_user_update(
-                            original_username, role=form_params.get('role', 'viewer'),
-                            enabled=form_params.get('enabled') == 'true', new_username=(
-                                form_params.get('new_username', original_username)))
+                        result = portal_user_update(form_params)
+                        original_username = result.get('previous_username', '')
                         sessions.update_identity(
                             original_username, result.get('username', original_username),
-                            result.get('role'))
+                            result.get('role'), result.get('session_timeout_s'),
+                            result.get('password_change_required'))
                     else:
                         if portal_user_remove is None:
                             raise RuntimeError('portal user management is unavailable')
@@ -1203,6 +1203,7 @@ async def start_web_portal(portal):
             csrf_token = session.get('csrf', '') if session else ''
             session_role = session.get('role', '') if session else ''
             session_username = session.get('username', '') if session else ''
+            session_password_change_required = bool(session.get('password_change_required')) if session else False
             is_login = route == '/login'
             is_password_change = (
                 route == '/user' and

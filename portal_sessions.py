@@ -27,8 +27,16 @@ class PortalSessions:
             'csrf': csrf,
             'username': str(identity.get('username', '')),
             'role': str(identity.get('role', 'viewer')),
+            'password_change_required': bool(
+                identity.get('password_change_required', False)
+            ),
             'created_ms': now,
             'last_seen_ms': now,
+            'timeout_ms': (
+                max(1, int(identity['session_timeout_s'])) * 1000
+                if identity.get('session_timeout_s') is not None
+                else self.timeout_ms
+            ),
         }
         self._sessions[session_id] = value
         return dict(value)
@@ -38,7 +46,8 @@ class PortalSessions:
         value = self._sessions.get(str(session_id))
         if not value:
             return None
-        if now - int(value['last_seen_ms']) > self.timeout_ms:
+        if now - int(value['last_seen_ms']) > int(
+                value.get('timeout_ms', self.timeout_ms)):
             self._sessions.pop(str(session_id), None)
             return None
         if touch:
@@ -62,7 +71,8 @@ class PortalSessions:
             self._sessions.pop(identifier, None)
         return len(identifiers)
 
-    def update_identity(self, old_username, new_username, role=None):
+    def update_identity(self, old_username, new_username, role=None,
+                        session_timeout_s=None, password_change_required=None):
         """Keep active sessions coherent after an administrator edits a user."""
         folded = str(old_username).lower()
         changed = 0
@@ -72,6 +82,10 @@ class PortalSessions:
             value['username'] = str(new_username)
             if role is not None:
                 value['role'] = str(role)
+            if session_timeout_s is not None:
+                value['timeout_ms'] = max(1, int(session_timeout_s)) * 1000
+            if password_change_required is not None:
+                value['password_change_required'] = bool(password_change_required)
             changed += 1
         return changed
 
@@ -79,7 +93,8 @@ class PortalSessions:
         now = int(self.now_ms() if now is None else now)
         expired = [
             identifier for identifier, value in self._sessions.items()
-            if now - int(value['last_seen_ms']) > self.timeout_ms
+            if now - int(value['last_seen_ms']) > int(
+                value.get('timeout_ms', self.timeout_ms))
         ]
         for identifier in expired:
             self._sessions.pop(identifier, None)

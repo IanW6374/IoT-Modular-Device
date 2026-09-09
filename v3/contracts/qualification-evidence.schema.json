@@ -70,7 +70,9 @@
       "properties": {
         "minimum_storage_free_bytes": {"type": ["integer", "null"], "minimum": 0},
         "maximum_network_recovery_s": {"type": "integer", "minimum": 0},
-        "network_outage_open": {"type": "boolean"}
+        "network_outage_open": {"type": "boolean"},
+        "maximum_consecutive_unhealthy": {"type": "integer", "minimum": 0},
+        "maximum_allowed_consecutive_unhealthy": {"type": "integer", "minimum": 0}
       },
       "additionalProperties": false
     },

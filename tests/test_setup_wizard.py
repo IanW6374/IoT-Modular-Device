@@ -944,11 +944,17 @@ class SetupWizardTests(unittest.TestCase):
         )
         config['schema'] = 5
         config['portal']['session_timeout_s'] = 28800
-        credential_store.save(credential_store._migrate_v5(config))
+        credential_store.save(credential_store.migrate_configuration(config))
 
         loaded = credential_store.load(require_provisioned=False)
         self.assertEqual(loaded['schema'], credential_store.SCHEMA_VERSION)
         self.assertEqual(loaded['portal']['session_timeout_s'], 3600)
+        self.assertEqual(loaded['portal']['users'][0]['session_timeout_s'], 3600)
+        self.assertEqual(loaded['portal']['users'][0]['max_retries'], 5)
+        self.assertFalse(loaded['portal']['users'][0]['locked'])
+        self.assertFalse(
+            loaded['portal']['users'][0]['password_change_required']
+        )
 
     def test_network_trial_confirms_candidate_after_authenticated_reconnect(self):
         config = credential_store.build_configuration(

@@ -27,14 +27,18 @@ except ImportError:
 
 import http_support
 
-HTML_ESCAPE = {
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}
+HTML_ESCAPE = (
+    ('&', '&amp;'), ('<', '&lt;'), ('>', '&gt;'),
+    ('"', '&quot;'), ("'", '&#39;'),
+)
 JS_ESCAPE = {'\\': '\\\\', "'": "\\'", '\n': '\\n', '\r': '\\r'}
 
 def html_escape(value):
     text = str(value)
-    for char, escaped in HTML_ESCAPE.items():
+    # Ampersand must be replaced first. MicroPython does not promise the same
+    # dictionary iteration order as CPython; an unordered mapping could turn
+    # an apostrophe into the visible text ``&#39;`` by escaping it twice.
+    for char, escaped in HTML_ESCAPE:
         text = text.replace(char, escaped)
     return text
 
