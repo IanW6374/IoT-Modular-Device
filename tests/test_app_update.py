@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import asyncio
 import sys
+import symtable
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -23,7 +24,8 @@ from tools.build_update import generated_driver_index
 from tools.build_update import is_ignored
 from tools.build_update import load_ignore_patterns
 from tools.build_update import (
-    chunk_runtime_string_literals, split_portal_route_modules,
+    PORTAL_ROUTE_SPLITS, chunk_runtime_string_literals,
+    split_portal_route_modules,
 )
 
 
@@ -650,6 +652,16 @@ class AppUpdateTests(unittest.TestCase):
             'return (True, login_failures, password_verifier,',
             routes['portal_route_access.py'].decode()
         )
+        access_route = routes['portal_route_access.py'].decode()
+        access_signature = access_route.split('):\n', 1)[0]
+        for request_context in (
+            'action_path', 'cookie_session_id',
+            'session_password_change_required',
+        ):
+            self.assertIn(request_context, access_signature)
+        self.assertIn(
+            'session_username, session_password_change_required)', access_route
+        )
         self.assertIn(
             'async def handle_settings_routes(',
             routes['portal_route_settings.py'].decode()
@@ -666,6 +678,30 @@ class AppUpdateTests(unittest.TestCase):
             'async def handle_upload_routes(',
             routes['portal_route_upload.py'].decode()
         )
+
+    def test_portal_route_split_passes_every_captured_request_dependency(self):
+        source_path = Path(self.previous_cwd) / 'web_portal.py'
+        table = symtable.symtable(
+            source_path.read_text(), str(source_path), 'exec'
+        )
+        portal = next(
+            child for child in table.get_children()
+            if child.get_name() == 'start_web_portal'
+        )
+        client = next(
+            child for child in portal.get_children()
+            if child.get_name() == 'handle_client'
+        )
+        dispatchers = {child.get_name(): child for child in client.get_children()}
+        for function_name, _module, arguments, _mutable in PORTAL_ROUTE_SPLITS:
+            captured = {
+                symbol.get_name() for symbol in dispatchers[function_name].get_symbols()
+                if symbol.is_free()
+            }
+            self.assertEqual(
+                set(), captured - set(arguments),
+                function_name + ' has unpassed closure dependencies',
+            )
 
     def test_large_renderer_strings_are_chunked_until_function_execution(self):
         long_value = ('portal-status-' * 500) + '…'

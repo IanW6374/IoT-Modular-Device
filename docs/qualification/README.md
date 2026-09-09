@@ -21,3 +21,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.18 qualification plan](v3.0.0-alpha.18.md)
 - [v3.0.0-alpha.19 qualification plan](v3.0.0-alpha.19.md)
 - [v3.0.0-alpha.20 qualification plan](v3.0.0-alpha.20.md)
+- [v3.0.0-alpha.21 qualification plan](v3.0.0-alpha.21.md)

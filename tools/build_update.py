@@ -148,7 +148,8 @@ PORTAL_ROUTE_SPLITS = (
     (
         'handle_access_routes', 'portal_route_access',
         (
-            'authenticator', 'cached_page', 'credential_security', 'csrf_error',
+            'action_path', 'authenticator', 'cached_page', 'cookie_session_id',
+            'credential_security', 'csrf_error',
             'csrf_token', 'factory_reset_handler', 'form_params', 'is_asset',
             'is_device_control', 'is_factory_default', 'is_login',
             'is_password_change', 'is_user_settings', 'log_output',
@@ -158,13 +159,15 @@ PORTAL_ROUTE_SPLITS = (
             'restart_request_handler', 'restart_status_getter', 'route',
             'secure_cookie', 'send_redirect', 'send_response', 'session',
             'session_id', 'session_role', 'session_username', 'session_valid',
-            'sessions', 'settings_getter', 'shutdown_request_handler',
+            'session_password_change_required',
+            'sessions', 'settings_getter', 'shutdown_request_handler', 'headers',
+            'portal_user_getter',
             'user_password_setter', 'username', 'writer',
         ),
         (
             'login_failures', 'password_verifier',
             'password_change_required', 'session', 'session_id', 'csrf_token',
-            'session_role', 'session_username',
+            'session_role', 'session_username', 'session_password_change_required',
         ),
     ),
     (
@@ -188,7 +191,7 @@ PORTAL_ROUTE_SPLITS = (
             'secure_config_import_apply_handler',
             'secure_config_import_preview_handler', 'secure_cookie',
             'send_redirect', 'send_response', 'session_role',
-            'session_username', 'settings_getter', 'settings_setter',
+            'session_username', 'sessions', 'settings_getter', 'settings_setter',
             'status_snapshot', 'update_preferences_setter',
             'value_refresh_ms', 'writer', '_handle_certificate_request',
         ),

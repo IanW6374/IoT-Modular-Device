@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.21 - 2026-09-09
+
+- Correct the compact release builder's portal route contract so request,
+  session and user-management context is passed into every generated
+  MicroPython dispatcher instead of failing with undefined names.
+- Validate every captured portal dispatcher dependency during source tests to
+  prevent installed bundles diverging from the source-tested request paths.
+- Identify automatic two-component releases as paired core-and-application
+  upgrades and identify individual application, core and universal artifacts
+  explicitly.
+- Rename the automatic action to **Download and stage**, right-align it beside
+  the release information and move staged state into a neutral **Upgrade
+  process** panel shared by automatic and manual workflows.
+- Retain native platform ABI 6 and the Alpha 20 qualification campaign state.
+
 ## 3.0.0-alpha.20 - 2026-09-09
 
 - Preserve paired-upgrade, certificate-renewal, power-recovery and controlled

@@ -2134,7 +2134,7 @@ def portal_action(action, params):
             'release_download_manual', download_release_once(
                 portal_task_progress('release_download_manual')
             ),
-            'Downloading and verifying the signed release'
+            release_update.download_task_title(release_available, update_orchestrator.status())
         )
 
     if action == 'validate-configuration':

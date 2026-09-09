@@ -424,6 +424,20 @@ def select_release(
     return applicable.get('firmware') or applicable.get('application')
 
 
+def download_task_title(release, paired=None):
+    """Return a precise task title for the selected remote release."""
+    paired = paired or {}
+    if int(paired.get('total_steps', 0) or 0) > 1:
+        kind = 'paired core and application'
+    else:
+        kind = {
+            'application': 'application',
+            'firmware': 'core firmware',
+            'universal': 'universal',
+        }.get(str(release.get('type', '')), 'signed')
+    return 'Downloading and staging ' + kind + ' upgrade'
+
+
 def _discard_staged(release_type):
     try:
         if release_type == 'application':

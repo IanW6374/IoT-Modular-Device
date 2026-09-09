@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import recovery_boot
+import release_update
 import update_orchestrator
 import update_security
 
@@ -64,6 +65,17 @@ class UpdateOrchestratorTests(unittest.TestCase):
             )
             self.assertEqual(completed['status'], 'complete')
             self.assertFalse(Path(self.path).exists())
+
+    def test_remote_download_title_identifies_paired_and_component_upgrades(self):
+        firmware = self.release('firmware')
+        self.assertEqual(
+            release_update.download_task_title(firmware, {'total_steps': 2}),
+            'Downloading and staging paired core and application upgrade',
+        )
+        self.assertEqual(
+            release_update.download_task_title(firmware),
+            'Downloading and staging core firmware upgrade',
+        )
 
 
 if __name__ == '__main__':

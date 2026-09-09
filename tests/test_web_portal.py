@@ -549,7 +549,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('name="current_password"', html)
         self.assertIn('autocomplete="current-password"', html)
 
-    def test_available_remote_release_has_download_and_verify_action(self):
+    def test_available_remote_release_identifies_type_and_staging_action(self):
         class MicroPythonText:
             def __str__(self):
                 return 'application'
@@ -563,9 +563,21 @@ class WebPortalTests(unittest.TestCase):
         }, 'csrf')
         self.assertIn('action="/check-release"', html)
         self.assertIn('action="/download-release"', html)
-        self.assertIn('Download and verify', html)
-        self.assertIn('<strong>Application 2.0.0</strong>', html)
+        self.assertIn('Download and stage', html)
+        self.assertIn('<strong>Application upgrade 2.0.0</strong>', html)
         self.assertIn('Universal stable runtime', html)
+
+        paired = web_portal.render_release_check_html({
+            'release_checks_enabled': True,
+            'release_available_type': 'firmware',
+            'release_available_version': 'core-2.0.0-mpy1.29.0',
+            'paired_update': {'total_steps': 2},
+        }, 'csrf')
+        self.assertIn(
+            '<strong>Paired upgrade (core + application) 2.0.0</strong>', paired
+        )
+        self.assertIn('class="release-available"', paired)
+        self.assertIn('.release-available form{margin-left:auto', portal_ui.PORTAL_CSS)
 
     def test_password_strength_rejects_predictable_values(self):
         with self.assertRaisesRegex(ValueError, 'common|predictable'):
@@ -2478,6 +2490,7 @@ class WebPortalTests(unittest.TestCase):
             'update_options': ('module_settings',),
         }, {})
         self.assertNotIn('id="update-upload-form"', ready)
+        self.assertIn('<h2>Upgrade process</h2>', ready)
 
         universal = web_portal.render_updates_page('csrf', {
             'release_checks_enabled': True,

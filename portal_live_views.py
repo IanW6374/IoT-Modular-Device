@@ -35,6 +35,22 @@ def display_release_version(value):
         value = value[:marker]
     return value
 
+def release_offer_text(status):
+    """Describe a checked release without hiding a paired transaction."""
+    release_type = str(status.get('release_available_type', '') or '')
+    version = str(status.get('release_available_version', '') or '')
+    if release_type == 'firmware':
+        version = display_release_version(version)
+    paired = status.get('paired_update', {}) or {}
+    if int(paired.get('total_steps', 0) or 0) > 1:
+        return 'Paired upgrade (core + application)', version
+    labels = {
+        'application': 'Application upgrade',
+        'firmware': 'Core firmware upgrade',
+        'universal': 'Universal upgrade',
+    }
+    return labels.get(release_type, 'Upgrade'), version
+
 def staged_version_text(status):
     application = str(status.get('update_version', '') or '')
     firmware = display_release_version(status.get('firmware_update_version', ''))
@@ -255,10 +271,12 @@ def render_update_summary_html(status):
     paired_html = ''
     if int(paired.get('total_steps', 0) or 0) > 1:
         paired_html = (
-            '<p class="portal-status" role="status" aria-live="polite"><strong>' +
-            html_escape(portal_ui.capitalized(paired.get('active_type', ''))) +
-            ' step ' + html_escape(paired.get('step', 0)) + ' of ' +
-            html_escape(paired.get('total_steps', 0)) + '</strong> — ' +
+            '<p class="portal-status" role="status" aria-live="polite"><strong>'
+            'Paired upgrade</strong> — ' + html_escape(
+                'Core' if paired.get('active_type') == 'firmware' else
+                portal_ui.capitalized(paired.get('active_type', ''))
+            ) + ' ' + html_escape(paired.get('step', 0)) + ' of ' +
+            html_escape(paired.get('total_steps', 0)) + ' · ' +
             html_escape(paired.get('status', '')) + '</p>'
         )
     history = status.get('update_history', [])
@@ -292,12 +310,8 @@ def render_update_summary_html(status):
         html_escape(release_text) + '">' + html_escape(release_text) + '</strong></div>' +
         paired_html + history_html +
         ('<p class="portal-status warning" role="status">Available ' +
-         html_escape(status.get('release_available_type', '')) +
-         ' release: ' + html_escape(
-             display_release_version(status.get('release_available_version', ''))
-             if status.get('release_available_type') == 'firmware' else
-             status.get('release_available_version', '')
-         ) + '</p>'
+         html_escape(release_offer_text(status)[0].lower()) + ': ' +
+         html_escape(release_offer_text(status)[1]) + '</p>'
          if status.get('release_available_version') else '') + '</div>'
     )
 
@@ -377,10 +391,7 @@ def render_release_check_html(status, token):
     download = ''
     if available:
         notes = status.get('release_available_notes', '')
-        release_type = str(status.get('release_available_type', ''))
-        if release_type == 'firmware':
-            available = display_release_version(available)
-        release_type = release_type[:1].upper() + release_type[1:]
+        release_type, available = release_offer_text(status)
         download = (
             '<div class="release-available"><p><strong>' +
             html_escape(release_type) + ' ' +
@@ -388,7 +399,7 @@ def render_release_check_html(status, token):
             (' — ' + html_escape(notes) if notes else '') + '</p>' +
             '<form action="/download-release" method="post">' +
             '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
-            '<button class="secondary" type="submit" title="Download the signed release, verify its descriptor and bundle, then stage it for activation.">Download and verify</button>' +
+            '<button class="secondary" type="submit" title="Download and verify the signed release, then stage it for activation.">Download and stage</button>' +
             '</form></div>'
         )
     check = (
@@ -1152,10 +1163,11 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
             'Upload and stage</button></div></form></div></div>'
         )
         script += update_upload_script()
+    workflow_title = 'Upgrade process' if activation else 'Manual upgrade'
     body = (
         portal_ui.page_heading(
             'Maintenance', 'Upgrades',
-            'Check, upload, verify and activate signed application or core firmware releases.'
+            'Check, stage and activate signed application, core or paired upgrades.'
         ) + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>Versions and upgrade state</h2></div>' +
         render_update_summary_html(status) + '<div class="update-actions">' +
@@ -1168,7 +1180,7 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
         '<div class="settings-subsection"><h3>Settings</h3>'
         '<p class="muted">Configure the release channel, schedule, download and activation preferences.</p>' +
         render_update_preferences(token, settings) + '</div></section>'
-        '<section class="card"><div class="section-title"><h2>Manual upgrade</h2></div>' +
+        '<section class="card"><div class="section-title"><h2>' + workflow_title + '</h2></div>' +
         manual_content + '</section></div>'
     )
     return portal_ui.shell(
