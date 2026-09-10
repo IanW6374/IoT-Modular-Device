@@ -225,7 +225,9 @@ PORTAL_CSS = (
     'text-align:right;overflow-wrap:anywhere;min-width:0}'
     '.portal-user-grid{grid-template-columns:repeat(auto-fill,30rem);justify-content:start}'
     '.portal-user-card form{display:grid;gap:7px}.portal-user-card form+form{margin-top:12px;'
-    'padding-top:12px;border-top:1px solid var(--line)}.portal-user-card .actions button{width:10rem}'
+    'padding-top:12px;border-top:1px solid var(--line)}.portal-user-status-value{display:flex;'
+    'align-items:center;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;'
+    'background:var(--bg);color:var(--muted);font-weight:500}.portal-user-card .actions button{width:10rem}'
     '@keyframes status-spin{to{transform:rotate(360deg)}}.page-load-action{display:flex;'
     'justify-content:center;width:100%;margin:18px 0 0}.file-input-hidden{position:absolute;'
     'width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);'
@@ -378,15 +380,13 @@ NAVIGATION = (
         ('modules', '/module-settings', 'Configuration'),
         ('module_diagnostics', '/diagnostics', 'Diagnostics'),
     )),
-    ('user', '/user', 'User', (
-        ('user_settings', '/user', 'Portal users'),
-    )),
     ('maintenance', '/certificates', 'Maintenance', (
         ('certificates', '/certificates', 'Certificates', CERTIFICATE_NAVIGATION),
         ('configuration_backup', '/configuration-backup', 'Configuration backup'),
         ('health_history', '/health-history', 'Health history'),
         ('maintenance_logging', '/logging', 'Logging', LOGGING_NAVIGATION),
         ('device_control', '/device-control', 'Power & reset'),
+        ('user_settings', '/user', 'Portal users'),
         ('release_qualification', '/release-qualification', 'Release qualification'),
         ('updates', '/updates', 'Upgrades'),
     )),

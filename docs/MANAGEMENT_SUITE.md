@@ -26,8 +26,11 @@ Promotion creates a format-3 channel catalog signed by the same Management
 Suite identity used for fleet policy. Download its public key from the suite and
 import it on each device under **Maintenance > Certificates > Management Suite
 verification key**. A device verifies fleet policy and the catalog with this
-key and still verifies the downloaded `.iotapp` or `.iotcore` bundle with its
-immutable update key. Compromise of the suite can therefore select an already
+key and still verifies the downloaded `.iotuni`, `.iotapp` or `.iotcore` bundle
+with its immutable update key. When available, the universal descriptor is the
+normal automatic-upgrade choice and uses the same paired transaction as a
+manual universal upload. Application and core descriptors remain available for
+setup and recovery. Compromise of the suite can therefore select an already
 signed artifact, but cannot create a new trusted artifact or bypass
 release-sequence rollback protection.
 

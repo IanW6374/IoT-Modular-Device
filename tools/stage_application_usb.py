@@ -12,6 +12,18 @@ TRANSFER_PHASE_BYTES = 192 * 1024
 USB_MAINTENANCE_WATCHDOG_TIMEOUT_MS = 300000
 
 
+def activation_preflight_code():
+    """Keep the staged bundle ready for frozen recovery to activate on boot."""
+    return (
+        "import app_update,recovery_boot\n"
+        "_iotmd_state=app_update.update_status()\n"
+        "if _iotmd_state.get('status') != 'ready':\n"
+        " raise ValueError('application update is not ready for activation')\n"
+        "recovery_boot.clear_recovery_request()\n"
+        "print(_iotmd_state)"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Copy and stage a signed .iotapp bundle over the MicroPython USB REPL'
@@ -130,14 +142,9 @@ print(_iotmd_state)
         print('signed application staged and verified', flush=True)
 
         if args.activate:
-            result = board.exec_(
-                "import app_update,recovery_boot\n"
-                "print(app_update.activate_pending())\n"
-                "recovery_boot.clear_recovery_request()",
-                timeout=180,
-            )
+            result = board.exec_(activation_preflight_code(), timeout=180)
             print(result.decode().strip(), flush=True)
-            print('resetting to activate the staged application', flush=True)
+            print('resetting so frozen recovery activates the staged application', flush=True)
             try:
                 board.exec_('import machine\nmachine.reset()', timeout=5)
             except (OSError, pyboard.PyboardError):

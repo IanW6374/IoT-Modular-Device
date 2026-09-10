@@ -61,6 +61,12 @@ def clear(path=STATE_PATH):
 def begin(releases, application_sequence=0, firmware_sequence=0,
           application_version='', firmware_version='', path=STATE_PATH):
     releases = list(releases)
+    universal = next(
+        (release for release in releases if release.get('type') == 'universal'),
+        None
+    )
+    if universal:
+        releases = [universal]
     if not releases:
         clear(path)
         return {}
@@ -96,6 +102,14 @@ def _refresh_state(state, application_sequence, firmware_sequence,
     pending = []
     for release in state['releases']:
         release_type = release.get('type')
+        offered = int(release.get('release_sequence', 0))
+        if release_type == 'universal':
+            installed = (
+                offered <= int(application_sequence) and
+                offered <= int(firmware_sequence)
+            )
+            (completed if installed else pending).append(release_type)
+            continue
         installed_sequence = (
             application_sequence if release_type == 'application'
             else firmware_sequence
@@ -104,7 +118,6 @@ def _refresh_state(state, application_sequence, firmware_sequence,
             application_version if release_type == 'application'
             else firmware_version
         )
-        offered = int(release.get('release_sequence', 0))
         installed = (
             offered <= int(installed_sequence)
             if int(installed_sequence) > 0 else

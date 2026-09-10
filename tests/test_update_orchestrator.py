@@ -77,6 +77,28 @@ class UpdateOrchestratorTests(unittest.TestCase):
             'Downloading and staging core firmware upgrade',
         )
 
+    def test_universal_release_is_one_paired_transaction(self):
+        universal = self.release('universal')
+        recovery_components = [
+            self.release('application'), self.release('firmware')
+        ]
+        with patch.object(update_security, 'validate_release_descriptor', return_value=True):
+            state = update_orchestrator.begin(
+                [universal] + recovery_components,
+                10, 10, '1.0.0', 'core-1.0.0', self.path
+            )
+            self.assertEqual(state['active_type'], 'universal')
+            self.assertEqual(len(state['releases']), 1)
+            self.assertEqual(update_orchestrator.status(self.path)['total_steps'], 1)
+            self.assertEqual(
+                release_update.download_task_title(universal),
+                'Downloading and staging universal upgrade',
+            )
+            completed = update_orchestrator.refresh(
+                20, 20, '2.0.0', 'core-2.0.0', self.path
+            )
+            self.assertEqual(completed['status'], 'complete')
+
 
 if __name__ == '__main__':
     unittest.main()

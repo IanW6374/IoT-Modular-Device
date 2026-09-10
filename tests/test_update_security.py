@@ -627,22 +627,35 @@ class UpdateSecurityTests(unittest.TestCase):
         )
 
         channel = json.loads(Path('site/beta/latest.json').read_text())
+        universal = dict(channel['releases'][0])
+        universal.update({
+            'type': 'universal', 'url': 'https://updates.example/iotmd/universal.iotuni',
+            'size': 512, 'sha256': 'c' * 64,
+        })
+        universal.pop('components', None)
+        universal['signature'] = update_security.sign_manifest(
+            'release', universal, self.private_key
+        )
+        channel['releases'].insert(0, universal)
         releases = release_update.release_descriptors(channel, 'beta')
-        self.assertEqual(channel['type'], 'application')
+        self.assertEqual(len(releases), 3)
         self.assertEqual(
             {release['type'] for release in releases},
-            {'application', 'firmware'},
+            {'application', 'firmware', 'universal'},
         )
         self.assertEqual(
             release_update.select_release(releases, 20099, 20099)['type'],
-            'firmware',
+            'universal',
         )
         self.assertEqual(
             release_update.select_release(releases, 20099, 20100)['type'],
-            'application',
+            'universal',
         )
         self.assertIsNone(
             release_update.select_release(releases, 20100, 20100)
+        )
+        self.assertIsNone(
+            release_update.select_release(releases, 20101, 20099)
         )
 
         channel['releases'][0]['notes'] = 'Tampered'
@@ -794,6 +807,56 @@ class UpdateSecurityTests(unittest.TestCase):
                 descriptor, 'ca.der', receive, None
             ))
         self.assertEqual(state['release_sequence'], 20100)
+
+    def test_remote_universal_release_uses_universal_receiver(self):
+        payload = b'IOTU1\npaired release'
+        descriptor = {
+            'format_version': 2, 'target_board': 'esp32-s3',
+            'channel': 'alpha', 'type': 'universal',
+            'version': '3.0.0-alpha.22', 'release_sequence': 2727,
+            'url': 'https://updates.example/bundles/universal.iotuni',
+            'size': len(payload), 'sha256': hashlib.sha256(payload).hexdigest(),
+            'minimum_core_api': 6, 'minimum_config_api': 3,
+            'maximum_config_api': 3, 'notes': 'Paired',
+            'published_at': '2026-09-10T08:00:00Z',
+            'signature_scheme': update_security.SIGNATURE_SCHEME,
+        }
+        descriptor['signature'] = update_security.sign_manifest(
+            'release', descriptor, self.private_key
+        )
+
+        class AsyncBuffer:
+            def __init__(self, data):
+                self.data = data
+
+            async def read(self, size):
+                chunk = self.data[:size]
+                self.data = self.data[size:]
+                return chunk
+
+        class Writer:
+            def close(self):
+                return None
+
+        async def open_response(*args):
+            return AsyncBuffer(payload), Writer(), len(payload)
+
+        application_receiver = object()
+        firmware_receiver = object()
+
+        async def universal_receiver(reader, length, maximum, **kwargs):
+            self.assertEqual(await reader.read(length), payload)
+            self.assertEqual(maximum, 4096)
+            self.assertIs(kwargs['application_receiver'], application_receiver)
+            self.assertIs(kwargs['firmware_receiver'], firmware_receiver)
+            return {'version': '3.0.0-alpha.22', 'release_sequence': 2727}
+
+        with patch.object(release_update, '_open_response', side_effect=open_response):
+            state = asyncio.run(release_update.stage_release(
+                descriptor, 'ca.der', application_receiver, firmware_receiver,
+                universal_receiver=universal_receiver, universal_max_bytes=4096
+            ))
+        self.assertEqual(state['release_sequence'], 2727)
 
 
 if __name__ == '__main__':

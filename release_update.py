@@ -374,8 +374,8 @@ def release_descriptors(document, channel=''):
     if listed is None:
         _parse_https_url(fallback.get('url', ''))
         return (fallback,)
-    if not isinstance(listed, list) or not 1 <= len(listed) <= 2:
-        raise ValueError('release channel must contain one or two releases')
+    if not isinstance(listed, list) or not 1 <= len(listed) <= 3:
+        raise ValueError('release channel must contain between one and three releases')
     releases = []
     types = set()
     for release in listed:
@@ -399,12 +399,36 @@ def select_release(
     releases, application_sequence=0, firmware_sequence=0,
     application_version='', firmware_version=''
 ):
-    """Choose the next component this device still needs, firmware first."""
+    """Prefer a paired universal release, otherwise choose firmware first."""
     applicable = {}
+    universal_offered = any(
+        release.get('type') == 'universal' for release in releases
+    )
     for release in releases:
         if not update_security.release_is_compatible(release):
             continue
         release_type = release.get('type')
+        offered_sequence = int(release.get('release_sequence', 0))
+        if release_type == 'universal':
+            installed_sequences = (
+                int(application_sequence), int(firmware_sequence)
+            )
+            if any(
+                sequence > offered_sequence for sequence in installed_sequences
+                if sequence > 0
+            ):
+                continue
+            newer = any(
+                offered_sequence > sequence if sequence > 0 else
+                str(release.get('version', '')) != str(version)
+                for sequence, version in (
+                    (installed_sequences[0], application_version),
+                    (installed_sequences[1], firmware_version),
+                )
+            )
+            if newer:
+                applicable[release_type] = release
+            continue
         installed_sequence = (
             application_sequence
             if release_type == 'application' else firmware_sequence
@@ -413,7 +437,6 @@ def select_release(
             application_version
             if release_type == 'application' else firmware_version
         )
-        offered_sequence = int(release.get('release_sequence', 0))
         newer = (
             offered_sequence > int(installed_sequence)
             if int(installed_sequence) > 0 else
@@ -421,6 +444,8 @@ def select_release(
         )
         if newer:
             applicable[release_type] = release
+    if universal_offered:
+        return applicable.get('universal')
     return applicable.get('firmware') or applicable.get('application')
 
 
@@ -440,7 +465,10 @@ def download_task_title(release, paired=None):
 
 def _discard_staged(release_type):
     try:
-        if release_type == 'application':
+        if release_type == 'universal':
+            import universal_update
+            universal_update.discard_pending_update()
+        elif release_type == 'application':
             import app_update
             app_update.discard_pending_update()
         else:
@@ -453,11 +481,17 @@ def _discard_staged(release_type):
 async def stage_release(
     release, ca_path, application_receiver, firmware_receiver,
     allow_protected=False, application_max_bytes=4194304,
-    firmware_max_bytes=4194304, progress_callback=None
+    firmware_max_bytes=4194304, progress_callback=None,
+    universal_receiver=None, universal_max_bytes=None
 ):
     update_security.validate_release_descriptor(release, release.get('channel', ''))
     expected_size = int(release['size'])
-    maximum = application_max_bytes if release['type'] == 'application' else firmware_max_bytes
+    release_type = release['type']
+    maximum = (
+        application_max_bytes if release_type == 'application' else
+        firmware_max_bytes if release_type == 'firmware' else
+        int(universal_max_bytes or (application_max_bytes + firmware_max_bytes + 8192))
+    )
     if expected_size > int(maximum):
         raise ValueError('release bundle exceeds the configured maximum size')
     reader, writer, response_length = await _open_response(release['url'], ca_path)
@@ -466,19 +500,28 @@ async def stage_release(
     try:
         if response_length is not None and response_length != expected_size:
             raise ValueError('release response length does not match signed metadata')
-        if release['type'] == 'application':
+        if release_type == 'application':
             if application_receiver is None:
                 raise ValueError('application update receiver is unavailable')
             state = await application_receiver(
                 verified_reader, expected_size, allow_protected,
                 application_max_bytes, progress_callback=progress_callback
             )
-        else:
+        elif release_type == 'firmware':
             if firmware_receiver is None:
                 raise ValueError('firmware update receiver is unavailable')
             state = await firmware_receiver(
                 verified_reader, expected_size, firmware_max_bytes,
                 progress_callback=progress_callback
+            )
+        else:
+            if universal_receiver is None:
+                raise ValueError('universal update receiver is unavailable')
+            state = await universal_receiver(
+                verified_reader, expected_size, maximum,
+                progress_callback=progress_callback,
+                firmware_receiver=firmware_receiver,
+                application_receiver=application_receiver
             )
         staged = True
         if response_length is None and await verified_reader.read(1):

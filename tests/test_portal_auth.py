@@ -82,6 +82,12 @@ class PortalAuthTests(unittest.TestCase):
         self.assertEqual(added['max_retries'], 3)
         self.assertEqual(added['session_timeout_s'], 900)
         self.assertTrue(added['password_change_required'])
+        self.assertTrue(added['enabled'])
+        disabled = portal_auth.add_user_from_form({
+            'username': 'disabled-user', 'password': 'Viewer-Maple-83!Lake',
+            'role': 'viewer', 'enabled': 'false',
+        })
+        self.assertFalse(disabled['enabled'])
         updated = portal_auth.update_user_from_form({
             'username': 'form-user', 'new_username': 'renamed-user',
             'role': 'operator', 'enabled': 'true', 'max_retries': '4',

@@ -460,6 +460,40 @@ class SetupWizardTests(unittest.TestCase):
         ])
         self.assertEqual(events[-1], 'connect:home-network')
 
+    def test_factory_setup_selects_application_from_universal_catalog(self):
+        releases = [
+            {'type': 'universal', 'version': '3.0.0-alpha.22'},
+            {'type': 'application', 'version': '3.0.0-alpha.22'},
+            {'type': 'firmware', 'version': '3.0.0-alpha.22'},
+        ]
+        selected = []
+
+        async def connect(*_args, **_kwargs):
+            return object()
+
+        async def fetch(*_args, **_kwargs):
+            return releases
+
+        async def stage(release, *_args, **_kwargs):
+            selected.append(release)
+            return {'optional_groups': []}
+
+        with mock.patch.object(setup_workflow, '_connect_station', connect), \
+                mock.patch.object(setup_workflow.release_update, 'fetch_releases', fetch), \
+                mock.patch.object(setup_workflow.release_update, 'stage_release', stage), \
+                mock.patch.object(setup_workflow, '_prepare_setup_application', return_value='ready'), \
+                mock.patch.object(
+                    setup_workflow.factory_config, 'SETUP_RELEASE_MANIFEST_URL',
+                    'https://updates.example/{channel}/latest.json'
+                ):
+            result = asyncio.run(setup_workflow._download_application({
+                'wifi': {'ssid': 'home-network', 'password': 'secret'},
+                'release': {'channel': 'alpha'},
+            }))
+
+        self.assertEqual(result, 'ready')
+        self.assertEqual(selected, [releases[1]])
+
     def test_certificate_completion_must_match_verified_installed_mode(self):
         original_validate = setup_workflow._validate_certificates
         original_details = setup_wizard.certificate_manager.certificate_details

@@ -287,7 +287,7 @@ def render_portal_settings_page(csrf, settings, message='', error=False):
         'name="portal_session_timeout_minutes" type="number" min="5" max="1440" required value="' +
         html_escape(session_timeout_minutes) + '"></label></div>'
         '<p class="muted">HTTPS defaults to port 8443 and explicit HTTP defaults to 8080. Port 80 is reserved for '
-        'certificate enrollment and recovery. Per-user timeouts are managed under User / Portal users.</p>'
+        'certificate enrollment and recovery. Per-user timeouts are managed under Maintenance / Portal users.</p>'
         '<div class="actions"><span></span>'
         '<button type="submit">Save changes</button></div></section></form>'
     )
@@ -508,8 +508,9 @@ def render_user_settings_page(
             'type="number" min="1" max="20" required value="' + html_escape(max_retries) + '"></label>'
             '<label class="field">Inactive session timeout (minutes)<input name="session_timeout_minutes" '
             'type="number" min="5" max="1440" required value="' + html_escape(timeout_minutes) + '"></label>'
-            '<p class="muted">Failed sign-in attempts: ' + html_escape(failures) + ' of ' +
-            html_escape(max_retries) + '.</p>'
+            '<div class="field portal-user-status"><span>Failed sign-in attempts</span>'
+            '<span class="portal-user-status-value">' + html_escape(failures) + ' of ' +
+            html_escape(max_retries) + '</span></div>'
             '<label class="check"><input type="checkbox" name="enabled" value="true"' +
             (' checked' if enabled else '') + '>Enabled</label>'
             '<label class="check"><input type="checkbox" name="password_change_required" value="true"' +
@@ -540,6 +541,9 @@ def render_user_settings_page(
         html_escape(default_timeout_minutes) + '"></label>'
         '<label class="field">Initial password<input type="password" name="password" '
         'minlength="16" maxlength="256" required autocomplete="new-password"></label>'
+        '<input type="hidden" name="enabled" value="false">'
+        '<label class="check"><input type="checkbox" name="enabled" '
+        'value="true" checked>Enabled</label>'
         '<label class="check"><input type="checkbox" name="password_change_required" '
         'value="true" checked>Require password change at first sign-in</label>'
         '<div class="actions"><span></span><button type="submit">Add new user</button></div>'
@@ -547,7 +551,7 @@ def render_user_settings_page(
     )
     body = (
         portal_ui.page_heading(
-            'User', 'Portal users',
+            'Maintenance', 'Portal users',
             'Manage portal usernames, roles and access. Change your own password from the avatar menu.'
         ) + _notice(message, error) + _notice(password_message, password_error) +
         '<section class="card"><div class="section-title"><h2>Portal users</h2>'

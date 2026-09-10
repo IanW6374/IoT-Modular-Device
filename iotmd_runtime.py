@@ -2405,14 +2405,13 @@ async def download_release_once(progress_callback=None):
         raise ValueError('no checked release is available')
     try:
         state = await release_update.stage_release(
-            release,
-            release_ca_cert_path,
-            app_update.receive_bundle,
-            firmware_update.receive_bundle,
+            release, release_ca_cert_path,
+            app_update.receive_bundle, firmware_update.receive_bundle,
             web_portal_allow_protected_updates,
             web_portal_update_max_bytes,
             web_portal_firmware_update_max_bytes,
-            progress_callback
+            progress_callback, universal_update.receive_bundle,
+            max(web_portal_update_max_bytes, web_portal_firmware_update_max_bytes)
         )
     except Exception as exc:
         record_upgrade_failure(
@@ -2430,12 +2429,12 @@ async def download_release_once(progress_callback=None):
     if release_auto_activate and fleet_activation_allowed():
         if release.get('type') == 'firmware':
             firmware_update.activate_pending()
+        elif release.get('type') == 'universal':
+            universal_update.activate_pending(True)
         update_orchestrator.mark_activating(release.get('type'))
         await asyncio.sleep(1)
         hardware_platform.reset()
     return 'Release staged'
-
-
 async def release_monitor():
     last_slot = ''
     while release_manifest_url:

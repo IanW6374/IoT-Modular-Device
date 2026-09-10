@@ -596,7 +596,7 @@ def validate_release_descriptor(
         raise ValueError('release descriptor channel is invalid')
     if channel and release_channel != str(channel):
         raise ValueError('release descriptor channel does not match the request')
-    if descriptor.get('type') not in ('application', 'firmware'):
+    if descriptor.get('type') not in ('application', 'firmware', 'universal'):
         raise ValueError('release descriptor type is invalid')
     if not str(descriptor.get('version', '')).strip():
         raise ValueError('release descriptor has no version')

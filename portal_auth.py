@@ -81,7 +81,8 @@ async def authenticate(username, password):
 
 
 def add_user(username, password, role='viewer', max_retries=5,
-             session_timeout_s=3600, password_change_required=False):
+             session_timeout_s=3600, password_change_required=False,
+             enabled=True):
     username = str(username).strip()
     role = str(role)
     credential_security.validate_password_strength(password)
@@ -99,7 +100,7 @@ def add_user(username, password, role='viewer', max_retries=5,
     )
     users.append({
         'username': username, 'password_verifier': verifier,
-        'role': role, 'enabled': True,
+        'role': role, 'enabled': bool(enabled),
         'max_retries': max_retries, 'failed_attempts': 0, 'locked': False,
         'session_timeout_s': session_timeout_s,
         'password_change_required': bool(password_change_required),
@@ -113,7 +114,8 @@ def add_user_from_form(values):
         values.get('username', ''), values.get('password', ''),
         values.get('role', 'viewer'), values.get('max_retries', 5),
         int(values.get('session_timeout_minutes', 60)) * 60,
-        values.get('password_change_required') == 'true'
+        values.get('password_change_required') == 'true',
+        values.get('enabled', 'true') == 'true'
     )
 
 

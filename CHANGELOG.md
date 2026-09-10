@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.22 - 2026-09-10
+
+- Move Portal users from its own top-level menu into Maintenance and align the
+  existing-user sign-in status with the new-user initial-password field.
+- Let administrators create a disabled portal user while keeping **Enabled**
+  selected by default.
+- Keep USB-staged application updates in the ready state until frozen recovery
+  activates them during reboot, preventing a premature trial from rolling back.
+- Prefer a Management Suite universal descriptor during automatic checks and
+  pass its download through the same paired verifier, activation and rollback
+  transaction as a manual `.iotuni` upload. Retain component descriptors for
+  first-time setup and recovery without silently falling back to a mismatched
+  pair.
+
+
 ## 3.0.0-alpha.21 - 2026-09-09
 
 - Correct the compact release builder's portal route contract so request,

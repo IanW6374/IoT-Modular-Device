@@ -85,16 +85,17 @@ Settings that require a restart are committed immediately and collected behind
 one banner action so several changes can be activated with one reboot.
 
 Portal destinations use a shared navigation model and consistent terminology.
-The top-level order is **Status**, **Device**, **Module**, **User** and
-**Maintenance**; destinations inside each dropdown are alphabetical:
+The top-level order is **Status**, **Device**, **Module** and **Maintenance**;
+destinations inside each dropdown are alphabetical:
 
 - **Device** contains Device API, logging, MQTT, network, portal and time/date
   settings.
 - **Maintenance** contains click-to-expand certificate and logging categories,
-  configuration backup, health history, Power & reset, and Upgrades.
+  configuration backup, health history, Portal users, Power & reset, and
+  Upgrades.
 - **Module** contains configuration and diagnostics; **Status** contains the
-  live overview; **User** contains portal-user management. Password changes are
-  opened from the signed-in user's avatar menu.
+  live overview. Password changes are opened from the signed-in user's avatar
+  menu.
 
 An **upgrade** is the act of installing software on a device. A **release** is
 the signed artifact published by the Management Suite, and a **rollout** is the
@@ -131,7 +132,10 @@ Use **Maintenance > Upgrades** for normal installation. Release sequences must
 increase monotonically. Verification occurs before staging, and activation uses
 trial health checks with rollback support. Automatic checks can be disabled or
 scheduled daily/weekly in device-local time, independently of automatic
-download and activation.
+download and activation. When a promoted release includes `.iotuni`, automatic
+upgrades download it and use the same paired verification, activation and
+rollback transaction as a manual universal upload. The application and core
+descriptors remain available for first-time setup and recovery.
 
 See the [upgrade guide](docs/UPGRADE_GUIDE.md) for release and USB recovery
 procedures.

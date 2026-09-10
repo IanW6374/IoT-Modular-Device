@@ -48,6 +48,14 @@ The ordinary artifact remains one `.iotuni` paired release. Alpha component
 artifacts are published for factory and recovery diagnosis, and installation
 of an older release sequence may require USB recovery or a newer signed build.
 
+Promoted Management Suite catalogs advertise the verified universal artifact
+as the preferred automatic upgrade. Automatic and manual universal upgrades
+therefore share the same streaming verification, paired staging, activation,
+health confirmation and rollback state machine. Signed application and core
+descriptors remain in the catalog for first-time setup and explicit recovery;
+the normal automatic selector does not use them when a universal descriptor is
+present.
+
 ## Artifact types
 
 - `.iotapp`: application and selected drivers.
@@ -216,18 +224,18 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha21.state.json \
-  --evidence .qualification/alpha21.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.21 --sequence 2726 status
+  --state .qualification/alpha22.state.json \
+  --evidence .qualification/alpha22.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.22 --sequence 2727 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha21.state.json \
-  --evidence .qualification/alpha21.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.21 --sequence 2726 monitor \
+  --state .qualification/alpha22.state.json \
+  --evidence .qualification/alpha22.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.22 --sequence 2727 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \

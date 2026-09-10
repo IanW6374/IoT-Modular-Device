@@ -718,8 +718,9 @@ class WebPortalTests(unittest.TestCase):
         html = render_settings_page('csrf', {})
         primary = html.split('aria-label="Primary"', 1)[1].split('</nav>', 1)[0]
 
-        for label in ('Device', 'Maintenance', 'Module', 'Status', 'User'):
+        for label in ('Device', 'Maintenance', 'Module', 'Status'):
             self.assertIn('>' + label + '</button>', primary)
+        self.assertNotIn('>User</button>', primary)
         self.assertNotIn('nav-menu-trigger" type="button" href=', primary)
         self.assertIn('aria-label="Device submenu"', html)
         self.assertIn('.nav-group:hover>.nav-dropdown', portal_ui.PORTAL_CSS)
@@ -746,13 +747,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('aria-label="Logging submenu"', html)
         self.assertLess(primary.index('>Status</button>'), primary.index('>Device</button>'))
         self.assertLess(primary.index('>Device</button>'), primary.index('>Module</button>'))
-        self.assertLess(primary.index('>Module</button>'), primary.index('>User</button>'))
-        self.assertLess(primary.index('>User</button>'), primary.index('>Maintenance</button>'))
-        user_menu = html.split(
-            'aria-label="User submenu"', 1
-        )[1].split('</div>', 1)[0]
-        self.assertIn('href="/user">Portal users</a>', user_menu)
-        self.assertNotIn('Change password', user_menu)
+        self.assertLess(primary.index('>Module</button>'), primary.index('>Maintenance</button>'))
+        self.assertNotIn('aria-label="User submenu"', html)
+        self.assertIn('href="/user">Portal users</a>', primary)
         self.assertNotIn('/change-password', html)
         self.assertIn('id="change-password-open"', html)
         self.assertIn('id="change-password-dialog"', html)
@@ -820,18 +817,22 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('name="new_username"', user)
         self.assertIn('name="max_retries"', user)
         self.assertIn('name="session_timeout_minutes"', user)
+        self.assertIn('name="enabled" value="false"', user)
+        self.assertIn('name="enabled" value="true" checked>Enabled', user)
         self.assertIn('Require password change at next sign-in', user)
         self.assertIn('Require password change at first sign-in', user)
         self.assertIn('.portal-user-card .actions button{width:10rem}', portal_ui.PORTAL_CSS)
         self.assertIn('.portal-user-grid{grid-template-columns:repeat(auto-fill,30rem)', portal_ui.PORTAL_CSS)
         self.assertIn('.portal-user-card form+form{margin-top:12px', portal_ui.PORTAL_CSS)
+        self.assertIn('.portal-user-status-value{display:flex;', portal_ui.PORTAL_CSS)
         self.assertIn('>Administrator</option>', user)
         self.assertNotIn('<span class="badge">administrator</span>', user)
         self.assertIn('action="/user?action=password"', user)
         self.assertIn('id="change-password-dialog"', user)
         self.assertNotIn('/change-password', user)
         self.assertNotIn('/user/password', user)
-        self.assertIn('<a href="/user">User</a>', user)
+        self.assertIn('<a href="/certificates">Maintenance</a>', user)
+        self.assertIn('<a href="/user" aria-current="page">Portal users</a>', user)
         password_error = web_portal.render_user_settings_page(
             'csrf', settings, password_message='Current password is incorrect.',
             password_error=True

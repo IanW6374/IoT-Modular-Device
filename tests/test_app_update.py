@@ -23,6 +23,7 @@ from tools.build_update import compact_application_files
 from tools.build_update import generated_driver_index
 from tools.build_update import is_ignored
 from tools.build_update import load_ignore_patterns
+from tools.stage_application_usb import activation_preflight_code
 from tools.build_update import (
     PORTAL_ROUTE_SPLITS, chunk_runtime_string_literals,
     split_portal_route_modules,
@@ -914,6 +915,13 @@ class AppUpdateTests(unittest.TestCase):
                 universal=True,
                 device_settings_path=path
             )
+
+    def test_usb_activation_waits_for_frozen_recovery(self):
+        code = activation_preflight_code()
+
+        self.assertIn("_iotmd_state.get('status') != 'ready'", code)
+        self.assertIn('recovery_boot.clear_recovery_request()', code)
+        self.assertNotIn('activate_pending()', code)
 
     def test_firmware_manifest_freezes_the_complete_recovery_layer(self):
         manifest = (

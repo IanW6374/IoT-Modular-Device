@@ -28,6 +28,7 @@ except ImportError:
 import app_update
 import certificate_manager
 import credential_store
+import factory_config
 import release_update
 import wifi_recovery
 
@@ -415,12 +416,16 @@ async def _download_application(config):
         config['wifi']['ssid'], config['wifi']['password'],
         wifi=config['wifi']
     )
-    release = await release_update.check_release(
+    releases = await release_update.fetch_releases(
         factory_config.SETUP_RELEASE_MANIFEST_URL,
         config['release']['channel'],
         factory_config.SETUP_TRUST_CA_CERT_PATH,
     )
-    if release.get('type') != 'application':
+    release = next(
+        (candidate for candidate in releases
+         if candidate.get('type') == 'application'), {}
+    )
+    if not release:
         raise ValueError('setup release service did not return an application')
     state = await release_update.stage_release(
         release, factory_config.SETUP_TRUST_CA_CERT_PATH,
