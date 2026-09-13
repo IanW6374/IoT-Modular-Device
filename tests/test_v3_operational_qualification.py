@@ -16,6 +16,7 @@ class MemoryNamespace:
     def __init__(self):
         self.generation = 0
         self.payload = b''
+        self.closed = False
 
     def snapshot(self):
         return self.generation, self.payload
@@ -26,6 +27,9 @@ class MemoryNamespace:
         self.generation += 1
         self.payload = bytes(payload)
         return self.generation
+
+    def close(self):
+        self.closed = True
 
 
 def profile(**changes):
@@ -78,6 +82,14 @@ class V3OperationalQualificationTests(unittest.TestCase):
         self.assertEqual(states['certificate-renewal'], 'not-run')
         self.assertEqual(states['release-confirmation'], 'passed')
         self.assertFalse(result['promotion_ready'])
+
+    def test_close_releases_all_owned_namespaces(self):
+        self.assertEqual(self.recorder.close(), 3)
+        self.assertTrue(self.namespace.closed)
+        self.assertTrue(self.history_namespace.closed)
+        self.assertTrue(self.campaign_namespace.closed)
+        with self.assertRaisesRegex(QualificationError, 'not started'):
+            self.recorder.snapshot()
 
     def test_unconfirmed_release_cannot_be_promoted(self):
         self.release['confirmed'] = False

@@ -24,3 +24,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.21 qualification plan](v3.0.0-alpha.21.md)
 - [v3.0.0-alpha.22 qualification plan](v3.0.0-alpha.22.md)
 - [v3.0.0-alpha.23 automatic-upgrade test](v3.0.0-alpha.23.md)
+- [v3.0.0-alpha.24 storage-handle recovery test](v3.0.0-alpha.24.md)

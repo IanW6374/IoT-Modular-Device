@@ -69,6 +69,7 @@ typedef struct {
 typedef struct {
     bool used;
     nvs_handle_t nvs;
+    char namespace_name[16];
 } iotmd_v3_storage_handle_t;
 
 static iotmd_v3_storage_handle_t iotmd_v3_storage_handles[
@@ -1121,6 +1122,19 @@ static mp_obj_t iotmd_platform_v3_storage_open(mp_obj_t namespace_in) {
             mp_raise_ValueError(MP_ERROR_TEXT("invalid storage namespace"));
         }
     }
+    // MicroPython can restart the product application without resetting the
+    // native module's static state. Reopening an owned namespace must reuse
+    // its existing NVS handle rather than leaking one bounded table entry per
+    // application generation.
+    for (size_t index = 0; index < IOTMD_V3_STORAGE_HANDLES; ++index) {
+        if (iotmd_v3_storage_handles[index].used &&
+                strlen(iotmd_v3_storage_handles[index].namespace_name) == length &&
+                memcmp(
+                    iotmd_v3_storage_handles[index].namespace_name, name, length
+                ) == 0) {
+            return MP_OBJ_NEW_SMALL_INT(index + 1);
+        }
+    }
     for (size_t index = 0; index < IOTMD_V3_STORAGE_HANDLES; ++index) {
         if (!iotmd_v3_storage_handles[index].used) {
             char bounded_name[16];
@@ -1133,6 +1147,10 @@ static mp_obj_t iotmd_platform_v3_storage_open(mp_obj_t namespace_in) {
             if (error != ESP_OK) {
                 mp_raise_OSError(error);
             }
+            memcpy(
+                iotmd_v3_storage_handles[index].namespace_name,
+                bounded_name, length + 1
+            );
             iotmd_v3_storage_handles[index].used = true;
             return MP_OBJ_NEW_SMALL_INT(index + 1);
         }
@@ -1150,6 +1168,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1(
 static mp_obj_t iotmd_platform_v3_storage_close(mp_obj_t handle_in) {
     iotmd_v3_storage_handle_t *handle = iotmd_v3_storage_handle(handle_in);
     nvs_close(handle->nvs);
+    handle->nvs = 0;
+    handle->namespace_name[0] = '\0';
     handle->used = false;
     return mp_const_none;
 }

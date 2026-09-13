@@ -462,6 +462,27 @@ class OperationalQualification:
             self._save()
         return self.snapshot()
 
+    def close(self):
+        """Release every native namespace owned by this recorder."""
+        closed = []
+        for namespace in (
+                self._campaign_namespace, self._history_namespace,
+                self._namespace):
+            if namespace is None or any(
+                    namespace is item for item in closed):
+                continue
+            closer = getattr(namespace, 'close', None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:
+                    pass
+            closed.append(namespace)
+        self._state = None
+        self._campaign = None
+        self._history = _empty_history()
+        return len(closed)
+
     def reset(self):
         """Explicitly reset release observations and the active ABI campaign."""
         release = self._release()

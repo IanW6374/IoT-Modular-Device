@@ -133,6 +133,12 @@ class V3PlatformContractTests(unittest.TestCase):
         with self.assertRaisesRegex(PlatformContractError, 'storage'):
             Platform(Provider())
 
+    def test_native_storage_reuses_namespace_after_application_restart(self):
+        source = (ROOT / 'firmware' / 'native' / 'iotmd_platform_v3.c').read_text()
+        self.assertIn('char namespace_name[16];', source)
+        self.assertIn('Reopening an owned namespace must reuse', source)
+        self.assertIn('return MP_OBJ_NEW_SMALL_INT(index + 1);', source)
+
     def test_native_rollback_requires_paired_trial(self):
         value = self.example()
         value['updates']['native_rollback'] = True

@@ -27,6 +27,8 @@ class AlphaQualificationService:
     def start(self):
         if self.recorder is not None:
             return True
+        candidate = None
+        namespaces = []
         try:
             if self.recorder_factory is None:
                 from v3.runtime.iotmd_next.platform import Platform
@@ -34,25 +36,41 @@ class AlphaQualificationService:
                 from v3.runtime.iotmd_next.qualification import OperationalQualification
                 self.platform = Platform()
                 namespace = TransactionalNamespace(self.platform, 'v3qual')
+                namespaces.append(namespace)
                 history_namespace = TransactionalNamespace(
                     self.platform, 'v3qualhist'
                 )
+                namespaces.append(history_namespace)
                 campaign_namespace = TransactionalNamespace(
                     self.platform, 'v3qualcamp'
                 )
-                self.recorder = OperationalQualification(
+                namespaces.append(campaign_namespace)
+                candidate = OperationalQualification(
                     namespace, self.clock, self.device_id, self.release_getter,
                     history_namespace=history_namespace,
                     campaign_namespace=campaign_namespace
                 )
             else:
-                self.recorder = self.recorder_factory(
+                candidate = self.recorder_factory(
                     self.clock, self.device_id, self.release_getter
                 )
-            self.recorder.start()
+            candidate.start()
+            self.recorder = candidate
             self.error = ''
             return True
         except Exception as exc:
+            closer = getattr(candidate, 'close', None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:
+                    pass
+            else:
+                for namespace in reversed(namespaces):
+                    try:
+                        namespace.close()
+                    except Exception:
+                        pass
             self.recorder = None
             self.platform = None
             detail = str(exc)[:160] or exc.__class__.__name__
@@ -63,6 +81,18 @@ class AlphaQualificationService:
                 )
             self.error = detail
             return False
+
+    def stop(self):
+        """Close native qualification namespaces before application exit."""
+        recorder = self.recorder
+        self.recorder = None
+        self.platform = None
+        closer = getattr(recorder, 'close', None)
+        if callable(closer):
+            try:
+                closer()
+            except Exception:
+                pass
 
     def observe(self, health_state, storage_free_bytes, network_up,
                 canary_paused=False):

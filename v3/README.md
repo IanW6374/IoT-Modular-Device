@@ -4,9 +4,9 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.23` retains native ABI 6 and provides a focused successor
-for testing the Management Suite's universal paired transaction, restart
-reconnection and portal session handling. Controlled
+Version `3.0.0-alpha.24` retains native ABI 6 and prevents qualification NVS
+handles from leaking across application restarts or failed recorder startup.
+Controlled
 platform qualification evidence carries across
 ordinary release changes while each release restarts its soak, health, storage
 and canary observations. A genuine power-on boot contributes power-recovery
@@ -53,8 +53,9 @@ wholesale.
 Read the [target architecture](../docs/V3_ARCHITECTURE.md),
 [requirements](../docs/V3_REQUIREMENTS.md) and
 [roadmap](../docs/V3_ROADMAP.md) before adding implementation code. The
-[Alpha 23 test note](../docs/V3_ALPHA23.md) defines its exact scope and safe
-test procedure. The [Alpha 22 note](../docs/V3_ALPHA22.md),
+[Alpha 24 test note](../docs/V3_ALPHA24.md) defines its exact scope and safe
+test procedure. The [Alpha 23 note](../docs/V3_ALPHA23.md),
+[Alpha 22 note](../docs/V3_ALPHA22.md),
 [Alpha 21 note](../docs/V3_ALPHA21.md),
 [Alpha 20 note](../docs/V3_ALPHA20.md),
 [Alpha 19 note](../docs/V3_ALPHA19.md),

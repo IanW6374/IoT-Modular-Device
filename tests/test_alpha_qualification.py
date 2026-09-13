@@ -11,6 +11,7 @@ class Recorder:
         self.renewals = []
         self.power = []
         self.validations = []
+        self.closed = 0
 
     def start(self):
         self.started += 1
@@ -37,6 +38,9 @@ class Recorder:
             'passed_gates': ['soak'], 'failed_gates': [],
             'promotion_ready': False,
         }]
+
+    def close(self):
+        self.closed += 1
 
     def snapshot(self):
         return {
@@ -123,6 +127,37 @@ class AlphaQualificationTests(unittest.TestCase):
         self.assertFalse(status['available'])
         self.assertEqual(status['summary'], 'Unavailable')
         self.assertIn('no platform', status['error'])
+
+    def test_failed_start_closes_candidate_and_retry_does_not_leak(self):
+        class BrokenRecorder(Recorder):
+            def start(self):
+                raise RuntimeError('invalid qualification state')
+
+        candidates = []
+
+        def factory(*unused):
+            candidate = BrokenRecorder()
+            candidates.append(candidate)
+            return candidate
+
+        service = AlphaQualificationService(
+            'device', lambda: {}, lambda: 1, factory
+        )
+        self.assertFalse(service.start())
+        self.assertFalse(service.start())
+        self.assertEqual([item.closed for item in candidates], [1, 1])
+        self.assertEqual(service.error, 'invalid qualification state')
+
+    def test_stop_closes_running_recorder(self):
+        recorder = Recorder()
+        service = AlphaQualificationService(
+            'device', lambda: {}, lambda: 1,
+            lambda *unused: recorder
+        )
+        self.assertTrue(service.start())
+        service.stop()
+        self.assertEqual(recorder.closed, 1)
+        self.assertIsNone(service.recorder)
 
     def test_missing_native_core_has_actionable_error(self):
         service = AlphaQualificationService(

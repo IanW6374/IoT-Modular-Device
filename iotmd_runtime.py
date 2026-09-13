@@ -3386,4 +3386,5 @@ def run_application():
         )
         raise
     finally:
+        qualification_service.stop()
         client.close()  # Prevent LmacRxBlk:1 errors

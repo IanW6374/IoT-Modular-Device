@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.24 - 2026-09-13
+
+- Prevent the qualification recorder from exhausting the native four-handle
+  storage table across application restarts or failed initialization.
+- Make native storage namespace opens idempotent, so reopening `v3qual`,
+  `v3qualhist` or `v3qualcamp` reuses the existing NVS handle.
+- Close every qualification namespace after partial startup failure and during
+  orderly application shutdown, while retaining all persisted evidence.
+- Retain native ABI 6 and release the application and core as one paired
+  universal update because the repair spans both components.
+
 ## 3.0.0-alpha.23 - 2026-09-13
 
 - Publish a paired release with sequence 2728 so the automatic
