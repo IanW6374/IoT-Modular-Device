@@ -138,6 +138,9 @@ PORTAL_CSS = (
     'border-radius:14px;padding:18px;background:var(--surface);min-width:0;text-align:center}.metric span{'
     'display:block;color:var(--muted);font-size:.73rem;font-weight:700;text-transform:uppercase;'
     'letter-spacing:.06em}.metric strong{display:block;margin-top:5px;overflow-wrap:anywhere}'
+    '#overview-status .metric{display:grid;grid-template-rows:2.4em auto;align-content:start}'
+    '#overview-status .metric span{line-height:1.2;text-align:center}'
+    '#overview-status .metric strong{align-self:start}'
     '.metric.good{border-color:#9ed6bd;background:#f4fbf7}.metric.warn{border-color:#efcf92;'
     'background:#fffaf1}.metric.bad{border-color:#e4abab;background:#fff7f7}.metric.info{'
     'border-color:#91ccd2;background:#f3fbfc}'
@@ -224,10 +227,13 @@ PORTAL_CSS = (
     '.health-item span{font-size:.75rem;color:var(--muted)}.health-item strong{font-size:.88rem;'
     'text-align:right;overflow-wrap:anywhere;min-width:0}'
     '.portal-user-grid{grid-template-columns:repeat(auto-fill,30rem);justify-content:start}'
-    '.portal-user-card form{display:grid;gap:7px}.portal-user-card form+form{margin-top:12px;'
+    '.portal-user-card{display:flex;flex-direction:column}.portal-user-card>form:first-of-type{'
+    'display:flex;flex:1;flex-direction:column;gap:7px}.portal-user-card form+form{margin-top:12px;'
     'padding-top:12px;border-top:1px solid var(--line)}.portal-user-status-value{display:flex;'
     'align-items:center;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;'
-    'background:var(--bg);color:var(--muted);font-weight:500}.portal-user-card .actions button{width:10rem}'
+    'background:var(--bg);color:var(--muted);font-weight:500}.portal-user-status{display:grid;gap:6px;'
+    'margin:8px 0;font-weight:700}.portal-user-card .check{align-items:flex-start;min-height:2.4rem}'
+    '.portal-user-card .actions{margin-top:auto}.portal-user-card .actions button{width:10rem}'
     '@keyframes status-spin{to{transform:rotate(360deg)}}.page-load-action{display:flex;'
     'justify-content:center;width:100%;margin:18px 0 0}.file-input-hidden{position:absolute;'
     'width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);'
@@ -267,6 +273,8 @@ PORTAL_CSS = (
     '.certificate-group{margin-top:18px;padding-top:2px}.certificate-group+.certificate-group{'
     'border-top:1px solid var(--line);padding-top:18px}.certificate-group-head{margin-bottom:10px}'
     '.certificate-group-head h3{font-size:1.05rem}.certificate-group-head p{margin:3px 0 0}'
+    '.certificate-card{display:flex;flex-direction:column}.certificate-card>form{margin-top:auto}'
+    '.certificate-card>form .actions,.certificate-renew-form .actions{margin-top:12px}'
     '@media(prefers-reduced-motion:reduce){.status-spinner{animation-duration:1.5s}}'
     '.auth-card{'
     'width:min(28rem,100%);margin:6vh auto;padding:23px}.auth-card form{display:grid;gap:13px}'
@@ -345,6 +353,14 @@ PORTAL_JS = (
     'if(passwordDialog.showModal)passwordDialog.showModal();else passwordDialog.setAttribute("open","open");};}'
     'if(passwordClose&&passwordDialog){passwordClose.onclick=function(){passwordDialog.close?'
     'passwordDialog.close():passwordDialog.removeAttribute("open");};}'
+    'var idleMs=parseInt(document.body.getAttribute("data-session-timeout-ms")||"0",10),idleTimer=0,'
+    'idleDeadline=0;function idleCheck(){if(Date.now()>=idleDeadline){location.replace('
+    '"/login?reason=expired");return;}idleTimer=setTimeout(idleCheck,idleDeadline-Date.now());}'
+    'function idleArm(){if(!idleMs)return;idleDeadline=Date.now()+idleMs;if(idleTimer)clearTimeout(idleTimer);'
+    'idleTimer=setTimeout(idleCheck,idleMs);}if(idleMs){var idleEvents=["pointerdown","keydown",'
+    '"touchstart","scroll"];for(var e=0;e<idleEvents.length;e++)document.addEventListener('
+    'idleEvents[e],idleArm,{passive:true});document.addEventListener("visibilitychange",function(){'
+    'if(!document.hidden)idleCheck();});idleArm();}'
     '})();'
 )
 
@@ -386,7 +402,7 @@ NAVIGATION = (
         ('health_history', '/health-history', 'Health history'),
         ('maintenance_logging', '/logging', 'Logging', LOGGING_NAVIGATION),
         ('device_control', '/device-control', 'Power & reset'),
-        ('user_settings', '/user', 'Portal users'),
+        ('user_settings', '/user', 'Users'),
         ('release_qualification', '/release-qualification', 'Release qualification'),
         ('updates', '/updates', 'Upgrades'),
     )),
@@ -592,7 +608,7 @@ def restrict_actions(page, role):
     return page
 
 
-def personalise_page(page, username, role, status=None):
+def personalise_page(page, username, role, status=None, session_timeout_ms=0):
     """Add request-local identity and permission presentation to portal HTML."""
     page = str(page).replace(
         '<!--portal-identity-->', identity_badge(username, role), 1
@@ -601,6 +617,7 @@ def personalise_page(page, username, role, status=None):
         '<!--portal-identity-details-->', identity_details(username, role), 1
     )
     page = page.replace('<!--device-status-->', device_status_indicator(status), 1)
+    page = page.replace('<!--session-timeout-->', escape(session_timeout_ms), 1)
     return restrict_actions(page, role)
 
 
@@ -728,7 +745,8 @@ def shell(title, active, body, csrf='', script='', extra_css='', authenticated=T
         '<title>' + escape(title) + '</title><link rel="stylesheet" href="/assets/portal.css?v=' +
         escape(ASSET_VERSION) + '">'
         + ('<style>' + extra_css + '</style>' if extra_css else '') +
-        '</head><body>' + header + '<main' +
+        '</head><body' + (' data-session-timeout-ms="<!--session-timeout-->"' if authenticated else '') +
+        '>' + header + '<main' +
         (' class="' + escape(main_class) + '"' if main_class else '') +
         '>' + (breadcrumb(active) if authenticated else '') + body +
         '</main><script src="/assets/portal.js?v=' +
@@ -772,10 +790,12 @@ def restart_page(target, message='Settings saved. The device is restarting.'):
         'status=document.querySelector("#restart-progress .status-text");'
         'function go(){var join=t.indexOf("?")<0?"?":"&";window.location.replace('
         't+join+"reconnect="+Date.now());}function fresh(url){var u=new URL(url);'
-        'u.searchParams.set("restart_probe",Date.now());return u.href;}function probe(url,marker){return fetch(fresh(url),{'
-        'mode:same?"same-origin":"no-cors",cache:"no-store",credentials:"omit"}).then(function(r){'
+        'u.searchParams.set("restart_probe",Date.now());return u.href;}function probe(url,marker){var c=new AbortController(),'
+        'timer=setTimeout(function(){c.abort();},3500);return fetch(fresh(url),{signal:c.signal,'
+        'mode:same?"same-origin":"no-cors",cache:"no-store",credentials:"omit"}).then(function(r){clearTimeout(timer);'
         'if(!same)return true;if(!r.ok)return false;return r.text().then(function(body){'
-        'return body.indexOf(marker)>=0;});});}function retry(){setTimeout(ready,offline?2000:500);}'
+        'return body.indexOf(marker)>=0;});}).catch(function(e){clearTimeout(timer);throw e;});}'
+        'function retry(){setTimeout(ready,offline?2000:500);}'
         'function ready(){if(!offline){probe(t,"id=\\\"login-form\\\"").then(function(ok){if(!ok)throw Error();failures=0;'
         'if(Date.now()-started>=6000){offline=true;status.textContent="Checking restarted portal…";}'
         'else status.textContent="Waiting for device to restart…";retry();}).catch(function(){failures++;'

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.23 - 2026-09-13
+
+- Publish a paired release with sequence 2728 so the automatic
+  universal upgrade path introduced in Alpha 22 can be exercised end to end.
+- Make restart recovery probes time-bounded so an unavailable connection cannot
+  prevent the restart page from returning automatically to sign-in.
+- Proactively sign out an inactive browser at its per-user timeout instead of
+  waiting for the next navigation.
+- Rename **Portal users** to **Users**, align existing/new user fields and
+  actions, and align overview status labels and values.
+- Surface **Renew now** with the installed identities under **Device
+  certificates**, and bottom-align removal actions across every trust card.
+- Pair with Management Suite 2.2.6, whose GitHub synchronization removes
+  releases and unreferenced files that have been deleted upstream.
+- Retain native ABI 6 and all existing qualification campaign evidence.
+
 ## 3.0.0-alpha.22 - 2026-09-10
 
 - Move Portal users from its own top-level menu into Maintenance and align the

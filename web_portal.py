@@ -224,17 +224,15 @@ async def start_web_portal(portal):
             nonlocal response_keep_alive
             if content_type.startswith('text/html') and session_username:
                 body = portal_ui.personalise_page(
-                    body, session_username, session_role, status_snapshot.get()
+                    body, session_username, session_role, status_snapshot.get(), session.get('timeout_ms', 0) if session else 0
                 )
             response_keep_alive = request_keep_alive
             await send_raw_response(
                 writer, status, body, content_type, extra_headers,
                 response_keep_alive
             )
-
         async def close_writer():
             await http_support.close_writer(writer)
-
         async def handle_access_routes():
             nonlocal login_failures, password_verifier
             nonlocal password_change_required, session, session_id
@@ -254,16 +252,18 @@ async def start_web_portal(portal):
                 body = 'Method not allowed'
                 await send_response(writer, '405 Method Not Allowed', body, 'text/plain')
             elif is_login and method == 'GET':
-                if session_valid:
+                expired = parse_query(action_path).get('reason') == 'expired'
+                if expired:
+                    if session_valid: sessions.revoke(session_id)
+                    await send_response(writer, '200 OK', render_login_page(message=
+                        'You have been signed out because your session expired.'),
+                        extra_headers=(('Set-Cookie', session_cookie('', secure_cookie, True)),))
+                elif session_valid:
                     await send_redirect(
                         writer,
                         '/user' if session_password_change_required else '/'
                     )
-                else:
-                    expired = parse_query(action_path).get('reason') == 'expired'
-                    await send_response(writer, '200 OK', render_login_page(message=
-                        'You have been signed out because your session expired.' if expired else ''),
-                        extra_headers=(('Set-Cookie', session_cookie('', secure_cookie, True)),) if expired else None)
+                else: await send_response(writer, '200 OK', render_login_page())
             elif is_login and method == 'POST':
                 params = form_params
                 identity = (

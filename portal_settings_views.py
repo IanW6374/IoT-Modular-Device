@@ -287,7 +287,7 @@ def render_portal_settings_page(csrf, settings, message='', error=False):
         'name="portal_session_timeout_minutes" type="number" min="5" max="1440" required value="' +
         html_escape(session_timeout_minutes) + '"></label></div>'
         '<p class="muted">HTTPS defaults to port 8443 and explicit HTTP defaults to 8080. Port 80 is reserved for '
-        'certificate enrollment and recovery. Per-user timeouts are managed under Maintenance / Portal users.</p>'
+        'certificate enrollment and recovery. Per-user timeouts are managed under Maintenance / Users.</p>'
         '<div class="actions"><span></span>'
         '<button type="submit">Save changes</button></div></section></form>'
     )
@@ -528,7 +528,7 @@ def render_user_settings_page(
         )
     new_user = (
         '<article class="module-card portal-user-card"><div class="module-card-title">'
-        '<strong>New portal user</strong></div>'
+        '<strong>New user</strong></div>'
         '<form action="/user/add" method="post" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
         '<label class="field">Username<input name="username" required maxlength="32"></label>'
@@ -551,14 +551,14 @@ def render_user_settings_page(
     )
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Portal users',
-            'Manage portal usernames, roles and access. Change your own password from the avatar menu.'
+            'Maintenance', 'Users',
+            'Manage usernames, roles and portal access. Change your own password from the avatar menu.'
         ) + _notice(message, error) + _notice(password_message, password_error) +
-        '<section class="card"><div class="section-title"><h2>Portal users</h2>'
+        '<section class="card"><div class="section-title"><h2>Users</h2>'
         '<span class="badge">Maximum 8</span></div><div class="module-grid portal-user-grid">' +
         ''.join(user_rows) + new_user + '</div></section>'
     )
-    return portal_ui.shell('IoT-MD portal users', 'user_settings', body, csrf)
+    return portal_ui.shell('IoT-MD users', 'user_settings', body, csrf)
 
 def render_module_settings_page(csrf, module_json='{"devices":[]}', message='', error=False):
     body = (

@@ -75,11 +75,12 @@ trust anchor is not mistaken for a device or client identity:
 - **API client trust** contains **Device API client issuer CA** anchors and
   enrolled **Device API caller certificates**. Removing an issuer CA reloads
   Device API trust; revoking a caller removes only that enrolled caller.
-- **Device certificates** is a read-only inventory of identities currently
+- **Device certificates** inventories identities currently
   presented by the device: **Portal HTTPS identity** and **Device API and fleet
-  server identity**. Identities are installed or replaced from **Certificate
-  enrollment**. The **Manual certificate package** controls are shown there and
-  remain the only enrollment method without automatic renewal.
+  server identity**. It also exposes **Renew now** for the current managed
+  enrollment method. Identities are installed or replaced from **Certificate
+  enrollment**. **Manual certificate package** remains the only method without
+  automatic renewal and therefore requires an explicit replacement package.
 
 The Management Suite verification key is a signing key rather than an X.509
 CA certificate. It verifies fleet policy and format-3 release catalogs; update

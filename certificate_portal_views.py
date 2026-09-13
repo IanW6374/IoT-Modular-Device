@@ -59,7 +59,7 @@ def _card(details, label, actions=''):
                             html_escape(details[key]) + '</strong></div>')
     else:
         rows.append('<p class="muted">No file is installed.</p>')
-    return ('<article class="module-card"><div class="module-head"><h3>' + label + '</h3>' + badge +
+    return ('<article class="module-card certificate-card"><div class="module-head"><h3>' + label + '</h3>' + badge +
             '</div><div class="property-grid">' + ''.join(rows) + '</div>' + actions + '</article>')
 
 
@@ -136,6 +136,21 @@ def _identity_upload_widget(csrf, return_to='/certificates'):
     return body, script
 
 
+def _renew_action(csrf, certificates, return_to='/certificates'):
+    method = _method(certificates)
+    operation = (certificates or {}).get('enrollment_operation', {}) or {}
+    if method not in ('self_signed', 'iot_ca_auto', 'iot_ca_file', 'acme'):
+        return '<p class="muted">Install a replacement package to renew a manual identity.</p>'
+    return (
+        '<form class="certificate-renew-form" method="post" action="/renew-certificate">'
+        '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
+        '<input type="hidden" name="return_to" value="' + html_escape(return_to) + '">'
+        '<div class="actions"><span></span><button type="submit"' +
+        (' disabled' if operation.get('phase') == 'running' else '') +
+        '>Renew now</button></div></form>'
+    )
+
+
 def render_certificate_page(csrf, message='', certificates=None):
     certificates = certificates or {}
     settings = certificates.get('acme_settings', {}) or {}
@@ -147,16 +162,6 @@ def render_certificate_page(csrf, message='', certificates=None):
     if operation_state not in ('', 'idle'):
         tone = 'error' if operation_state in ('error', 'failed') else ('success' if operation_state == 'complete' else 'info')
         operation_notice = '<section class="portal-status ' + tone + '"><strong>' + html_escape(operation.get('message', '')) + '</strong></section>'
-    managed = method in ('self_signed', 'iot_ca_auto', 'iot_ca_file', 'acme')
-    renew_action = (
-        '<form method="post" action="/renew-certificate">'
-        '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
-        '<div class="actions"><span></span><button type="submit"' +
-        (' disabled' if operation.get('phase') == 'running' else '') +
-        '>Renew now</button></div></form>'
-        if managed else
-        '<p class="muted">Install a replacement package to renew a manual identity.</p>'
-    )
     options = ''.join('<option value="' + key + '"' + (' selected' if key == method else '') + '>' + value[0] + '</option>'
                       for key, value in METHODS.items())
     manual_upload, manual_script = _identity_upload_widget(csrf, '/certificates')
@@ -165,7 +170,7 @@ def render_certificate_page(csrf, message='', certificates=None):
             _notice(message) + operation_notice +
             '<section class="card"><div class="section-title"><h2>Current enrollment</h2>' +
             render_badge(label, 'good' if method != 'manual' else 'warn') +
-            '</div><p>' + html_escape(description) + '</p>' + renew_action + '</section>'
+            '</div><p>' + html_escape(description) + '</p>' + _renew_action(csrf, certificates) + '</section>'
             '<section class="card"><div class="section-title"><h2>Change enrollment method</h2></div>'
             '<label class="field">Enrollment method<select id="enrollment-method">' + options + '</select></label>'
             '<div class="certificate-option-panel" data-method="self_signed"><p>' + html_escape(METHODS['self_signed'][1]) + '</p>'
@@ -258,6 +263,7 @@ def render_api_client_trust_page(csrf, message='', certificates=None):
 
 def render_device_certificates_page(csrf, message='', certificates=None):
     certificates = certificates or {}
+    method_label = METHODS.get(_method(certificates), ('Unknown certificate method', ''))[0]
     body = (portal_ui.page_heading('Maintenance', 'Device certificates',
             'Inspect the identities currently presented by this device. Install or replace identities through Certificate enrollment.') +
             _notice(message) +
@@ -266,7 +272,11 @@ def render_device_certificates_page(csrf, message='', certificates=None):
             'MQTT, upgrade and syslog connections instead validate their remote servers using the trust anchors under CA &amp; signing trust.</p>'
             '<div class="module-grid">' +
             _card(certificates.get('portal'), 'Portal HTTPS identity') +
-            _card(certificates.get('api_server'), 'Device API and fleet server identity') + '</div></section>')
+            _card(certificates.get('api_server'), 'Device API and fleet server identity') + '</div></section>'
+            '<section class="card"><div class="section-title"><h2>Certificate renewal</h2></div>'
+            '<p>Current enrollment method: <strong>' + html_escape(method_label) + '</strong></p>'
+            '<p class="muted">Request immediate renewal of every identity managed by the current enrollment method.</p>' +
+            _renew_action(csrf, certificates, '/device-certificates') + '</section>')
     return portal_ui.shell('IoT-MD device certificates', 'device_certificates', body, csrf)
 
 

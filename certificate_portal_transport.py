@@ -43,8 +43,11 @@ async def handle(method, route, path, writer, reader, headers, form, csrf,
             'renew-certificate', path, actions, log_output, form
         )
         message = result.get('message', '') if isinstance(result, dict) else result
+        target = form.get('return_to', '/certificates')
+        if target not in certificate_routes:
+            target = '/certificates'
         await send_response(writer, '202 Accepted', _render_certificate_route(
-            '/certificates', csrf, message, inventory() if inventory else {}
+            target, csrf, message, inventory() if inventory else {}
         ))
         return True
     if method == 'POST' and path.startswith('/certificate-upload'):
