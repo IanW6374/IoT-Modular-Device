@@ -269,6 +269,10 @@ def authorize_upload(request):
 def begin(begin_callback, request):
     if isinstance(request, dict) and request.get('universal_plan'):
         authorize_upload(request)
+        # The signed outer plan authorizes reclaiming the inactive application
+        # generation even though this sequential inner upload retains its real
+        # receiver kind (firmware or application).
+        return begin_callback(request, reclaim_kind='universal')
     return begin_callback(request)
 
 

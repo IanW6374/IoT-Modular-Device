@@ -118,17 +118,22 @@ class UpdateService:
         self.receivers[kind] = receiver
         return receiver
 
-    def begin(self, request):
+    def begin(self, request, reclaim_kind=None):
         if not isinstance(request, dict):
             raise ValueError('resumable upload request is invalid')
         if self._installing:
             raise ValueError('another update is already being installed')
         kind = str(request.get('kind', ''))
         self.receiver(kind)
-        return self.store.begin(
+        arguments = (
             request.get('id', ''), kind,
             request.get('total_bytes', 0), request.get('sha256', '')
         )
+        if reclaim_kind is None:
+            return self.store.begin(*arguments)
+        if str(reclaim_kind) != 'universal':
+            raise ValueError('update reclaim kind is invalid')
+        return self.store.begin(*arguments, reclaim_kind='universal')
 
     def status(self, identifier):
         return self.store.status(identifier)

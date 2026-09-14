@@ -199,11 +199,14 @@ class ResumableUploadStore:
                 raise
             self._require_upload_space(required)
 
-    def begin(self, identifier, kind, total_bytes, sha256):
+    def begin(self, identifier, kind, total_bytes, sha256, reclaim_kind=None):
         identifier = _safe_identifier(identifier)
         kind = str(kind)
         if kind not in ALLOWED_KINDS:
             raise ValueError('upload kind is invalid')
+        reclaim_kind = kind if reclaim_kind is None else str(reclaim_kind)
+        if reclaim_kind not in ALLOWED_KINDS:
+            raise ValueError('upload reclaim kind is invalid')
         total_bytes = int(total_bytes)
         if total_bytes <= 0 or total_bytes > self.maximum_bytes:
             raise ValueError('upload size is outside the supported range')
@@ -224,7 +227,7 @@ class ResumableUploadStore:
                 try:
                     self._ensure_upload_space(
                         total_bytes - int(current.get('received_bytes', 0)),
-                        kind
+                        reclaim_kind
                     )
                 except ValueError:
                     # A partial artifact that cannot accept its remaining
@@ -244,7 +247,7 @@ class ResumableUploadStore:
         existing = self._session_names()
         if identifier not in existing and len(existing) >= self.maximum_sessions:
             raise ValueError('too many update uploads are active')
-        self._ensure_upload_space(total_bytes, kind)
+        self._ensure_upload_space(total_bytes, reclaim_kind)
         metadata_path, payload_path = self._paths(identifier)
         value = {
             'format_version': FORMAT_VERSION,

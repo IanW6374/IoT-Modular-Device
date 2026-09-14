@@ -4,11 +4,14 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.27` retains native ABI 6, preflights paired application
+Version `3.0.0-alpha.28` retains native ABI 6, preflights paired application
 capacity before selecting a new core and can release verified staging blocks
 while extracting the application from PSRAM on a constrained filesystem. It
 also safely reclaims stale encrypted-NVS qualification snapshots and separates
-upgrade discovery, installation and automatic settings in the portal.
+upgrade discovery, installation and automatic settings in the portal. Signed
+sequential universal components now retain the outer plan's storage-reclaim
+authority, so the inactive application generation can be released before a
+large inner core upload while standalone component uploads remain restricted.
 Controlled platform qualification evidence carries across
 ordinary release changes while each release restarts its soak, health, storage
 and canary observations. A genuine power-on boot contributes power-recovery

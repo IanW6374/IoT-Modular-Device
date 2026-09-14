@@ -27,3 +27,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.24 storage-handle recovery test](v3.0.0-alpha.24.md)
 - [v3.0.0-alpha.26 constrained activation and upgrade UI test](v3.0.0-alpha.26.md)
 - [v3.0.0-alpha.27 qualification storage and workflow test](v3.0.0-alpha.27.md)
+- [v3.0.0-alpha.28 constrained universal-upload test](v3.0.0-alpha.28.md)

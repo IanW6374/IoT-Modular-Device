@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.28 - 2026-09-14
+
+- Carry the signed universal-plan storage policy through sequential firmware
+  and application uploads, allowing the inactive application generation to be
+  reclaimed when the inner core bundle cannot otherwise fit on the filesystem.
+- Retain each inner component's real installer type while limiting this reclaim
+  authority to uploads already bound to a verified universal manifest.
+- Provide an application-first bridge path for devices unable to stage the
+  Alpha 27 core: activate the Alpha 28 application, then install the Alpha 28
+  universal release.
+- Retain native ABI 6 and use release sequence 2733.
+
 ## 3.0.0-alpha.27 - 2026-09-14
 
 - Reclaim only the stale alternating encrypted-NVS snapshot when ESP-IDF

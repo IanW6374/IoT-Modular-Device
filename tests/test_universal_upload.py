@@ -82,6 +82,32 @@ class UniversalUploadTests(unittest.TestCase):
         self.assertEqual(stored['firmware']['upload_id'], 'upload-firmware')
         self.assertEqual(stored['application']['upload_id'], 'upload-application')
 
+    def test_sequential_component_begin_uses_universal_reclaim_policy(self):
+        manifest = self.manifest()
+        with (
+            patch.object(app_update, 'running_release_sequence', return_value=2400),
+            patch.object(firmware_update, 'running_release_sequence', return_value=2400),
+            patch.object(app_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(firmware_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(universal_update, 'update_status', return_value={'status': 'idle'}),
+        ):
+            plan = universal_upload.prepare(manifest)
+        request = {
+            'universal_plan': plan['id'], 'id': 'upload-firmware',
+            'kind': 'firmware', 'total_bytes': manifest['firmware']['size'],
+            'sha256': manifest['firmware']['sha256'],
+        }
+        calls = []
+
+        def begin(value, reclaim_kind=None):
+            calls.append((value, reclaim_kind))
+            return {'received_bytes': 0}
+
+        result = universal_upload.begin(begin, request)
+
+        self.assertEqual(result['received_bytes'], 0)
+        self.assertEqual(calls, [(request, 'universal')])
+
     def test_prepare_reconciles_orphaned_transaction_before_remote_retry(self):
         manifest = self.manifest()
         with (

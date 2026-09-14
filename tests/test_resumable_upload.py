@@ -132,6 +132,28 @@ class ResumableUploadTests(unittest.TestCase):
         self.assertEqual(status['received_bytes'], 0)
         self.assertEqual(reclaimed, [('universal', 4096)])
 
+    def test_universal_component_uses_outer_plan_reclaim_policy(self):
+        values = (4096, 4096, 10, 1, 1, 0, 0, 0, 255)
+        recovered = (4096, 4096, 10, 4, 4, 0, 0, 0, 255)
+        reclaimed = []
+        store = ResumableUploadStore(
+            self.temp.name, maximum_bytes=8192, storage_reserve_bytes=1024,
+            storage_reclaimer=lambda kind, required: (
+                reclaimed.append((kind, required)) or True
+            )
+        )
+
+        with mock.patch.object(
+            resumable_upload.os, 'statvfs', side_effect=(values, recovered)
+        ):
+            status = store.begin(
+                'session-component', 'firmware', 4096, self.digest,
+                reclaim_kind='universal'
+            )
+
+        self.assertEqual(status['kind'], 'firmware')
+        self.assertEqual(reclaimed, [('universal', 4096)])
+
     def test_capacity_check_includes_allocation_rounding_and_metadata_blocks(self):
         values = (4096, 4096, 10, 4, 4, 0, 0, 0, 255)
         store = ResumableUploadStore(
