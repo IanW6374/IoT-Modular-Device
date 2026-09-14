@@ -8,7 +8,7 @@ from v3.runtime.iotmd_next.paired_update import (
 )
 from v3.runtime.iotmd_next.platform import Platform
 from v3.runtime.iotmd_next.storage import (
-    StorageConflict, TransactionalNamespace,
+    StorageConflict, StorageContractError, TransactionalNamespace,
 )
 
 
@@ -163,6 +163,14 @@ class V3TransactionalStorageTests(unittest.TestCase):
         self.assertEqual(self.namespace.commit(generation, b'first'), 1)
         with self.assertRaises(StorageConflict):
             self.namespace.commit(generation, b'stale')
+
+    def test_native_nvs_capacity_error_is_explained(self):
+        def full(*_args):
+            raise OSError(0x1105)
+        self.provider.storage_commit = full
+        with self.assertRaisesRegex(
+                StorageContractError, 'transactional storage is full'):
+            self.namespace.commit(0, b'qualification')
 
     def test_pair_cannot_trial_until_both_components_are_staged(self):
         self.coordinator.prepare(pair())

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.27 - 2026-09-14
+
+- Reclaim only the stale alternating encrypted-NVS snapshot when ESP-IDF
+  reports `ESP_ERR_NVS_NOT_ENOUGH_SPACE`, preserving the latest qualification
+  record throughout the retry and replacing the raw `4357` failure.
+- Protect the sole enabled administrator in both the portal controls and the
+  existing server-side policy; role and enabled controls unlock only after a
+  second enabled administrator exists.
+- Replace the single Upgrades entry with an alphabetic submenu containing
+  **Available upgrades**, **Install upgrade**, and **Settings**.
+- Send automatic downloads and local signed uploads to the dedicated install
+  page, while release checks and discarded releases return to the available
+  upgrade workflow.
+- Keep automatic release-channel, schedule, download and activation settings
+  on their own administrator-only page.
+- Retain native ABI 6 and publish application and core together because the
+  qualification storage repair spans native firmware and the portal runtime.
+
 ## 3.0.0-alpha.26 - 2026-09-14
 
 - Preflight application-slot capacity before selecting a paired core and, when

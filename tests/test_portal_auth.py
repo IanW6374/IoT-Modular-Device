@@ -122,6 +122,8 @@ class PortalAuthTests(unittest.TestCase):
     def test_route_roles(self):
         self.assertEqual(portal_auth.required_role('GET', '/'), 'viewer')
         self.assertEqual(portal_auth.required_role('POST', '/activate-update'), 'operator')
+        self.assertEqual(portal_auth.required_role('GET', '/update-install'), 'operator')
+        self.assertEqual(portal_auth.required_role('GET', '/update-settings'), 'administrator')
         self.assertEqual(portal_auth.required_role('GET', '/certificates'), 'administrator')
         self.assertEqual(portal_auth.required_role('GET', '/api/restart-required'), 'viewer')
         self.assertEqual(portal_auth.required_role('POST', '/restart-device'), 'administrator')

@@ -651,15 +651,14 @@ async def start_web_portal(portal):
                 send_response, send_redirect
             ):
                 pass
-            elif method == 'GET' and is_updates:
-                await send_response(
-                    writer, '200 OK',
-                    render_updates_page(
-                        csrf_token,
-                        status_snapshot.get(),
-                        settings_getter() if settings_getter else {}
-                    )
-                )
+            elif method == 'GET' and (is_updates or is_update_install or is_update_settings):
+                renderer = render_updates_page
+                arguments = (csrf_token, status_snapshot.get(), settings_getter() if settings_getter else {})
+                if is_update_install:
+                    renderer, arguments = render_update_install_page, (csrf_token, status_snapshot.get())
+                elif is_update_settings:
+                    renderer, arguments = render_update_settings_page, (csrf_token, settings_getter() if settings_getter else {})
+                await send_response(writer, '200 OK', renderer(*arguments))
             elif method == 'GET' and is_diagnostics:
                 await send_response(
                     writer, '200 OK',
@@ -787,15 +786,12 @@ async def start_web_portal(portal):
                 except Exception as exc:
                     await send_response(
                         writer, '400 Bad Request',
-                        render_updates_page(
-                            csrf_token,
-                            status_snapshot.get(),
-                            settings_getter() if settings_getter else {},
-                            str(exc), True
+                        render_update_settings_page(
+                            csrf_token, settings_getter() if settings_getter else {}, str(exc), True
                         )
                     )
                 else:
-                    await send_redirect(writer, '/updates')
+                    await send_redirect(writer, '/update-settings')
             elif method == 'POST' and route == '/revoke-api-client':
                 result = apply_portal_action(
                     'revoke-api-client', action_path, action_handler, log_output,
@@ -1132,11 +1128,11 @@ async def start_web_portal(portal):
                         writer, '202 Accepted',
                         portal_ui.task_page(
                             result['task_id'], result.get('message', 'Downloading release'),
-                            '/updates'
+                            '/update-install'
                         )
                     )
                 else:
-                    await send_redirect(writer, '/updates')
+                    await send_redirect(writer, '/update-install')
             elif method == 'POST' and path.startswith('/validate-configuration'):
                 result = apply_portal_action(
                     'validate-configuration', action_path, action_handler, log_output,
@@ -1225,6 +1221,8 @@ async def start_web_portal(portal):
             )
             is_module_settings = route == '/module-settings'
             is_updates = route == '/updates'
+            is_update_install = route == '/update-install'
+            is_update_settings = route == '/update-settings'
             is_diagnostics = route == '/diagnostics'
             is_logging = route == '/logging'
             is_audit_logging = route == '/audit-log'

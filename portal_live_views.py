@@ -1017,7 +1017,7 @@ def update_upload_script():
         'setStage("verify_application",(s.percent||0)/100);}'
         'else if(s.phase==="complete"){finished=true;box.classList.add("complete");label.textContent="Verification complete";'
         'setStage("ready",1);'
-        'setTimeout(function(){location.replace("/updates");},900);return;}else if(s.phase==="failed"){'
+        'setTimeout(function(){location.replace("/update-install");},900);return;}else if(s.phase==="failed"){'
         'terminalFailure(s.message||"Verification failed");return;}'
         'schedulePoll();}).catch(function(){schedulePoll();});}'
         'function jsonPost(url,value){return fetch(url,{method:"POST",credentials:"same-origin",headers:{'
@@ -1092,7 +1092,7 @@ def update_upload_script():
         '"/universal-upload-finalize",{id:plan.id});});});});});}'
         'if(universal){startUniversalUpload().then(function(){finished=true;box.classList.add("complete");label.textContent='
         '"Universal verification complete";setStage("ready",1);setTimeout(function(){location.replace('
-        '"/updates");},900);}).catch(function(err){if(updateCancelled)return;terminalFailure('
+        '"/update-install");},900);}).catch(function(err){if(updateCancelled)return;terminalFailure('
         'err&&err.message?err.message:"Universal upload failed");});return;}'
         'setStage("prepare",0);label.textContent="Preparing and hashing file…";requestAnimationFrame(function(){'
         'f.arrayBuffer().then(function(data){return crypto.subtle.digest("SHA-256",data);}).then(function(hash){'
@@ -1105,110 +1105,133 @@ def update_upload_script():
         'if(updateCancelled)return;terminalFailure(err&&err.message?err.message:"Upload failed");});});};'
     )
 
-def render_updates_page(token, status=None, settings=None, message='', error=False):
+def _staged_update_workspace(token, status):
     status = status or {}
     activation = (
         render_universal_update_html(status, token) +
         render_update_activation_html(status, token) +
         render_firmware_update_html(status, token)
     )
-    automatic_action = render_release_check_html(status, token)
-    script = update_preferences_script()
-    if activation:
-        if status.get('universal_update_status') == 'ready':
-            ready_steps = (
-                'Inspect paired manifest', 'Upload core firmware',
-                'Write core firmware', 'Verify core firmware',
-                'Upload application', 'Verify and stage application',
-                'Pair verified components', 'Activate and reboot',
-            )
-        elif status.get('firmware_update_status') == 'ready':
-            ready_steps = (
-                'Prepare and hash file', 'Upload core firmware',
-                'Write core firmware', 'Verify core firmware',
-                'Activate and reboot',
-            )
-        else:
-            ready_steps = (
-                'Prepare and hash file', 'Upload application',
-                'Verify and stage application', 'Activate and reboot',
-            )
-        manual_content = (
-            '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">'
-            '<ol class="upgrade-stage-list">' + ''.join(
-                '<li class="' + ('complete' if index < len(ready_steps) - 1 else 'active') + '">' +
-                html_escape(label) + '</li>'
-                for index, label in enumerate(ready_steps)
-            ) + '</ol></aside><div class="upgrade-operation">'
-            '<div class="staged-upgrade-copy"><span class="badge good">Verified</span>'
-            '<h3>Ready to activate</h3><p><strong>' +
-            html_escape(staged_version_text(status)) + '</strong> is staged. '
-            'Activation will reboot the device and retain the current release for rollback.</p></div>'
-            '<div class="actions manual-upgrade-buttons">'
-            '<form action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
-            html_escape(token) + '"><button class="secondary" type="submit">Cancel</button></form>' +
-            activation + '</div></div></div>'
+    if not activation:
+        return (
+            '<section class="card"><div class="section-title"><h2>No upgrade staged</h2></div>'
+            '<p class="muted">Check the signed release channel or upload a signed file first.</p>'
+            '<div class="actions"><span></span><a class="button" href="/updates">'
+            'Find an upgrade</a></div></section>'
+        )
+    if status.get('universal_update_status') == 'ready':
+        ready_steps = (
+            'Inspect paired manifest', 'Upload core firmware',
+            'Write core firmware', 'Verify core firmware',
+            'Upload application', 'Verify and stage application',
+            'Pair verified components', 'Activate and reboot',
+        )
+    elif status.get('firmware_update_status') == 'ready':
+        ready_steps = (
+            'Prepare and hash file', 'Upload core firmware',
+            'Write core firmware', 'Verify core firmware',
+            'Activate and reboot',
         )
     else:
-        manual_content = (
+        ready_steps = (
+            'Prepare and hash file', 'Upload application',
+            'Verify and stage application', 'Activate and reboot',
+        )
+    return (
+        '<section class="card"><div class="section-title"><h2>Staged upgrade</h2></div>'
+        '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">'
+        '<ol class="upgrade-stage-list">' + ''.join(
+            '<li class="' + ('complete' if index < len(ready_steps) - 1 else 'active') + '">' +
+            html_escape(label) + '</li>' for index, label in enumerate(ready_steps)
+        ) + '</ol></aside><div class="upgrade-operation">'
+        '<div class="staged-upgrade-copy"><span class="badge good">Verified</span>'
+        '<h3>Ready to activate</h3><p><strong>' +
+        html_escape(staged_version_text(status)) + '</strong> is staged. Activation will reboot '
+        'the device and retain the current release for rollback.</p></div>'
+        '<div class="actions manual-upgrade-buttons">'
+        '<form action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
+        html_escape(token) + '"><button class="secondary" type="submit">Discard</button></form>' +
+        activation + '</div></div></div></section>'
+    )
+
+
+def render_updates_page(token, status=None, settings=None, message='', error=False):
+    status = status or {}
+    activation_ready = bool(
+        status.get('universal_update_status') == 'ready' or
+        status.get('update_status') == 'ready' or
+        status.get('firmware_update_supported') and
+        status.get('firmware_update_status') == 'ready'
+    )
+    if activation_ready:
+        source = (
+            '<section class="card"><div class="section-title"><h2>Verified upgrade ready</h2></div>'
+            '<p><strong>' + html_escape(staged_version_text(status)) + '</strong> is ready to install.</p>'
+            '<div class="actions"><span></span><a class="button" href="/update-install">'
+            'Review and install</a></div></section>'
+        )
+        script = ''
+    else:
+        source = (
+            '<section class="card"><div class="section-title"><h2>Choose upgrade source</h2></div>'
+            '<div class="upgrade-source-block"><h3>Release channel</h3>'
+            '<p class="muted">Check the configured signed channel and stage an available release.</p>'
+            '<div class="update-actions">' + render_release_check_html(status, token) + '</div></div>'
+            '<div class="upgrade-source-divider"><span>or use a signed file</span></div>'
+            '<div class="upgrade-source-block"><h3>Local upgrade file</h3>'
             '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">'
-            '<ol id="update-stage-list" class="upgrade-stage-list">'
-            '<li class="active">Select signed file</li><li>Upload release</li>'
-            '<li>Verify and stage</li><li>Activate and reboot</li></ol></aside>'
+            '<ol id="update-stage-list" class="upgrade-stage-list"><li class="active">Select signed file</li>'
+            '<li>Upload release</li><li>Verify and stage</li><li>Activate and reboot</li></ol></aside>'
             '<div class="upgrade-operation"><form id="update-upload-form" data-csrf="' + html_escape(token) + '">'
             '<div id="update-file-selection"><input id="update-bundle" class="file-input-hidden" type="file" required '
             'accept=".iotapp,.iotcore,.iotuni"><label class="button secondary file-button" for="update-bundle">'
             'Choose upgrade file</label> <span id="update-file-name" class="file-name">No file selected</span>'
             '<span id="update-file-guidance" class="file-guidance"> Use a universal upgrade for routine updates. '
             'Application and core files are intended for recovery.</span></div>'
-            '<div id="update-overall" class="upgrade-overall" hidden>'
-            '<div class="upgrade-overall-head"><strong>Current task: '
-            '<span id="update-overall-label">Waiting to start</span></strong></div>'
+            '<div id="update-overall" class="upgrade-overall" hidden><div class="upgrade-overall-head">'
+            '<strong>Current task: <span id="update-overall-label">Waiting to start</span></strong></div>'
             '<div id="update-overall-bar" class="upgrade-overall-track" role="progressbar" '
             'aria-label="Current upgrade task progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
-            '<span id="update-overall-fill" class="upgrade-overall-fill"></span></div></div>' +
+            '<span id="update-overall-fill" class="upgrade-overall-fill"></span></div></div>'
             '<p id="update-result" class="portal-status" role="status" aria-live="polite"></p>'
             '<div class="actions manual-upgrade-buttons"><button id="update-cancel" class="secondary" '
             'type="button" disabled>Cancel</button><button id="update-primary" type="submit" disabled>'
-            'Upload and stage</button></div></form></div></div>'
+            'Upload and stage</button></div></form></div></div></div></section>'
         )
-        script += update_upload_script()
-    workflow_title = 'Staged upgrade' if activation else 'Choose upgrade source'
-    if activation:
-        upgrade_content = (
-            '<section class="card"><div class="section-title"><h2>' +
-            workflow_title + '</h2></div>' + manual_content + '</section>'
-        )
-    else:
-        upgrade_content = (
-            '<section class="card"><div class="section-title"><h2>' +
-            workflow_title + '</h2></div>'
-            '<div class="upgrade-source-block"><h3>Release channel</h3>'
-            '<p class="muted">Check the configured signed channel and stage an available release.</p>'
-            '<div class="update-actions">' + automatic_action + '</div></div>'
-            '<div class="upgrade-source-divider"><span>or use a signed file</span></div>'
-            '<div class="upgrade-source-block"><h3>Local upgrade file</h3>' +
-            manual_content + '</div></section>'
-        )
-    preferences = (
-        '<details class="card upgrade-settings"><summary><span>'
-        '<strong>Automatic upgrade settings</strong>'
-        '<small>Release channel, schedule, download and activation preferences</small>'
-        '</span></summary><div class="upgrade-settings-body">' +
-        render_update_preferences(token, settings) + '</div></details>'
-    )
+        script = update_upload_script()
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Upgrades',
-            'Check, stage and activate signed application, core or paired upgrades.'
+            'Maintenance', 'Available upgrades',
+            'Check the signed release channel or stage a local signed upgrade.'
         ) + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>Versions and upgrade state</h2></div>' +
         render_update_summary_html(status) + '<div class="update-actions">' +
-        render_application_rollback_html(status, token) + '</div></section>' +
-        '<div class="upgrade-grid">' + upgrade_content + preferences + '</div>'
+        render_application_rollback_html(status, token) + '</div></section>' + source
+    )
+    return portal_ui.shell('IoT-MD available upgrades', 'updates', body, token, script)
+
+
+def render_update_install_page(token, status=None, message='', error=False):
+    body = (
+        portal_ui.page_heading(
+            'Maintenance', 'Install upgrade',
+            'Review and activate the signed upgrade currently staged on this device.'
+        ) + _notice(message, error) + _staged_update_workspace(token, status or {})
+    )
+    return portal_ui.shell('IoT-MD install upgrade', 'update_install', body, token)
+
+
+def render_update_settings_page(token, settings=None, message='', error=False):
+    body = (
+        portal_ui.page_heading(
+            'Maintenance', 'Upgrade settings',
+            'Configure the release channel, schedule, download and activation preferences.'
+        ) + _notice(message, error) + '<section class="card">' +
+        render_update_preferences(token, settings or {}) + '</section>'
     )
     return portal_ui.shell(
-        'IoT-MD upgrades', 'updates', body, token, script
+        'IoT-MD upgrade settings', 'update_settings', body, token,
+        update_preferences_script()
     )
 
 def render_page_parts(token, current_loglevel, levels, logs=None, log_refresh_ms=5000,

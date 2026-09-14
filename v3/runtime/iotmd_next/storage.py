@@ -3,6 +3,7 @@
 import errno
 
 MAX_NAMESPACE_BYTES = 15
+ESP_ERR_NVS_NOT_ENOUGH_SPACE = 0x1105
 
 
 class StorageContractError(RuntimeError):
@@ -77,6 +78,12 @@ class TransactionalNamespace:
             retry = getattr(errno, 'EAGAIN', 11)
             if exc.args and exc.args[0] in (retry, -retry, 11, -11):
                 raise StorageConflict('storage generation changed')
+            if exc.args and exc.args[0] in (
+                    ESP_ERR_NVS_NOT_ENOUGH_SPACE,
+                    -ESP_ERR_NVS_NOT_ENOUGH_SPACE):
+                raise StorageContractError(
+                    'encrypted transactional storage is full'
+                )
             raise
         result = _generation(result)
         if result != generation + 1:

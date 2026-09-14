@@ -391,6 +391,12 @@ LOGGING_NAVIGATION = (
     ('logging', '/logging', 'Device log'),
 )
 
+UPGRADE_NAVIGATION = (
+    ('updates', '/updates', 'Available upgrades'),
+    ('update_install', '/update-install', 'Install upgrade'),
+    ('update_settings', '/update-settings', 'Settings'),
+)
+
 
 NAVIGATION = (
     ('status', '/', 'Status', (
@@ -414,9 +420,9 @@ NAVIGATION = (
         ('health_history', '/health-history', 'Health history'),
         ('maintenance_logging', '/logging', 'Logging', LOGGING_NAVIGATION),
         ('device_control', '/device-control', 'Power & reset'),
-        ('user_settings', '/user', 'Users'),
         ('release_qualification', '/release-qualification', 'Release qualification'),
-        ('updates', '/updates', 'Upgrades'),
+        ('maintenance_updates', '/updates', 'Upgrades', UPGRADE_NAVIGATION),
+        ('user_settings', '/user', 'Users'),
     )),
 )
 
@@ -432,6 +438,7 @@ def _navigation_keys(items):
 
 CERTIFICATE_ACTIVE_KEYS = _navigation_keys(CERTIFICATE_NAVIGATION)
 LOGGING_ACTIVE_KEYS = _navigation_keys(LOGGING_NAVIGATION)
+UPGRADE_ACTIVE_KEYS = _navigation_keys(UPGRADE_NAVIGATION)
 
 
 def escape(value):

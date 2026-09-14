@@ -139,6 +139,15 @@ class V3PlatformContractTests(unittest.TestCase):
         self.assertIn('Reopening an owned namespace must reuse', source)
         self.assertIn('return MP_OBJ_NEW_SMALL_INT(index + 1);', source)
 
+    def test_native_storage_reclaims_only_stale_snapshot_when_nvs_is_full(self):
+        source = (ROOT / 'firmware' / 'native' / 'iotmd_platform_v3.c').read_text()
+        full = source.index('error == ESP_ERR_NVS_NOT_ENOUGH_SPACE')
+        erase = source.index('nvs_erase_key(handle->nvs, key)', full)
+        retry = source.index('nvs_set_blob(handle->nvs, key, buffer, length)', erase)
+        self.assertLess(full, erase)
+        self.assertLess(erase, retry)
+        self.assertIn('The opposite key is the last committed generation', source)
+
     def test_native_rollback_requires_paired_trial(self):
         value = self.example()
         value['updates']['native_rollback'] = True

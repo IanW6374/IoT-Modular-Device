@@ -473,6 +473,10 @@ def render_user_settings_page(
     default_timeout_minutes = max(5, min(
         1440, (int(settings.get('portal_session_timeout_s', 3600) or 3600) + 59) // 60
     ))
+    enabled_administrators = sum(
+        1 for item in users or ()
+        if item.get('enabled') and item.get('role') == 'administrator'
+    )
     user_rows = []
     for user in users or ():
         name = str(user.get('username', ''))
@@ -481,6 +485,9 @@ def render_user_settings_page(
         max_retries = max(1, min(20, int(user.get('max_retries', 5) or 5)))
         failures = max(0, int(user.get('failed_attempts', 0) or 0))
         locked = bool(user.get('locked'))
+        sole_administrator = bool(
+            enabled and role == 'administrator' and enabled_administrators == 1
+        )
         change_required = bool(user.get('password_change_required'))
         timeout_minutes = max(5, min(
             1440, (int(user.get('session_timeout_s', 3600) or 3600) + 59) // 60
@@ -503,16 +510,31 @@ def render_user_settings_page(
             '<input type="hidden" name="username" value="' + html_escape(name) + '">'
             '<label class="field">Username<input name="new_username" required maxlength="32" value="' +
             html_escape(name) + '"></label>'
-            '<label class="field">Role<select name="role">' + options + '</select></label>'
+            '<label class="field">Role' + (
+                '<input type="hidden" name="role" value="administrator">'
+                '<select disabled aria-describedby="administrator-safety-' +
+                html_escape(name) + '">' + options + '</select>'
+                if sole_administrator else
+                '<select name="role">' + options + '</select>'
+            ) + '</label>'
             '<label class="field">Maximum failed sign-in attempts<input name="max_retries" '
             'type="number" min="1" max="20" required value="' + html_escape(max_retries) + '"></label>'
             '<label class="field">Inactive session timeout (minutes)<input name="session_timeout_minutes" '
             'type="number" min="5" max="1440" required value="' + html_escape(timeout_minutes) + '"></label>'
             '<div class="field portal-user-status"><span>Failed sign-in attempts</span>'
             '<span class="portal-user-status-value">' + html_escape(failures) + ' of ' +
-            html_escape(max_retries) + '</span></div>'
-            '<label class="check"><input type="checkbox" name="enabled" value="true"' +
-            (' checked' if enabled else '') + '>Enabled</label>'
+            html_escape(max_retries) + '</span></div>' +
+            (
+                '<input type="hidden" name="enabled" value="true">'
+                '<label class="check"><input type="checkbox" checked disabled '
+                'aria-describedby="administrator-safety-' + html_escape(name) + '">Enabled</label>'
+                '<p id="administrator-safety-' + html_escape(name) + '" class="field-hint">'
+                'Protected: enable another administrator before changing this account’s role '
+                'or disabling it.</p>'
+                if sole_administrator else
+                '<label class="check"><input type="checkbox" name="enabled" value="true"' +
+                (' checked' if enabled else '') + '>Enabled</label>'
+            ) +
             '<label class="check"><input type="checkbox" name="password_change_required" value="true"' +
             (' checked' if change_required else '') + '>Require password change at next sign-in</label>'
             '<div class="actions"><span></span>'

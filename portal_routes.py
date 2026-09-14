@@ -21,6 +21,8 @@ ROUTES = {
     '/task-status': ('viewer', 'operations'),
     '/update-progress': ('viewer', 'operations'),
     '/updates': ('operator', 'maintenance'),
+    '/update-install': ('operator', 'maintenance'),
+    '/update-settings': ('administrator', 'maintenance'),
     '/check-release': ('operator', 'maintenance'),
     '/download-release': ('operator', 'maintenance'),
     '/update-upload': ('operator', 'maintenance'),

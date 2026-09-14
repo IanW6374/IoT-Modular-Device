@@ -4,10 +4,11 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.26` retains native ABI 6, preflights paired application
+Version `3.0.0-alpha.27` retains native ABI 6, preflights paired application
 capacity before selecting a new core and can release verified staging blocks
 while extracting the application from PSRAM on a constrained filesystem. It
-also consolidates automatic and local upgrades into one portal workflow.
+also safely reclaims stale encrypted-NVS qualification snapshots and separates
+upgrade discovery, installation and automatic settings in the portal.
 Controlled platform qualification evidence carries across
 ordinary release changes while each release restarts its soak, health, storage
 and canary observations. A genuine power-on boot contributes power-recovery
@@ -54,8 +55,9 @@ wholesale.
 Read the [target architecture](../docs/V3_ARCHITECTURE.md),
 [requirements](../docs/V3_REQUIREMENTS.md) and
 [roadmap](../docs/V3_ROADMAP.md) before adding implementation code. The
-[Alpha 26 test note](../docs/V3_ALPHA26.md) defines its exact scope and safe
-test procedure. The [Alpha 24 note](../docs/V3_ALPHA24.md),
+[Alpha 27 test note](../docs/V3_ALPHA27.md) defines its exact scope and safe
+test procedure. The [Alpha 26 note](../docs/V3_ALPHA26.md),
+[Alpha 24 note](../docs/V3_ALPHA24.md),
 [Alpha 23 note](../docs/V3_ALPHA23.md),
 [Alpha 22 note](../docs/V3_ALPHA22.md),
 [Alpha 21 note](../docs/V3_ALPHA21.md),

@@ -834,6 +834,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('name="session_timeout_minutes"', user)
         self.assertIn('name="enabled" value="false"', user)
         self.assertIn('name="enabled" value="true" checked>Enabled', user)
+        self.assertIn('name="role" value="administrator"', user)
+        self.assertIn('select disabled aria-describedby="administrator-safety-admin"', user)
+        self.assertIn('Protected: enable another administrator', user)
         self.assertIn('Require password change at next sign-in', user)
         self.assertIn('Require password change at first sign-in', user)
         self.assertIn('.portal-user-card .actions button{width:10rem}', portal_ui.PORTAL_CSS)
@@ -852,6 +855,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('/user/password', user)
         self.assertIn('<a href="/certificates">Maintenance</a>', user)
         self.assertIn('<a href="/user" aria-current="page">Users</a>', user)
+        two_administrators = web_portal.render_user_settings_page(
+            'csrf', settings, users=(
+                {'username': 'admin', 'role': 'administrator', 'enabled': True},
+                {'username': 'backup-admin', 'role': 'administrator', 'enabled': True},
+            )
+        )
+        self.assertNotIn('administrator-safety-', two_administrators)
+        self.assertEqual(two_administrators.count('<select name="role">'), 3)
         password_error = web_portal.render_user_settings_page(
             'csrf', settings, password_message='Current password is incorrect.',
             password_error=True
@@ -886,7 +897,10 @@ class WebPortalTests(unittest.TestCase):
         )[1].split('</div></div><div class="nav-group">', 1)[0]
 
         self.assertIn('aria-label="Maintenance submenu"', html)
-        self.assertIn('href="/updates">Upgrades</a>', maintenance_menu)
+        self.assertIn('aria-label="Upgrades submenu"', maintenance_menu)
+        self.assertIn('href="/updates">Available upgrades</a>', maintenance_menu)
+        self.assertIn('href="/update-install">Install upgrade</a>', maintenance_menu)
+        self.assertIn('href="/update-settings">Settings</a>', maintenance_menu)
         self.assertNotIn('/updates?check=1', maintenance_menu)
         self.assertIn('class="nav-subgroup">', maintenance_menu)
         self.assertIn('aria-expanded="false">Certificates</button>', maintenance_menu)
@@ -1448,6 +1462,8 @@ class WebPortalTests(unittest.TestCase):
                     ('/wifi-settings', 'Network'),
                     ('/ntp-settings', 'Time / Date'),
                     ('/logging-settings', 'Logging'),
+                    ('/update-install', 'Install upgrade'),
+                    ('/update-settings', 'Upgrade settings'),
                 ):
                     page = await request(
                         ('GET ' + route + ' HTTP/1.1\r\nCookie: iotmd_session=' +
@@ -1461,7 +1477,7 @@ class WebPortalTests(unittest.TestCase):
                      session_id + '\r\n\r\n').encode()
                 )
                 self.assertIn('200 OK', automatic_check)
-                self.assertIn('<h1>Upgrades</h1>', automatic_check)
+                self.assertIn('<h1>Available upgrades</h1>', automatic_check)
                 self.assertIn('Not checked', automatic_check)
                 self.assertEqual(len(portal_actions), action_count)
                 settings_body = (
@@ -2100,6 +2116,13 @@ class WebPortalTests(unittest.TestCase):
                 'release_auto_activate': False,
             }
         )
+        update_settings = web_portal.render_update_settings_page(
+            'abc', {
+                'release_channel': 'beta',
+                'release_auto_download': True,
+                'release_auto_activate': False,
+            }
+        )
 
         self.assertIn('<h1>Overview</h1>', overview)
         self.assertIn('Probe', overview)
@@ -2123,11 +2146,11 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('href="/download-diagnostics"', logging)
         self.assertIn('aria-label="Maintenance submenu"', logging)
 
-        self.assertIn('<h1>Upgrades</h1>', updates)
+        self.assertIn('<h1>Available upgrades</h1>', updates)
         self.assertIn('<h2>Choose upgrade source</h2>', updates)
         self.assertIn('<h3>Release channel</h3>', updates)
         self.assertIn('<h3>Local upgrade file</h3>', updates)
-        self.assertIn('<strong>Automatic upgrade settings</strong>', updates)
+        self.assertNotIn('Automatic upgrade settings', updates)
         self.assertLess(
             updates.index('<h3>Release channel</h3>'),
             updates.index('<h3>Local upgrade file</h3>'),
@@ -2147,8 +2170,10 @@ class WebPortalTests(unittest.TestCase):
             updates,
         )
         self.assertNotIn('Universal .iotuni upgrades are recommended;', updates)
-        self.assertIn('name="release_channel"', updates)
-        self.assertIn('<option value="alpha">Alpha</option>', updates)
+        self.assertNotIn('name="release_channel"', updates)
+        self.assertIn('<h1>Upgrade settings</h1>', update_settings)
+        self.assertIn('name="release_channel"', update_settings)
+        self.assertIn('<option value="alpha">Alpha</option>', update_settings)
         self.assertNotIn('id="update-progress"', updates)
         self.assertIn('id="update-file-selection"', updates)
         self.assertIn('class="manual-upgrade-workspace"', updates)
@@ -2468,7 +2493,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<h2>Choose upgrade source</h2>', idle)
         self.assertIn('<h3>Release channel</h3>', idle)
         self.assertIn('<h3>Local upgrade file</h3>', idle)
-        self.assertIn('<strong>Automatic upgrade settings</strong>', idle)
+        self.assertNotIn('Automatic upgrade settings', idle)
         self.assertLess(
             idle.index('<h3>Release channel</h3>'),
             idle.index('<h3>Local upgrade file</h3>'),
@@ -2476,32 +2501,29 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('action="/check-release"', idle)
         self.assertIn('id="update-upload-form"', idle)
         self.assertIn('Upload and stage', idle)
-        self.assertIn('name="release_check_schedule"', idle)
-        self.assertIn('<option value="disabled" selected>Disabled</option>', idle)
-        self.assertIn('>Daily</option>', idle)
-        self.assertIn('>Weekly</option>', idle)
-        self.assertIn('name="release_check_time" type="time"', idle)
-        self.assertIn('name="release_check_weekday"', idle)
-        self.assertIn('name="release_base_url" type="url"', idle)
-        self.assertIn('https://iot-upgrade.home.arpa:8443', idle)
-        self.assertIn('catalog path is added automatically', idle)
-        self.assertIn('id="release-check-fields" class="conditional-fields"', idle)
+        settings_idle = web_portal.render_update_settings_page('csrf', {})
+        self.assertIn('name="release_check_schedule"', settings_idle)
+        self.assertIn('<option value="disabled" selected>Disabled</option>', settings_idle)
+        self.assertIn('>Daily</option>', settings_idle)
+        self.assertIn('>Weekly</option>', settings_idle)
+        self.assertIn('name="release_check_time" type="time"', settings_idle)
+        self.assertIn('name="release_check_weekday"', settings_idle)
+        self.assertIn('name="release_base_url" type="url"', settings_idle)
+        self.assertIn('https://iot-upgrade.home.arpa:8443', settings_idle)
+        self.assertIn('catalog path is added automatically', settings_idle)
+        self.assertIn('id="release-check-fields" class="conditional-fields"', settings_idle)
         self.assertIn(
-            'id="release-check-fields" class="conditional-fields" hidden disabled', idle
+            'id="release-check-fields" class="conditional-fields" hidden disabled', settings_idle
         )
-        self.assertIn('id="release-weekday-field" class="field" hidden', idle)
-        self.assertIn('releaseFields.hidden=disabled', idle)
-        self.assertIn('releaseFields.disabled=disabled', idle)
-        self.assertIn('releaseTime.disabled=disabled', idle)
-        self.assertIn('releaseWeekdayField.hidden=!weekly', idle)
-        self.assertIn('syncReleaseSchedule()', idle)
-        self.assertNotIn('#release-check-fields{grid-column:1/-1}', idle)
+        self.assertIn('id="release-weekday-field" class="field" hidden', settings_idle)
+        self.assertIn('releaseFields.hidden=disabled', settings_idle)
+        self.assertIn('releaseFields.disabled=disabled', settings_idle)
+        self.assertIn('releaseTime.disabled=disabled', settings_idle)
+        self.assertIn('releaseWeekdayField.hidden=!weekly', settings_idle)
+        self.assertIn('syncReleaseSchedule()', settings_idle)
+        self.assertNotIn('#release-check-fields{grid-column:1/-1}', settings_idle)
 
-        daily = web_portal.render_updates_page('csrf', {
-            'release_checks_enabled': True,
-            'update_status': 'idle',
-            'firmware_update_status': 'idle',
-        }, {
+        daily = web_portal.render_update_settings_page('csrf', {
             'release_check_schedule': 'daily',
             'release_check_time': '03:15',
         })
@@ -2512,11 +2534,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('name="release_check_time" type="time" required value="03:15"', daily)
         self.assertIn('id="release-weekday-field" class="field" hidden', daily)
 
-        weekly = web_portal.render_updates_page('csrf', {
-            'release_checks_enabled': True,
-            'update_status': 'idle',
-            'firmware_update_status': 'idle',
-        }, {
+        weekly = web_portal.render_update_settings_page('csrf', {
             'release_check_schedule': 'weekly',
             'release_check_time': '04:30',
             'release_check_weekday': 2,
@@ -2525,12 +2543,13 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('id="release-weekday-field" class="field">', weekly)
         self.assertIn('<option value="2" selected>Wednesday</option>', weekly)
 
-        ready = web_portal.render_updates_page('csrf', {
+        ready = web_portal.render_update_install_page('csrf', {
             'release_checks_enabled': True,
             'update_status': 'ready',
+            'update_version': '2.0.0',
             'firmware_update_status': 'idle',
             'update_options': ('module_settings',),
-        }, {})
+        })
         self.assertNotIn('id="update-upload-form"', ready)
         self.assertIn('<h2>Staged upgrade</h2>', ready)
         self.assertIn('<h3>Ready to activate</h3>', ready)
@@ -2546,14 +2565,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('Available application upgrade', ready_with_offer)
         self.assertNotIn('<h2>Choose upgrade source</h2>', ready_with_offer)
 
-        universal = web_portal.render_updates_page('csrf', {
+        universal = web_portal.render_update_install_page('csrf', {
             'release_checks_enabled': True,
             'update_status': 'ready',
             'firmware_update_status': 'ready',
             'firmware_update_supported': True,
             'universal_update_status': 'ready',
             'universal_update_version': '2.0.0',
-        }, {})
+        })
         self.assertIn('action="/activate-universal"', universal)
         self.assertIn('Activate universal upgrade 2.0.0 and reboot', universal)
         self.assertIn('Inspect paired manifest', universal)
@@ -2573,7 +2592,6 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('class="actions manual-upgrade-buttons"', ready)
         self.assertIn('action="/discard-update"', ready)
         self.assertIn('Activate and reboot', ready)
-        self.assertIn('class="metric update-status good"', ready)
 
         downloading = web_portal.render_update_summary_html({
             'update_status': 'verification', 'firmware_update_status': 'idle',
