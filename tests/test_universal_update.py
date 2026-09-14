@@ -367,10 +367,12 @@ class UniversalUpdateTests(unittest.TestCase):
             patch.object(app_update, 'update_status', return_value={'status': 'ready'}),
             patch.object(firmware_update, 'update_status', return_value={'status': 'ready'}),
             patch.object(app_update, 'configure_pending_update') as configure,
+            patch.object(app_update, 'prepare_activation_capacity') as preflight,
             patch.object(firmware_update, 'activate_pending') as activate,
         ):
             state = universal_update.activate_pending()
         configure.assert_called_once_with({})
+        preflight.assert_called_once_with()
         activate.assert_called_once_with()
         self.assertEqual(state['status'], 'activating')
 
@@ -389,10 +391,11 @@ class UniversalUpdateTests(unittest.TestCase):
             patch.object(app_update, 'update_status', return_value={'status': 'ready'}),
             patch.object(firmware_update, 'update_status', return_value={'status': 'ready'}),
             patch.object(app_update, 'configure_pending_update', side_effect=lambda _: calls.append('application')),
+            patch.object(app_update, 'prepare_activation_capacity', side_effect=lambda: calls.append('preflight')),
             patch.object(firmware_update, 'activate_pending', side_effect=lambda: calls.append('firmware')),
         ):
             universal_update.activate_pending(True)
-        self.assertEqual(calls, ['firmware', 'application'])
+        self.assertEqual(calls, ['application', 'preflight', 'firmware'])
         self.assertEqual(universal_update.trial_timeout_ms(), 420000)
 
     def test_confirmation_failure_is_persisted_with_last_completed_phase(self):
@@ -714,10 +717,12 @@ class UniversalUpdateTests(unittest.TestCase):
             patch.object(app_update, 'update_status', return_value={'status': 'ready'}),
             patch.object(firmware_update, 'update_status', return_value={'status': 'idle'}),
             patch.object(app_update, 'configure_pending_update') as configure,
+            patch.object(app_update, 'prepare_activation_capacity') as preflight,
             patch.object(firmware_update, 'activate_pending') as activate,
         ):
             universal_update.activate_pending()
         configure.assert_called_once_with({})
+        preflight.assert_called_once_with()
         activate.assert_not_called()
 
     def test_builder_binds_two_independently_signed_bundles(self):

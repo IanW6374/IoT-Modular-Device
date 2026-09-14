@@ -130,7 +130,7 @@ PORTAL_CSS = (
     'gap:5px;align-items:center}.update-switch input{width:1rem;height:1rem}'
     '.task-progress{display:flex;align-items:center;justify-content:flex-start;width:100%;gap:9px;'
     'margin:13px 0;text-align:left}'
-    '.task-progress[hidden]{display:none}.status-spinner{width:1rem;height:1rem;flex:0 0 auto;'
+    '.task-progress[hidden],#task-return[hidden]{display:none}.status-spinner{width:1rem;height:1rem;flex:0 0 auto;'
     'border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;'
     'animation:status-spin .75s linear infinite}.status-text{font-variant-numeric:tabular-nums}'
     '.task-progress.complete .status-spinner,.task-progress.failed .status-spinner{display:none}'
@@ -374,17 +374,17 @@ def task_page(task_id, title, return_url='/updates'):
         '<section class="auth-card card"><span class="eyebrow">Device task</span><h1>' +
         escape(title) + '</h1>' + progress('task-progress', 'Starting…') +
         '<div class="page-load-action"><a id="task-return" class="button secondary" href="' +
-        escape(return_url) + '" hidden>Continue</a></div></section>'
+        escape(return_url) + '" hidden>Return to upgrades</a></div></section>'
     )
     script = (
         'var i=' + repr(str(task_id)) + ',b=document.getElementById("task-progress"),'
         'l=b.querySelector(".status-text"),'
         'r=document.getElementById("task-return");function poll(){fetch("/task-status?id="+encodeURIComponent(i),'
         '{cache:"no-store",credentials:"same-origin"}).then(function(x){if(x.status===401){location.replace("/login?reason=expired");'
-        'return null;}return x.json();}).then(function(s){if(!s)return;var status=s.message||s.phase||"Working…";'
-        'if(typeof s.percent==="number"){status+=" · "+s.percent+"%";}l.textContent=status;'
-        'if(s.phase==="complete"||s.phase==="failed"){b.classList.add(s.phase);r.hidden=false;'
-        'if(s.phase==="complete"){setTimeout(function(){location.replace(r.href);},900);}return;}setTimeout(poll,600);'
+        'return null;}return x.json();}).then(function(s){if(!s)return;var status=s.message||s.phase||"Working…",'
+        'done=s.phase==="complete"||s.phase==="failed";if(!done&&typeof s.percent==="number"){'
+        'status+=" · "+s.percent+"%";}l.textContent=status;if(done){b.classList.add(s.phase);r.hidden=false;'
+        'if(s.phase==="complete"){setTimeout(function(){location.replace(r.href);},1500);}return;}setTimeout(poll,600);'
         '}).catch(function(){setTimeout(poll,1200);});}poll();'
     )
     return shell('IoT-MD task', '', body, script=script, authenticated=False)

@@ -560,10 +560,15 @@ def activate_pending(maintenance_allowed=True):
         str(firmware_update.update_status().get('target', ''))
         if firmware_required else ''
     )
+    if application_required:
+        app_update.configure_pending_update({})
+        # Prove the runtime slot can be constructed before selecting the new
+        # core, regardless of the signed component ordering. Constrained
+        # devices may safely buffer the verified bundle in PSRAM and release
+        # its filesystem blocks during boot.
+        app_update.prepare_activation_capacity()
     for component in state.get('activation_order', ('application', 'firmware')):
-        if component == 'application' and application_required:
-            app_update.configure_pending_update({})
-        elif component == 'firmware' and firmware_required:
+        if component == 'firmware' and firmware_required:
             firmware_update.activate_pending()
     state['status'] = 'activating'
     _write_state(state)

@@ -295,6 +295,11 @@ def render_update_summary_html(status):
                 '</li>'
             )
         history_html = '<details class="update-history"><summary>Recent upgrade history</summary><ul>' + ''.join(rows) + '</ul></details>'
+    update_is_staged = (
+        status.get('universal_update_status') == 'ready' or
+        status.get('firmware_update_status') == 'ready' or
+        status.get('update_status') == 'ready'
+    )
     return (
         '<div id="update-summary" class="update-summary">' +
         '<div class="metric update-staged"><span>' + render_label('update_version') +
@@ -312,7 +317,8 @@ def render_update_summary_html(status):
         ('<p class="portal-status warning" role="status">Available ' +
          html_escape(release_offer_text(status)[0].lower()) + ': ' +
          html_escape(release_offer_text(status)[1]) + '</p>'
-         if status.get('release_available_version') else '') + '</div>'
+        if status.get('release_available_version') and not update_is_staged
+        else '') + '</div>'
     )
 
 def render_update_activation_html(status, token):
@@ -1134,6 +1140,10 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
                 html_escape(label) + '</li>'
                 for index, label in enumerate(ready_steps)
             ) + '</ol></aside><div class="upgrade-operation">'
+            '<div class="staged-upgrade-copy"><span class="badge good">Verified</span>'
+            '<h3>Ready to activate</h3><p><strong>' +
+            html_escape(staged_version_text(status)) + '</strong> is staged. '
+            'Activation will reboot the device and retain the current release for rollback.</p></div>'
             '<div class="actions manual-upgrade-buttons">'
             '<form action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
             html_escape(token) + '"><button class="secondary" type="submit">Cancel</button></form>' +
@@ -1163,7 +1173,30 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
             'Upload and stage</button></div></form></div></div>'
         )
         script += update_upload_script()
-    workflow_title = 'Upgrade process' if activation else 'Manual upgrade'
+    workflow_title = 'Staged upgrade' if activation else 'Choose upgrade source'
+    if activation:
+        upgrade_content = (
+            '<section class="card"><div class="section-title"><h2>' +
+            workflow_title + '</h2></div>' + manual_content + '</section>'
+        )
+    else:
+        upgrade_content = (
+            '<section class="card"><div class="section-title"><h2>' +
+            workflow_title + '</h2></div>'
+            '<div class="upgrade-source-block"><h3>Release channel</h3>'
+            '<p class="muted">Check the configured signed channel and stage an available release.</p>'
+            '<div class="update-actions">' + automatic_action + '</div></div>'
+            '<div class="upgrade-source-divider"><span>or use a signed file</span></div>'
+            '<div class="upgrade-source-block"><h3>Local upgrade file</h3>' +
+            manual_content + '</div></section>'
+        )
+    preferences = (
+        '<details class="card upgrade-settings"><summary><span>'
+        '<strong>Automatic upgrade settings</strong>'
+        '<small>Release channel, schedule, download and activation preferences</small>'
+        '</span></summary><div class="upgrade-settings-body">' +
+        render_update_preferences(token, settings) + '</div></details>'
+    )
     body = (
         portal_ui.page_heading(
             'Maintenance', 'Upgrades',
@@ -1171,17 +1204,8 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
         ) + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>Versions and upgrade state</h2></div>' +
         render_update_summary_html(status) + '<div class="update-actions">' +
-        render_application_rollback_html(status, token) + '</div></section>'
-        '<div class="upgrade-grid"><section class="card"><div class="section-title">'
-        '<h2>Automatic upgrade</h2></div>'
-        '<div class="settings-subsection"><h3>Manual upgrade check</h3>'
-        '<p class="muted">Check the signed release channel now without changing the automatic schedule.</p>'
-        '<div class="update-actions">' + automatic_action + '</div></div>'
-        '<div class="settings-subsection"><h3>Settings</h3>'
-        '<p class="muted">Configure the release channel, schedule, download and activation preferences.</p>' +
-        render_update_preferences(token, settings) + '</div></section>'
-        '<section class="card"><div class="section-title"><h2>' + workflow_title + '</h2></div>' +
-        manual_content + '</section></div>'
+        render_application_rollback_html(status, token) + '</div></section>' +
+        '<div class="upgrade-grid">' + upgrade_content + preferences + '</div>'
     )
     return portal_ui.shell(
         'IoT-MD upgrades', 'updates', body, token, script

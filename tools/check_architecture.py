@@ -65,7 +65,8 @@ REQUIRED_APPLICATION_MODULES = (
     'services/certificate_renewal_service.py', 'services/mqtt_startup_service.py',
 )
 REQUIRED_FROZEN_MODULES = (
-    'application_storage.py', 'boot_state.py', 'certificate_codec.py', 'credential_schema.py',
+    'application_activation.py', 'application_storage.py', 'boot_state.py',
+    'certificate_codec.py', 'credential_schema.py',
     'setup_workflow.py', 'setup_wizard_views.py',
 )
 LAZY_IMPORT_BOUNDARIES = {

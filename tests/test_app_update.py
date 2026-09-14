@@ -422,6 +422,44 @@ class AppUpdateTests(unittest.TestCase):
             Path('.app-slots/a/iotmd.py').read_bytes(), b'app-c'
         )
 
+    def test_activation_buffers_bundle_when_filesystem_is_temporarily_tight(self):
+        self.make_bundle({'iotmd.py': b'new-app', 'large.py': b'x' * 4096})
+        app_update.stage_bundle()
+        calls = []
+
+        def capacity(required):
+            calls.append(required)
+            if len(calls) == 1:
+                raise ValueError(
+                    'insufficient storage: need 5000 bytes, have 4000'
+                )
+            self.assertFalse(Path(app_update.BUNDLE_PATH).exists())
+
+        with patch.object(
+            update_support, 'require_free_space', side_effect=capacity
+        ):
+            result = app_update.activate_pending()
+
+        self.assertIn('activated update', result)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(
+            Path('.app-slots/a/iotmd.py').read_bytes(), b'new-app'
+        )
+        self.assertFalse(Path(app_update.BUNDLE_PATH).exists())
+
+    def test_activation_capacity_preflight_accepts_memory_fallback(self):
+        self.make_bundle({'iotmd.py': b'new-app'})
+        app_update.stage_bundle()
+        with patch.object(
+            update_support, 'require_free_space',
+            side_effect=ValueError(
+                'insufficient storage: need 5000 bytes, have 4000'
+            )
+        ):
+            self.assertEqual(
+                app_update.prepare_activation_capacity(), 'memory'
+            )
+
     def test_universal_staging_reclaim_preserves_active_slot(self):
         Path('.app-slots/a').mkdir(parents=True)
         Path('.app-slots/b').mkdir(parents=True)

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.26 - 2026-09-14
+
+- Preflight application-slot capacity before selecting a paired core and, when
+  flash is temporarily constrained, retain the verified application bundle in
+  PSRAM while releasing its staging blocks for transactional extraction.
+- Freeze the constrained-capacity activator into the recovery core so paired
+  activation remains available without importing the product application.
+- Consolidate release-channel and local-file upgrades into one consistent
+  source workflow and use the same staged activation panel for either path.
+- Present automatic upgrade settings as a collapsible secondary section and
+  suppress duplicate available-release notices after a release is staged.
+- Show percentages only while device tasks are running; completed release
+  checks now report the useful result, such as **Release available** or **No
+  newer release**, before returning to Upgrades.
+- Retain native ABI 6 and publish application and core together because the
+  storage activation repair spans the frozen core and application coordinator.
+
 ## 3.0.0-alpha.24 - 2026-09-13
 
 - Prevent the qualification recorder from exhausting the native four-handle

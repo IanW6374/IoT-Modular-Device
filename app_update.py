@@ -47,7 +47,7 @@ CHUNK_SIZE = 1024
 DEFAULT_MAX_BUNDLE_BYTES = 2 * 1024 * 1024
 RECOVERY_FILES = (
     'main.py', 'recovery_boot.py', 'app_update.py', 'firmware_update.py',
-    'universal_update.py',
+    'universal_update.py', 'application_activation.py',
     'hardware_platform.py', 'boot_state.py', 'update_security.py', 'update_support.py',
     'wifi_recovery.py',
     'credential_security.py',
@@ -453,6 +453,11 @@ def update_status():
         return {'status': 'idle'}
 
 
+def prepare_activation_capacity():
+    import application_activation
+    return application_activation.prepare_capacity(sys.modules[__name__])
+
+
 def discard_pending_update():
     state = update_status()
     if state.get('status') != 'ready':
@@ -476,109 +481,8 @@ def activate_pending():
 
 
 def _activate_pending_locked():
-    state = update_status()
-    if state.get('status') == 'trial':
-        rollback_update()
-        return 'rolled back unconfirmed update'
-    if state.get('status') == 'activating':
-        rollback_update()
-        return 'rolled back interrupted update'
-    if state.get('status') == 'committing':
-        _finish_commit(state)
-        return 'completed interrupted update confirmation'
-    if state.get('status') != 'ready':
-        return ''
-
-    manifest = validate_bundle(BUNDLE_PATH, state.get('allow_protected', False))
-    selected_paths_for_update = set(state.get('selected_paths', ()))
-    selected_size = sum(
-        int(entry.get('size', 0)) for entry in manifest.get('files', [])
-        if _safe_path(entry.get('path', '')) in selected_paths_for_update
-    )
-    backup_size = 0
-    for path in selected_paths_for_update:
-        if is_shared_path(path) and _file_exists(path):
-            try:
-                backup_size += int(os.stat(path)[6])
-            except Exception:
-                pass
-    current_slot = active_slot()
-    target_slot = ''
-    if state.get('has_application'):
-        target_slot = 'b' if current_slot == 'a' else 'a'
-
-    # A/B activation always replaces the inactive generation.  Reclaim it
-    # before checking capacity for the new slot; counting its occupied blocks
-    # made otherwise valid updates fail while still preserving a redundant
-    # rollback generation.  The active slot is never touched here.
-    if target_slot:
-        _remove_tree(_slot_path(target_slot))
-    update_support.require_free_space(selected_size + backup_size)
-
-    state['status'] = 'activating'
-    state['applied'] = []
-    state['previous_slot'] = current_slot
-    state['target_slot'] = target_slot
-    _write_json_atomic(STATE_PATH, state)
-
-    with open(BUNDLE_PATH, 'rb') as stream:
-        read_manifest(stream)
-        configured_paths = state.get('selected_paths')
-        if configured_paths is None:
-            selected_paths = {
-                _safe_path(entry.get('path', ''))
-                for entry in manifest.get('files', [])
-            }
-        else:
-            selected_paths = set(configured_paths)
-        for entry in manifest['files']:
-            path = _safe_path(entry['path'])
-            size = int(entry['size'])
-            if path not in selected_paths:
-                _skip_stream(stream, size, path)
-                continue
-            if is_shared_path(path):
-                backup_path = BACKUP_ROOT + '/' + path
-                existed = _file_exists(path)
-                if existed:
-                    _copy_file(path, backup_path)
-                state['applied'].append({'path': path, 'existed': existed})
-                _write_json_atomic(STATE_PATH, state)
-                _write_stream_file(stream, size, path)
-            elif target_slot:
-                _write_stream_file(stream, size, _slot_path(target_slot, path))
-            else:
-                _skip_stream(stream, size, path)
-
-    if target_slot and not _file_exists(
-        _slot_path(target_slot, APPLICATION_ENTRY)
-    ):
-        raise ValueError('application bundle has no ' + APPLICATION_ENTRY)
-
-    if target_slot:
-        integrity_entries = []
-        for entry in manifest.get('files', []):
-            entry_path = _safe_path(entry.get('path', ''))
-            if entry_path in selected_paths and not is_shared_path(entry_path):
-                integrity_entries.append({
-                    'path': entry_path,
-                    'size': int(entry.get('size', 0)),
-                    'sha256': str(entry.get('sha256', '')).lower()
-                })
-        _write_json_atomic(
-            _slot_path(target_slot, SLOT_INTEGRITY_FILE),
-            {'files': integrity_entries}
-        )
-        if not validate_slot_integrity(target_slot):
-            raise ValueError('application slot integrity verification failed')
-
-    state['status'] = 'trial'
-    _write_json_atomic(STATE_PATH, state)
-    update_support.record_update_event(
-        'application', 'trial', state.get('version', ''),
-        digest=str(manifest.get('signature', ''))
-    )
-    return 'activated update ' + str(state.get('version', ''))
+    import application_activation
+    return application_activation.activate(sys.modules[__name__])
 
 
 def confirm_update(prepare_only=False):
