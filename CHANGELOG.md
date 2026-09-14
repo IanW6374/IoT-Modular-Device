@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.29 - 2026-09-14
+
+- Consolidate upgrade discovery into ordered Summary, staged-upgrade,
+  Rollback, Automatic upgrade and Manual upgrade sections.
+- Route both automatic and manual selections through the same dedicated
+  installation workflow, with type-specific steps and no device mutation
+  before the operator selects **Initiate upgrade**.
+- Keep automatic download progress inside the normal portal shell, return to
+  the same installation workflow after staging and use a consistent **Restart
+  and install** final action.
+- Retain Alpha 28's signed universal-plan storage authority so constrained
+  devices can reclaim an inactive application generation between sequential
+  core and application uploads without granting that authority to standalone
+  recovery files.
+- Provide an application-first bridge for Alpha 26 and Alpha 27 devices that
+  cannot initially stage the larger paired universal release.
+- Retain native ABI 6 and use release sequence 2734.
+
 ## 3.0.0-alpha.28 - 2026-09-14
 
 - Carry the signed universal-plan storage policy through sequential firmware
