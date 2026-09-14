@@ -246,7 +246,9 @@ class WebPortalTests(unittest.TestCase):
     def test_portal_marks_required_and_custom_invalid_fields(self):
         backup = web_portal.render_configuration_backup_page('csrf')
         certificates = web_portal.render_certificate_route('/certificates', 'csrf')
-        update = web_portal.render_updates_page('csrf', {})
+        update = web_portal.render_update_install_page(
+            'csrf', {}, source='manual'
+        )
 
         self.assertIn('id="configuration-import-file" type="file"', backup)
         self.assertIn('accept="application/json,.json" required', backup)
@@ -2116,6 +2118,9 @@ class WebPortalTests(unittest.TestCase):
                 'release_auto_activate': False,
             }
         )
+        manual_update = web_portal.render_update_install_page(
+            'abc', status, source='manual'
+        )
         update_settings = web_portal.render_update_settings_page(
             'abc', {
                 'release_channel': 'beta',
@@ -2147,82 +2152,86 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('aria-label="Maintenance submenu"', logging)
 
         self.assertIn('<h1>Available upgrades</h1>', updates)
-        self.assertIn('<h2>Choose upgrade source</h2>', updates)
-        self.assertIn('<h3>Release channel</h3>', updates)
-        self.assertIn('<h3>Local upgrade file</h3>', updates)
+        self.assertIn('<h2>Summary</h2>', updates)
+        self.assertIn('<h2>Upgrade already staged</h2>', updates)
+        self.assertIn('<h2>Rollback</h2>', updates)
+        self.assertIn('<h2>Automatic upgrade</h2>', updates)
+        self.assertIn('<h2>Manual upgrade</h2>', updates)
         self.assertNotIn('Automatic upgrade settings', updates)
         self.assertLess(
-            updates.index('<h3>Release channel</h3>'),
-            updates.index('<h3>Local upgrade file</h3>'),
+            updates.index('<h2>Automatic upgrade</h2>'),
+            updates.index('<h2>Manual upgrade</h2>'),
         )
         self.assertIn('.upgrade-grid{display:grid;grid-template-columns:1fr;', portal_ui.PORTAL_CSS)
-        self.assertIn('id="update-upload-form"', updates)
-        self.assertIn('Upload and stage', updates)
+        self.assertNotIn('id="update-upload-form"', updates)
+        self.assertIn('href="/update-install?source=manual"', updates)
+        self.assertIn('id="update-upload-form"', manual_update)
+        self.assertIn('Initiate upgrade', manual_update)
         self.assertIn(
             'Use a universal upgrade for routine updates. '
             'Application and core files are intended for recovery.',
-            updates,
+            manual_update,
         )
-        self.assertIn('function terminalFailure(text)', updates)
-        self.assertIn('fileSelection.hidden=false;cancelButton.disabled=true;', updates)
+        self.assertIn('function terminalFailure(text)', manual_update)
+        self.assertIn('fileSelection.hidden=false;cancelButton.disabled=true;', manual_update)
         self.assertIn(
-            'id="update-primary" type="submit" disabled>Upload and stage',
-            updates,
+            'id="update-primary" type="submit" disabled>Initiate upgrade',
+            manual_update,
         )
         self.assertNotIn('Universal .iotuni upgrades are recommended;', updates)
         self.assertNotIn('name="release_channel"', updates)
         self.assertIn('<h1>Upgrade settings</h1>', update_settings)
         self.assertIn('name="release_channel"', update_settings)
         self.assertIn('<option value="alpha">Alpha</option>', update_settings)
-        self.assertNotIn('id="update-progress"', updates)
-        self.assertIn('id="update-file-selection"', updates)
-        self.assertIn('class="manual-upgrade-workspace"', updates)
-        self.assertIn('id="update-cancel"', updates)
-        self.assertIn('<strong>Current task: <span id="update-overall-label">', updates)
-        self.assertIn('id="update-overall"', updates)
-        self.assertIn('id="update-overall-bar"', updates)
-        self.assertIn('id="update-stage-list"', updates)
-        self.assertIn('Current task', updates)
-        self.assertNotIn('Step "+(index+1)+" of "+flow.length', updates)
-        self.assertIn('overallLabel.textContent=flow[index][1]', updates)
-        self.assertIn('id="update-file-guidance"', updates)
-        self.assertIn('fileGuidance.hidden=!!selected', updates)
+        self.assertNotIn('id="update-progress"', manual_update)
+        self.assertIn('id="update-file-selection"', manual_update)
+        self.assertIn('class="manual-upgrade-workspace"', manual_update)
+        self.assertIn('id="update-cancel"', manual_update)
+        self.assertIn('<strong>Current task: <span id="update-overall-label">', manual_update)
+        self.assertIn('id="update-overall"', manual_update)
+        self.assertIn('id="update-overall-bar"', manual_update)
+        self.assertIn('id="update-stage-list"', manual_update)
+        self.assertIn('Current task', manual_update)
+        self.assertNotIn('Step "+(index+1)+" of "+flow.length', manual_update)
+        self.assertIn('overallLabel.textContent=flow[index][1]', manual_update)
+        self.assertIn('id="update-file-guidance"', manual_update)
+        self.assertIn('fileGuidance.hidden=!!selected', manual_update)
         self.assertIn('.file-name+.file-guidance{margin-left:1.25rem}', portal_ui.PORTAL_CSS)
-        self.assertIn('Prepare and hash file', updates)
-        self.assertIn('Pair verified components', updates)
-        self.assertIn('renderWorkflow(workflowKind(selected))', updates)
-        self.assertNotIn('class="status-spinner"', updates)
-        self.assertIn('fileSelection.hidden=true', updates)
-        self.assertIn('fileSelection.hidden=false', updates)
-        self.assertNotIn('<progress', updates)
-        self.assertIn('/resumable-upload-chunk', updates)
-        self.assertIn('/universal-upload-prepare', updates)
-        self.assertIn('/universal-upload-finalize', updates)
-        self.assertNotIn('sendUniversal()', updates)
-        self.assertIn('kind=universal?"universal"', updates)
-        self.assertIn('received_bytes', updates)
-        self.assertIn('Writing firmware ', updates)
-        self.assertNotIn('Completed: upload · firmware write', updates)
-        self.assertIn('Verification complete', updates)
-        self.assertIn('setTimeout(poll,1000)', updates)
-        self.assertIn('f.slice(offset,end)', updates)
-        self.assertIn('request.upload.onprogress=function(event)', updates)
-        self.assertIn('Number(event.loaded||0)', updates)
-        self.assertNotIn('if(!event.lengthComputable)return', updates)
-        self.assertIn('requestAnimationFrame(function(){resolve(sendChunk(received))', updates)
-        self.assertIn('out.textContent=text', updates)
-        self.assertNotIn('out.appendChild(line)', updates)
-        self.assertIn('Checking uploaded ', updates)
-        self.assertNotIn('previous(', updates)
-        self.assertNotIn('Writing firmware on device', updates)
-        self.assertIn('Verifying signed ', updates)
-        self.assertIn('"Uploading "+componentName(kind)+" "+percent+"%"', updates)
-        self.assertNotIn('"Uploading "+kind+" "+percent+"%"', updates)
-        self.assertIn('.iotuni', updates)
-        self.assertIn('firmware_verification', updates)
-        self.assertIn('application_verification', updates)
-        self.assertIn('startPolling()', updates)
-        self.assertNotIn('Upload complete; verifying', updates)
+        self.assertIn('Prepare and hash file', manual_update)
+        self.assertIn('Pair verified components', manual_update)
+        self.assertIn('renderWorkflow(workflowKind(selected))', manual_update)
+        self.assertNotIn('class="status-spinner"', manual_update)
+        self.assertIn('fileSelection.hidden=true', manual_update)
+        self.assertIn('fileSelection.hidden=false', manual_update)
+        self.assertNotIn('<progress', manual_update)
+        self.assertIn('/resumable-upload-chunk', manual_update)
+        self.assertIn('/universal-upload-prepare', manual_update)
+        self.assertIn('/universal-upload-finalize', manual_update)
+        self.assertNotIn('sendUniversal()', manual_update)
+        self.assertIn('kind=universal?"universal"', manual_update)
+        self.assertIn('received_bytes', manual_update)
+        self.assertIn('Writing firmware ', manual_update)
+        self.assertNotIn('Completed: upload · firmware write', manual_update)
+        self.assertIn('Verification complete', manual_update)
+        self.assertIn('setTimeout(poll,1000)', manual_update)
+        self.assertIn('f.slice(offset,end)', manual_update)
+        self.assertIn('request.upload.onprogress=function(event)', manual_update)
+        self.assertIn('Number(event.loaded||0)', manual_update)
+        self.assertNotIn('if(!event.lengthComputable)return', manual_update)
+        self.assertIn('requestAnimationFrame(function(){resolve(sendChunk(received))', manual_update)
+        self.assertIn('out.textContent=text', manual_update)
+        self.assertNotIn('out.appendChild(line)', manual_update)
+        self.assertIn('Checking uploaded ', manual_update)
+        self.assertNotIn('previous(', manual_update)
+        self.assertNotIn('Writing firmware on device', manual_update)
+        self.assertIn('Verifying signed ', manual_update)
+        self.assertIn('"Uploading "+componentName(kind)+" "+percent+"%"', manual_update)
+        self.assertNotIn('"Uploading "+kind+" "+percent+"%"', manual_update)
+        self.assertIn('.iotuni', manual_update)
+        self.assertIn('firmware_verification', manual_update)
+        self.assertIn('application_verification', manual_update)
+        self.assertIn('startPolling()', manual_update)
+        self.assertNotIn('Upload complete; verifying', manual_update)
         self.assertIn('.upgrade-overall{', portal_ui.PORTAL_CSS)
         self.assertIn('.upgrade-stage-list li.active', portal_ui.PORTAL_CSS)
 
@@ -2366,10 +2375,10 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('name="device_settings"', staged_html)
         self.assertNotIn('name="secrets"', staged_html)
         self.assertIn('action="/activate-update" method="post"', staged_html)
-        self.assertIn('Activate and reboot', staged_html)
+        self.assertIn('Restart and install', staged_html)
         self.assertNotIn('Base firmware update', staged_html)
         self.assertNotIn('id="firmware-upload-form"', staged_html)
-        self.assertIn('Activate firmware and reboot', staged_html)
+        self.assertIn('Restart and install core firmware', staged_html)
         self.assertIn(
             'Application — 1.1 / Core firmware — mp-1.28.0', staged_html
         )
@@ -2490,17 +2499,55 @@ class WebPortalTests(unittest.TestCase):
             'update_status': 'idle',
             'firmware_update_status': 'idle',
         }, {})
-        self.assertIn('<h2>Choose upgrade source</h2>', idle)
-        self.assertIn('<h3>Release channel</h3>', idle)
-        self.assertIn('<h3>Local upgrade file</h3>', idle)
+        self.assertIn('<h2>Summary</h2>', idle)
+        self.assertIn('<h2>Upgrade already staged</h2>', idle)
+        self.assertIn('<h2>Rollback</h2>', idle)
+        self.assertIn('<h2>Automatic upgrade</h2>', idle)
+        self.assertIn('<h2>Manual upgrade</h2>', idle)
         self.assertNotIn('Automatic upgrade settings', idle)
         self.assertLess(
-            idle.index('<h3>Release channel</h3>'),
-            idle.index('<h3>Local upgrade file</h3>'),
+            idle.index('<h2>Automatic upgrade</h2>'),
+            idle.index('<h2>Manual upgrade</h2>'),
         )
         self.assertIn('action="/check-release"', idle)
-        self.assertIn('id="update-upload-form"', idle)
-        self.assertIn('Upload and stage', idle)
+        self.assertNotIn('id="update-upload-form"', idle)
+        manual = web_portal.render_update_install_page(
+            'csrf', {}, source='manual'
+        )
+        self.assertIn('id="update-upload-form"', manual)
+        self.assertIn('Initiate upgrade', manual)
+        available = web_portal.render_updates_page('csrf', {
+            'release_checks_enabled': True,
+            'release_available_type': 'universal',
+            'release_available_version': '3.0.0-alpha.29',
+            'update_status': 'idle',
+            'firmware_update_status': 'idle',
+        }, {})
+        self.assertIn(
+            'href="/update-install?source=automatic"', available
+        )
+        self.assertNotIn('action="/download-release"', available)
+        self.assertEqual(available.count('3.0.0-alpha.29'), 1)
+        automatic = web_portal.render_update_install_page('csrf', {
+            'release_available_type': 'universal',
+            'release_available_version': '3.0.0-alpha.29',
+        }, source='automatic')
+        self.assertIn('<h2>Automatic upgrade</h2>', automatic)
+        self.assertIn('action="/download-release"', automatic)
+        self.assertIn('>Initiate upgrade</button>', automatic)
+        self.assertIn('Inspect paired manifest', automatic)
+        self.assertIn('Pair verified components', automatic)
+        task = web_portal.render_upgrade_task_page(
+            'csrf', 'release-download-1', 'Downloading universal upgrade', {
+                'release_available_type': 'universal',
+                'release_available_version': '3.0.0-alpha.29',
+            }
+        )
+        self.assertIn('<h1>Install upgrade</h1>', task)
+        self.assertIn('id="upgrade-task-steps"', task)
+        self.assertIn('id="upgrade-task-progress"', task)
+        self.assertIn('fetch("/task-status?id="', task)
+        self.assertIn("location.replace('/update-install')", task)
         settings_idle = web_portal.render_update_settings_page('csrf', {})
         self.assertIn('name="release_check_schedule"', settings_idle)
         self.assertIn('<option value="disabled" selected>Disabled</option>', settings_idle)
@@ -2563,7 +2610,8 @@ class WebPortalTests(unittest.TestCase):
             'firmware_update_status': 'idle',
         }, {})
         self.assertNotIn('Available application upgrade', ready_with_offer)
-        self.assertNotIn('<h2>Choose upgrade source</h2>', ready_with_offer)
+        self.assertIn('<h2>Upgrade already staged</h2>', ready_with_offer)
+        self.assertIn('Continue installation', ready_with_offer)
 
         universal = web_portal.render_update_install_page('csrf', {
             'release_checks_enabled': True,
@@ -2574,7 +2622,7 @@ class WebPortalTests(unittest.TestCase):
             'universal_update_version': '2.0.0',
         })
         self.assertIn('action="/activate-universal"', universal)
-        self.assertIn('Activate universal upgrade 2.0.0 and reboot', universal)
+        self.assertIn('Restart and install universal upgrade 2.0.0', universal)
         self.assertIn('Inspect paired manifest', universal)
         self.assertIn('Upload core firmware', universal)
         self.assertIn('Write core firmware', universal)
@@ -2591,7 +2639,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('class="task-progress complete"', ready)
         self.assertIn('class="actions manual-upgrade-buttons"', ready)
         self.assertIn('action="/discard-update"', ready)
-        self.assertIn('Activate and reboot', ready)
+        self.assertIn('Restart and install', ready)
 
         downloading = web_portal.render_update_summary_html({
             'update_status': 'verification', 'firmware_update_status': 'idle',

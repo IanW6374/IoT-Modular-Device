@@ -655,7 +655,8 @@ async def start_web_portal(portal):
                 renderer = render_updates_page
                 arguments = (csrf_token, status_snapshot.get(), settings_getter() if settings_getter else {})
                 if is_update_install:
-                    renderer, arguments = render_update_install_page, (csrf_token, status_snapshot.get())
+                    renderer = render_update_install_page
+                    arguments = (csrf_token, status_snapshot.get(), '', False, parse_query(action_path).get('source', ''))
                 elif is_update_settings:
                     renderer, arguments = render_update_settings_page, (csrf_token, settings_getter() if settings_getter else {})
                 await send_response(writer, '200 OK', renderer(*arguments))
@@ -1126,9 +1127,10 @@ async def start_web_portal(portal):
                 if isinstance(result, dict) and result.get('task_id'):
                     await send_response(
                         writer, '202 Accepted',
-                        portal_ui.task_page(
-                            result['task_id'], result.get('message', 'Downloading release'),
-                            '/update-install'
+                        render_upgrade_task_page(
+                            csrf_token, result['task_id'],
+                            result.get('message', 'Downloading release'),
+                            status_snapshot.get(), '/update-install'
                         )
                     )
                 else:
