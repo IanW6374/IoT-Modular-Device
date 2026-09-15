@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.31 - 2026-09-15
+
+- Keep manual uploads moving when their browser tab is hidden by scheduling
+  each chunk from the preceding network completion rather than animation
+  frames; warn before leaving while a local file transfer is active.
+- Make asynchronous release and certificate operations reconnectable through
+  stable task URLs, a bounded device-side task registry and a compact global
+  running-task indicator.
+- Resynchronise live portal views when a tab becomes visible, reduce background
+  polling, show current refresh times and provide a client-side Device log
+  filter used by failure links.
+- Add skip navigation, complete keyboard menu movement, consistent focus and
+  target treatment, reduced-motion support, automatic dark presentation and
+  forced-colour compatibility.
+- Apply a per-response nonce Content Security Policy, use a browser-enforced
+  `__Host-` HTTPS session cookie and add strong conditional caching for
+  fingerprinted portal assets.
+- Warn about unsaved form changes and improve the accessible explanation of
+  sole-administrator protection without adding permanent visual clutter.
+- Add a non-destructive Playwright and axe qualification suite covering
+  Chromium, Firefox, WebKit and representative mobile viewports.
+- Retain native ABI 6 and use release sequence 2736.
+
 ## 3.0.0-alpha.30 - 2026-09-15
 
 - Present the sole-administrator protection explanation as hover and accessible

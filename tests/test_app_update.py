@@ -541,6 +541,7 @@ class AppUpdateTests(unittest.TestCase):
             'network_transports.py', 'tls_sessions.py',
             'fleet_management.py', 'portal_auth.py', 'portal_contracts.py',
             'portal_routes.py', 'portal_view_models.py', 'portal_sessions.py',
+            'portal_task_registry.py',
             'resumable_upload.py', 'support_bundle.py',
             'message_broker.py', 'runtime_health.py', 'remote_logging.py',
             'timezone_rules.py', 'update_orchestrator.py',

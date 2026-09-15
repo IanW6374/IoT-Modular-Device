@@ -16,9 +16,9 @@ class CertificateRenewalService:
 
     async def run(self):
         def progress(message):
-            self.task_status['certificate-renewal'] = {
+            self.task_status.setdefault('certificate-renewal', {}).update({
                 'phase': 'running', 'message': str(message)
-            }
+            })
         try:
             state = await self.renew(self.config, self.paths, progress)
         except Exception:

@@ -145,16 +145,51 @@ def parse_cookies(headers):
             cookies[key] = value
     return cookies
 
-def has_portal_session(headers, session_id):
-    return bool(session_id) and parse_cookies(headers).get('iotmd_session') == session_id
+def session_cookie_name(secure=False):
+    """Use the browser-enforced host-only prefix for the HTTPS product portal."""
+    return '__Host-iotmd_session' if secure else 'iotmd_session'
+
+
+def has_portal_session(headers, session_id, secure=False):
+    return bool(session_id) and parse_cookies(headers).get(
+        session_cookie_name(secure)
+    ) == session_id
 
 def session_cookie(session_id, secure=False, clear=False):
-    cookie = 'iotmd_session=' + str(session_id) + '; Path=/; HttpOnly; SameSite=Strict'
+    cookie = session_cookie_name(secure) + '=' + str(session_id) + '; Path=/; HttpOnly; SameSite=Strict'
     if clear:
         cookie += '; Max-Age=0'
     if secure:
         cookie += '; Secure'
     return cookie
+
+def secure_html_response(body, extra_headers, nonce):
+    """Apply a per-response nonce and the product portal's strict CSP."""
+    body = str(body).replace('<!--csp-nonce-->', nonce)
+    headers = tuple(extra_headers or ()) + ((
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self' 'nonce-" + nonce +
+        "'; style-src 'self' 'nonce-" + nonce +
+        "'; img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    ),)
+    return body, headers
+
+def portal_asset_response(route, request_headers, version, css, javascript):
+    """Return immutable asset response fields, including conditional caching."""
+    kind = 'css' if str(route).endswith('.css') else 'js'
+    etag = '"portal-' + str(version) + '-' + kind + '"'
+    headers = (
+        ('Cache-Control', 'public, max-age=31536000, immutable'),
+        ('ETag', etag),
+    )
+    if (request_headers or {}).get('if-none-match') == etag:
+        return '304 Not Modified', '', 'text/plain', headers
+    return (
+        '200 OK', css if kind == 'css' else javascript,
+        'text/css; charset=utf-8' if kind == 'css'
+        else 'application/javascript; charset=utf-8', headers
+    )
 
 def new_session_id():
     if os and hasattr(os, 'urandom'):

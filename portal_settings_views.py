@@ -478,7 +478,7 @@ def render_user_settings_page(
         if item.get('enabled') and item.get('role') == 'administrator'
     )
     user_rows = []
-    for user in users or ():
+    for user_index, user in enumerate(users or ()):
         name = str(user.get('username', ''))
         enabled = bool(user.get('enabled'))
         role = str(user.get('role', 'viewer'))
@@ -492,6 +492,7 @@ def render_user_settings_page(
             'Protected: enable another administrator before changing this account’s role '
             'or disabling it.'
         )
+        safety_tip_id = 'administrator-safety-' + str(user_index)
         change_required = bool(user.get('password_change_required'))
         timeout_minutes = max(5, min(
             1440, (int(user.get('session_timeout_s', 3600) or 3600) + 59) // 60
@@ -516,7 +517,8 @@ def render_user_settings_page(
             html_escape(name) + '"></label>'
             '<label class="field">Role' + (
                 '<input type="hidden" name="role" value="administrator">'
-                '<select disabled title="' + html_escape(administrator_safety_tip) + '">' +
+                '<select disabled aria-describedby="' + safety_tip_id + '" title="' +
+                html_escape(administrator_safety_tip) + '">' +
                 options + '</select>'
                 if sole_administrator else
                 '<select name="role">' + options + '</select>'
@@ -530,9 +532,12 @@ def render_user_settings_page(
             html_escape(max_retries) + '</span></div>' +
             (
                 '<input type="hidden" name="enabled" value="true">'
-                '<label class="check" title="' + html_escape(administrator_safety_tip) + '">'
+                '<label class="check" tabindex="0" aria-describedby="' + safety_tip_id + '" title="' +
+                html_escape(administrator_safety_tip) + '">'
                 '<input type="checkbox" checked disabled aria-label="Enabled. ' +
                 html_escape(administrator_safety_tip) + '">Enabled</label>'
+                '<span id="' + safety_tip_id + '" class="visually-hidden">' +
+                html_escape(administrator_safety_tip) + '</span>'
                 if sole_administrator else
                 '<label class="check"><input type="checkbox" name="enabled" value="true"' +
                 (' checked' if enabled else '') + '>Enabled</label>'

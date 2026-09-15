@@ -21,6 +21,9 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+tests/browser/node_modules/
+tests/browser/test-results/
+tests/browser/playwright-report/
 
 # Virtual environments
 .venv/

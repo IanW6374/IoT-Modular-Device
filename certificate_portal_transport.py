@@ -46,9 +46,15 @@ async def handle(method, route, path, writer, reader, headers, form, csrf,
         target = form.get('return_to', '/certificates')
         if target not in certificate_routes:
             target = '/certificates'
-        await send_response(writer, '202 Accepted', _render_certificate_route(
-            target, csrf, message, inventory() if inventory else {}
-        ))
+        if isinstance(result, dict) and result.get('task_id'):
+            await send_redirect(
+                writer, '/task?id=' + str(result['task_id']) + '&return=' +
+                target.lstrip('/')
+            )
+        else:
+            await send_response(writer, '202 Accepted', _render_certificate_route(
+                target, csrf, message, inventory() if inventory else {}
+            ))
         return True
     if method == 'POST' and path.startswith('/certificate-upload'):
         if upload is None:

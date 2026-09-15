@@ -6,13 +6,49 @@ except ImportError:
     json = None
 
 import web_portal_ui as portal_ui
-from portal_http import html_escape, js_escape, render_logs_html
+from portal_http import (
+    html_escape, js_escape, log_upgrade_upload_failure, parse_query,
+    render_logs_html,
+)
 from portal_settings_views import _notice, render_operational_hidden_fields
 from portal_view_models import overview_metrics, update_check_summary
 from device_modules.base import module_diagnostics_need_attention
 from portal_presenters import (
     diagnostic_help, friendly_label, render_badge, render_label,
 )
+
+_UPDATE_PROGRESS_PHASES = (
+    'writing', 'verification', 'firmware_writing',
+    'firmware_verification', 'application_verification', 'compacting'
+)
+
+def update_progress_reporter(record):
+    """Return a byte-based progress callback backed by a shared record."""
+    async def report(phase, completed=0, total=0):
+        phase = str(phase)
+        if phase not in _UPDATE_PROGRESS_PHASES:
+            return
+        total = max(0, int(total or 0))
+        completed = max(0, int(completed or 0))
+        percent = max(0, min(100, int(completed * 100 / total))) if total else 0
+        if record.get('phase') == phase and percent < int(record.get('percent', 0) or 0):
+            return
+        record.update({
+            'phase': phase, 'percent': percent,
+            'completed_bytes': completed, 'total_bytes': total,
+        })
+    return report
+
+async def complete_resumable_update(identifier, complete, record, log_output):
+    """Complete an uploaded artifact independently of its HTTP request."""
+    try:
+        result = await complete(identifier, update_progress_reporter(record))
+    except Exception as exc:
+        message = 'Update rejected: ' + str(exc)
+        record.update({'phase': 'failed', 'percent': 0, 'message': message})
+        log_upgrade_upload_failure(log_output, 'verification', exc)
+    else:
+        record.update({'phase': 'complete', 'percent': 100, 'message': str(result)})
 
 def render_refresh_controls_html(button_id='refresh-toggle', refresh_scope='log and value'):
     return (
@@ -684,7 +720,7 @@ def render_overview_page(token, status=None, modules=None, value_refresh_ms=5000
             'Current connectivity, software versions and MQTT-published module values.'
         ) +
         '<section class="card"><div class="section-title"><h2>Device</h2>'
-        '<span class="badge good" id="overview-refresh">live</span></div>' +
+        '<span class="badge good" id="overview-refresh">Live · just updated</span></div>' +
         render_overview_status(status) + '</section>'
         '<section class="card"><div class="section-title"><h2>Modules</h2>'
         '<a href="/module-settings">Configure modules</a></div>' +
@@ -695,13 +731,15 @@ def render_overview_page(token, status=None, modules=None, value_refresh_ms=5000
         'function refreshOverview(){fetch("/api/overview",{cache:"no-store",credentials:"same-origin"})'
         '.then(function(r){if(r.status===401){location.replace("/login?reason=expired");return null;}return r.json();})'
         '.then(function(p){if(!p)return;document.getElementById("overview-status").outerHTML=p.status;'
-        'document.getElementById("overview-modules").outerHTML=p.modules;})'
-        '.catch(function(){});}setInterval(refreshOverview,' + str(interval) + ');'
+        'document.getElementById("overview-modules").outerHTML=p.modules;var updated=document.getElementById('
+        '"overview-refresh");if(updated)updated.textContent="Live · "+new Date().toLocaleTimeString();})'
+        '.catch(function(){});}portalAdaptivePoll(refreshOverview,' + str(interval) + ');'
     )
     return portal_ui.shell('IoT-MD overview', 'overview', body, token, script)
 
 def render_logging_page(token, current_loglevel, levels, logs,
-                        log_refresh_ms=5000, settings=None, message=''):
+                        log_refresh_ms=5000, settings=None, message='',
+                        filter_text=''):
     settings = settings or {}
     options = ''.join(
         '<option value="' + level + '"' +
@@ -724,12 +762,21 @@ def render_logging_page(token, current_loglevel, levels, logs,
         '<label>Stored lines <input name="log_buffer_lines" type="number" min="0" max="500" '
         'required value="' + html_escape(settings.get('log_buffer_lines', 200)) + '"></label>'
         '<button class="secondary" type="submit">Apply</button></form>'
+        '<label class="log-filter">Filter displayed logs '
+        '<input id="log-filter" type="search" value="' + html_escape(filter_text) + '" '
+        'placeholder="Error, MQTT, module…"></label>'
         '<pre id="logs" class="log-view">' + render_logs_html(logs or []) + '</pre></section>'
     )
     interval = max(1000, int(log_refresh_ms or 5000))
     script = (
         'var logRefreshPaused=false,logRefreshButton=document.getElementById("log-refresh-toggle"),'
         'logRefreshState=document.querySelector(".refresh-status");'
+        'var logFilter=document.getElementById("log-filter"),latestLogs=document.getElementById("logs").textContent;'
+        'function filteredLogs(text){var term=String(logFilter.value||"").trim().toLowerCase();if(!term)return text;'
+        'return String(text).split("\\n").filter(function(line){return line.toLowerCase().indexOf(term)>=0;}).join("\\n");}'
+        'function showLogs(text,follow){var e=document.getElementById("logs");latestLogs=String(text);'
+        'e.textContent=filteredLogs(latestLogs);if(follow)e.scrollTop=e.scrollHeight;}'
+        'logFilter.oninput=function(){showLogs(latestLogs,false);};'
         'function updateLogRefresh(){logRefreshButton.textContent=logRefreshPaused?"Resume":"Pause";'
         'logRefreshState.textContent=logRefreshPaused?"refresh paused":"auto refresh";'
         'logRefreshState.className=logRefreshPaused?"badge warn refresh-status":"badge good refresh-status";}'
@@ -739,8 +786,8 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'function refreshLogs(){if(logRefreshPaused)return;var e=document.getElementById("logs"),b=nearBottom(e);'
         'fetch("/logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
-        'if(t!==null&&t!==undefined&&e.textContent!==t){e.textContent=t;if(b)e.scrollTop=e.scrollHeight;}})'
-        '.catch(function(){});}setInterval(refreshLogs,' + str(interval) + ');updateLogRefresh();'
+        'if(t!==null&&t!==undefined&&latestLogs!==t)showLogs(t,b);})'
+        '.catch(function(){});}portalAdaptivePoll(refreshLogs,' + str(interval) + ');updateLogRefresh();'
     )
     return portal_ui.shell('IoT-MD device log', 'logging', body, token, script)
 
@@ -755,8 +802,8 @@ def render_request_error_page(token):
         '<section class="card"><div class="warning"><strong>Request failed.</strong> '
         'Review the device log for the recorded cause, then return and retry.'
         '</div><div class="actions request-error-actions">'
-        '<button class="secondary" type="button" onclick="history.back()">Go back</button>'
-        '<a class="button" href="/logging">Open device log</a></div></section>'
+        '<button id="request-error-back" class="secondary" type="button">Go back</button>'
+        '<a class="button" href="/logging?filter=ERROR">Open device log</a></div></section>'
     )
     return portal_ui.shell(
         'IoT-MD request failed', 'logging', body, token
@@ -789,7 +836,7 @@ def render_audit_logging_page(token, logs, log_refresh_ms=5000):
         'b=auditNearBottom(e);fetch("/audit-logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
         'if(t!==null&&t!==undefined&&e.textContent!==t){e.textContent=t;if(b)e.scrollTop=e.scrollHeight;}})'
-        '.catch(function(){});}setInterval(refreshAuditLogs,' + str(interval) + ');updateAuditRefresh();'
+        '.catch(function(){});}portalAdaptivePoll(refreshAuditLogs,' + str(interval) + ');updateAuditRefresh();'
     )
     return portal_ui.shell(
         'IoT-MD audit log', 'audit_logging', body, token, script
@@ -865,7 +912,7 @@ def render_module_diagnostics_page(token, modules, value_refresh_ms=5000,
         '{cache:"no-store",credentials:"same-origin"}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.json();})'
         '.then(function(p){if(!p)return;document.getElementById("module-diagnostics").innerHTML='
-        'p.modules;}).catch(function(){});}setInterval(refreshModuleDiagnostics,' +
+        'p.modules;}).catch(function(){});}portalAdaptivePoll(refreshModuleDiagnostics,' +
         str(interval) + ');'
     )
     return portal_ui.shell(
@@ -948,7 +995,7 @@ def update_upload_script():
         'cancelButton=document.getElementById("update-cancel"),primaryButton=document.getElementById('
         '"update-primary"),fileSelection=document.getElementById("update-file-selection"),'
         'fileGuidance=document.getElementById("update-file-guidance"),'
-        'activeRequest=null,updateCancelled=false,pollTimer=null,stageList='
+        'activeRequest=null,updateCancelled=false,uploadInProgress=false,pollTimer=null,stageList='
         'document.getElementById("update-stage-list"),workflows={application:[["prepare","Prepare and hash file"],'
         '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
         '["ready","Ready to restart"]],firmware:[["prepare","Prepare and hash file"],'
@@ -972,14 +1019,15 @@ def update_upload_script():
         'fileGuidance.hidden=!!selected;'
         'if(selected){box.hidden=true;box.classList.remove("complete","failed");out.className="portal-status";'
         'out.textContent="";}};'
-        'cancelButton.onclick=function(){updateCancelled=true;if(pollTimer)clearTimeout(pollTimer);'
+        'cancelButton.onclick=function(){updateCancelled=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";if(pollTimer)clearTimeout(pollTimer);'
         'if(activeRequest)activeRequest.abort();uploadForm.reset();document.getElementById("update-file-name").textContent='
         '"No file selected";cancelButton.disabled=true;primaryButton.disabled=true;primaryButton.textContent="Initiate upgrade";'
         'fileGuidance.hidden=false;'
         'renderWorkflow("");fileSelection.hidden=false;var box=document.getElementById("update-overall");box.hidden=true;'
         'box.classList.remove("complete","failed");document.getElementById("update-result").className="portal-status";'
         'document.getElementById("update-result").textContent="";};'
-        'uploadForm.onsubmit=function(e){e.preventDefault();updateCancelled=false;primaryButton.disabled=true;'
+        'window.addEventListener("beforeunload",function(e){if(!uploadInProgress)return;e.preventDefault();e.returnValue="";});'
+        'uploadForm.onsubmit=function(e){e.preventDefault();uploadForm.dataset.portalDirty="0";updateCancelled=false;uploadInProgress=true;primaryButton.disabled=true;'
         'primaryButton.textContent="Working…";cancelButton.disabled=false;var input='
         'document.getElementById("update-bundle"),f=input.files&&input.files[0],out=document.getElementById('
         '"update-result"),overall=document.getElementById("update-overall"),box=overall,'
@@ -1001,7 +1049,7 @@ def update_upload_script():
         'overallBar.setAttribute("aria-valuenow",String(taskValue));'
         'overallLabel.textContent=flow[index][1];}'
         'function failure(text){out.className="portal-status error";out.textContent=text;}'
-        'function terminalFailure(text){finished=true;if(pollTimer)clearTimeout(pollTimer);'
+        'function terminalFailure(text){finished=true;uploadInProgress=false;if(pollTimer)clearTimeout(pollTimer);'
         'box.classList.add("failed");box.hidden=false;label.textContent="Failed";failure(text);'
         'input.value="";document.getElementById("update-file-name").textContent="No file selected";'
         'fileGuidance.hidden=false;fileSelection.hidden=false;cancelButton.disabled=true;primaryButton.disabled=true;'
@@ -1024,7 +1072,7 @@ def update_upload_script():
         'label.textContent="Verifying core firmware "+(s.percent||0)+"%";setStage("verify_core",(s.percent||0)/100);}'
         'else if(s.phase==="application_verification"){label.textContent="Verifying application "+(s.percent||0)+"%";'
         'setStage("verify_application",(s.percent||0)/100);}'
-        'else if(s.phase==="complete"){finished=true;box.classList.add("complete");label.textContent="Verification complete";'
+        'else if(s.phase==="complete"){finished=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";box.classList.add("complete");label.textContent="Verification complete";'
         'setStage("ready",1);'
         'setTimeout(function(){location.replace("/update-install");},900);return;}else if(s.phase==="failed"){'
         'terminalFailure(s.message||"Verification failed");return;}'
@@ -1053,8 +1101,7 @@ def update_upload_script():
         '"/resumable-upload-chunk?id="+encodeURIComponent(id)+"&offset="+offset;return uploadChunk('
         'url,f.slice(offset,end),offset,f.size,"Uploading ",uploadStage).then(function(s){'
         'var received=Number(s.received_bytes||end),n=Math.round(received*100/f.size);label.textContent="Uploading "+n+"%";'
-        'setStage(uploadStage,n/100);return new Promise(function(resolve){requestAnimationFrame(function(){'
-        'resolve(sendChunk(received));});});});}'
+        'setStage(uploadStage,n/100);return sendChunk(received);});}'
         'function componentName(kind){return kind==="firmware"?"core firmware":"application";}'
         'function waitForComponent(uploadId,kind){return new Promise(function(resolve,reject){function check(){fetch('
         '"/update-progress?id="+encodeURIComponent(uploadId),{cache:"no-store",credentials:"same-origin"}).then(function(r){'
@@ -1080,8 +1127,7 @@ def update_upload_script():
         '"&offset="+offset,uploadStage=kind==="firmware"?"upload_core":"upload_application";return uploadChunk('
         'url,blob.slice(offset,end),offset,blob.size,"Uploading "+componentName(kind)+" ",uploadStage).then(function(progress){var received=Number('
         'progress.received_bytes||end),percent=Math.round(received*100/blob.size);label.textContent="Uploading "+componentName(kind)+" "+percent+"%";'
-        'setStage(uploadStage,percent/100);return new Promise(function(resolve){requestAnimationFrame(function(){'
-        'resolve(chunk(received));});});});}return chunk(Number(s.received_bytes||0));});}'
+        'setStage(uploadStage,percent/100);return chunk(received);});}return chunk(Number(s.received_bytes||0));});}'
         'function startUniversalUpload(){return f.slice(0,10).arrayBuffer().then(function(header){var bytes=new Uint8Array(header),'
         'magic=String.fromCharCode.apply(null,bytes.slice(0,6));if(magic!=="IOTU1\\n")throw new Error("Invalid universal update header");'
         'var manifestLength=new DataView(header).getUint32(6,false);if(manifestLength<2||manifestLength>4096)'
@@ -1099,19 +1145,19 @@ def update_upload_script():
         'return uploadUniversalComponent(f.slice(prefix+firmwareSize),"application",String(manifest.application.sha256),plan.id);});}'
         'return sequence.then(function(){setStage("pair",0);label.textContent="Pairing verified components";return jsonPost('
         '"/universal-upload-finalize",{id:plan.id});});});});});}'
-        'if(universal){startUniversalUpload().then(function(){finished=true;box.classList.add("complete");label.textContent='
+        'if(universal){startUniversalUpload().then(function(){finished=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";box.classList.add("complete");label.textContent='
         '"Universal verification complete";setStage("ready",1);setTimeout(function(){location.replace('
         '"/update-install");},900);}).catch(function(err){if(updateCancelled)return;terminalFailure('
         'err&&err.message?err.message:"Universal upload failed");});return;}'
-        'setStage("prepare",0);label.textContent="Preparing and hashing file…";requestAnimationFrame(function(){'
-        'f.arrayBuffer().then(function(data){return crypto.subtle.digest("SHA-256",data);}).then(function(hash){'
+        'setStage("prepare",0);label.textContent="Preparing and hashing file…";Promise.resolve().then(function(){return '
+        'f.arrayBuffer();}).then(function(data){return crypto.subtle.digest("SHA-256",data);}).then(function(hash){'
         'var hex=Array.from(new Uint8Array(hash)).map(function(b){'
         'return b.toString(16).padStart(2,"0");}).join("");id=hex.slice(0,24)+"-"+f.size;var kind=universal?"universal":'
         '(firmware?"firmware":"application");setStage("prepare",1);setStage(firmware?"upload_core":"upload_application",0);'
         'return jsonPost("/resumable-upload-begin",'
         '{id:id,kind:kind,total_bytes:f.size,sha256:hex});'
         '}).then(function(s){startPolling();return sendChunk(Number(s.received_bytes||0));}).catch(function(err){'
-        'if(updateCancelled)return;terminalFailure(err&&err.message?err.message:"Upload failed");});});};'
+        'if(updateCancelled)return;terminalFailure(err&&err.message?err.message:"Upload failed");});};'
     )
 
 
@@ -1352,6 +1398,28 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
     )
     return portal_ui.shell(
         'IoT-MD install upgrade', 'updates', body, token, script
+    )
+
+def render_persistent_task_route(
+    route, action_path, token, task_status_getter, status
+):
+    """Render a reconnectable task URL without retaining request-local state."""
+    params = parse_query(action_path)
+    task_id = str(params.get('id', ''))[:64]
+    current = task_status_getter(task_id) if task_status_getter else {}
+    if route == '/update-task':
+        return render_upgrade_task_page(
+            token, task_id, current.get('message', 'Processing upgrade'),
+            status, '/update-install'
+        )
+    return_route = '/' + str(params.get('return', 'updates')).lstrip('/')
+    if return_route not in (
+        '/updates', '/certificates', '/device-certificates',
+        '/configuration-backup', '/diagnostics', '/settings'
+    ):
+        return_route = '/'
+    return portal_ui.task_page(
+        task_id, current.get('message', 'Device task'), return_route
     )
 
 

@@ -4,7 +4,7 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.30` retains native ABI 6, preflights paired application
+Version `3.0.0-alpha.31` retains native ABI 6, preflights paired application
 capacity before selecting a new core and can release verified staging blocks
 while extracting the application from PSRAM on a constrained filesystem. It
 also safely reclaims stale encrypted-NVS qualification snapshots and separates
@@ -17,6 +17,9 @@ large inner core upload while standalone component uploads remain restricted.
 It also keeps portal status reads independent of qualification-history writes
 and proactively reclaims inactive encrypted-NVS generations before replacing
 them, preventing storage pressure after a power cycle from blocking the portal.
+The final alpha adds browser-independent chunk progression, reconnectable
+device-task URLs, adaptive live refresh, strict nonce-based portal policy,
+host-prefixed HTTPS sessions and cross-engine accessibility qualification.
 Controlled platform qualification evidence carries across
 ordinary release changes while each release restarts its soak, health, storage
 and canary observations. A genuine power-on boot contributes power-recovery
@@ -63,8 +66,9 @@ wholesale.
 Read the [target architecture](../docs/V3_ARCHITECTURE.md),
 [requirements](../docs/V3_REQUIREMENTS.md) and
 [roadmap](../docs/V3_ROADMAP.md) before adding implementation code. The
-[Alpha 30 test note](../docs/V3_ALPHA30.md) defines its exact scope and safe
-test procedure. The [Alpha 29 note](../docs/V3_ALPHA29.md),
+[Alpha 31 test note](../docs/V3_ALPHA31.md) defines its exact scope and safe
+test procedure. The [Alpha 30 note](../docs/V3_ALPHA30.md),
+[Alpha 29 note](../docs/V3_ALPHA29.md),
 [Alpha 27 test note](../docs/V3_ALPHA27.md),
 [Alpha 26 note](../docs/V3_ALPHA26.md),
 [Alpha 24 note](../docs/V3_ALPHA24.md),

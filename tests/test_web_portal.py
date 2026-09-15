@@ -289,7 +289,7 @@ class WebPortalTests(unittest.TestCase):
         page = portal_ui.task_page('release-check', 'Checking release channel')
 
         self.assertIn('!done&&typeof s.percent==="number"', page)
-        self.assertIn('Return to upgrades', page)
+        self.assertIn('Return to portal', page)
         self.assertIn('#task-return[hidden]{display:none}', portal_ui.PORTAL_CSS)
         self.assertIn('location.replace(r.href);},1500)', page)
 
@@ -462,6 +462,29 @@ class WebPortalTests(unittest.TestCase):
         self.assertFalse(credentials_match('other', 'Secret-Cedar-47!River', 'admin', verifier))
         self.assertTrue(has_portal_session({'cookie': 'a=1; iotmd_session=session'}, 'session'))
         self.assertFalse(has_portal_session({'cookie': 'iotmd_session=wrong'}, 'session'))
+        self.assertTrue(has_portal_session(
+            {'cookie': '__Host-iotmd_session=session'}, 'session', secure=True
+        ))
+        self.assertEqual(
+            portal_http.session_cookie('session', secure=True),
+            '__Host-iotmd_session=session; Path=/; HttpOnly; SameSite=Strict; Secure'
+        )
+        secured, headers = portal_http.secure_html_response(
+            '<script nonce="<!--csp-nonce-->"></script>', (), 'abc123'
+        )
+        self.assertIn('nonce="abc123"', secured)
+        policy = dict(headers)['Content-Security-Policy']
+        self.assertIn("script-src 'self' 'nonce-abc123'", policy)
+        self.assertNotIn('unsafe-inline', policy)
+        asset = portal_http.portal_asset_response(
+            '/assets/portal.css', {}, '129', 'css', 'javascript'
+        )
+        etag = dict(asset[3])['ETag']
+        cached = portal_http.portal_asset_response(
+            '/assets/portal.css', {'if-none-match': etag}, '129',
+            'css', 'javascript'
+        )
+        self.assertEqual(cached[0], '304 Not Modified')
         self.assertEqual(url_decode('%7B%22name%22%3A+%22test%22%7D'), '{"name": "test"}')
         self.assertEqual(url_decode('%C2%B0C'), '°C')
         self.assertTrue(asyncio.run(credentials_match_async(
@@ -775,7 +798,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('aria-label="Breadcrumb"', html)
         self.assertIn('<a href="/device-api">Device</a>', html)
         self.assertIn('aria-hidden="true">\\</span>', html)
-        self.assertIn('<main><div class="breadcrumb"', html)
+        self.assertIn('<main id="main-content" tabindex="-1"><div class="breadcrumb"', html)
 
     def test_messaging_combines_mqtt_and_home_assistant(self):
         html = web_portal.render_messaging_page('csrf', {
@@ -837,14 +860,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('name="enabled" value="false"', user)
         self.assertIn('name="enabled" value="true" checked>Enabled', user)
         self.assertIn('name="role" value="administrator"', user)
-        self.assertIn('select disabled title="Protected: enable another administrator', user)
+        self.assertIn('select disabled aria-describedby="administrator-safety-0" title="Protected: enable another administrator', user)
         self.assertIn(
-            '<label class="check" title="Protected: enable another administrator', user
+            '<label class="check" tabindex="0" aria-describedby="administrator-safety-0" title="Protected: enable another administrator', user
         )
         self.assertIn(
             'aria-label="Enabled. Protected: enable another administrator', user
         )
-        self.assertNotIn('<p id="administrator-safety-', user)
+        self.assertIn('id="administrator-safety-0" class="visually-hidden"', user)
         self.assertIn('Require password change at next sign-in', user)
         self.assertIn('Require password change at first sign-in', user)
         self.assertIn('.portal-user-card .actions button{width:10rem}', portal_ui.PORTAL_CSS)
@@ -1196,7 +1219,7 @@ class WebPortalTests(unittest.TestCase):
                 await web_portal.start_web_portal(PortalDependencies(
                     {
                         'username': 'admin', 'password_verifier': verifier,
-                        'https': True, 'password_change_required': True,
+                        'https': False, 'password_change_required': True,
                         'password_setter': set_password
                     },
                     {
@@ -1662,7 +1685,7 @@ class WebPortalTests(unittest.TestCase):
                 await web_portal.start_web_portal(PortalDependencies(
                     {
                         'username': 'admin', 'authenticator': viewer_authenticator,
-                        'https': True, 'password_change_required': False,
+                        'https': False, 'password_change_required': False,
                     },
                     {
                         'logs.get': lambda: [],
@@ -1866,8 +1889,11 @@ class WebPortalTests(unittest.TestCase):
 
         self.assertIn('<!doctype html>', page)
         self.assertIn('<h1>Request could not be completed</h1>', page)
-        self.assertIn('href="/logging">Open device log</a>', page)
-        self.assertIn('history.back()', page)
+        self.assertIn(
+            'href="/logging?filter=ERROR">Open device log</a>', page
+        )
+        self.assertIn('id="request-error-back"', page)
+        self.assertIn('history.back()', portal_ui.PORTAL_JS)
 
     def test_response_sets_content_length(self):
         raw = response('200 OK', 'hello', 'text/plain')
@@ -1922,7 +1948,7 @@ class WebPortalTests(unittest.TestCase):
         )
 
         self.assertIn('fetch("/api/overview"', html)
-        self.assertIn('setInterval(refreshOverview,3000)', html)
+        self.assertIn('portalAdaptivePoll(refreshOverview,3000)', html)
         self.assertNotIn('id="logs"', html)
         self.assertNotIn('id="update-upload-form"', html)
 
@@ -2210,7 +2236,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Prepare and hash file', manual_update)
         self.assertIn('Pair verified components', manual_update)
         self.assertIn('renderWorkflow(workflowKind(selected))', manual_update)
-        self.assertNotIn('class="status-spinner"', manual_update)
+        self.assertNotIn(
+            'class="status-spinner"', manual_update.split('<main', 1)[1]
+        )
         self.assertIn('fileSelection.hidden=true', manual_update)
         self.assertIn('fileSelection.hidden=false', manual_update)
         self.assertNotIn('<progress', manual_update)
@@ -2228,7 +2256,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('request.upload.onprogress=function(event)', manual_update)
         self.assertIn('Number(event.loaded||0)', manual_update)
         self.assertNotIn('if(!event.lengthComputable)return', manual_update)
-        self.assertIn('requestAnimationFrame(function(){resolve(sendChunk(received))', manual_update)
+        self.assertNotIn('requestAnimationFrame', manual_update)
+        self.assertIn('return sendChunk(received)', manual_update)
         self.assertIn('out.textContent=text', manual_update)
         self.assertNotIn('out.appendChild(line)', manual_update)
         self.assertIn('Checking uploaded ', manual_update)

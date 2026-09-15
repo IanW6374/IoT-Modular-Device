@@ -56,50 +56,6 @@ def _is_certificate_request(method, route, path):
     )
 
 
-_UPDATE_PROGRESS_PHASES = (
-    'writing', 'verification', 'firmware_writing',
-    'firmware_verification', 'application_verification', 'compacting'
-)
-def update_progress_reporter(record):
-    """Return a byte-based progress callback backed by a shared record."""
-    async def report(phase, completed=0, total=0):
-        phase = str(phase)
-        if phase not in _UPDATE_PROGRESS_PHASES:
-            return
-        total = max(0, int(total or 0))
-        completed = max(0, int(completed or 0))
-        percent = max(
-            0, min(100, int(completed * 100 / total))
-        ) if total else 0
-        if (
-            record.get('phase') == phase and
-            percent < int(record.get('percent', 0) or 0)
-        ):
-            return
-        record.update({
-            'phase': phase,
-            'percent': percent,
-            'completed_bytes': completed,
-            'total_bytes': total,
-        })
-    return report
-
-
-async def complete_resumable_update(identifier, complete, record, log_output):
-    """Complete an uploaded artifact independently of its HTTP request."""
-    try:
-        result = await complete(
-            identifier, update_progress_reporter(record)
-        )
-    except Exception as exc:
-        message = 'Update rejected: ' + str(exc)
-        record.update({'phase': 'failed', 'percent': 0, 'message': message})
-        log_upgrade_upload_failure(log_output, 'verification', exc)
-    else:
-        record.update({
-            'phase': 'complete', 'percent': 100, 'message': str(result)
-        })
-
 async def _handle_certificate_request(*args):
     import certificate_portal_transport
     return await certificate_portal_transport.handle(*args)
@@ -128,6 +84,7 @@ async def start_web_portal(portal):
     certificate_validate_handler = portal.get('certificates.apply')
     update_preferences_setter = portal.get('updates.preferences.apply')
     task_status_getter = portal.get('tasks.status')
+    task_list_getter = portal.get('tasks.list')
     certificate_info_getter = portal.get('certificates.get')
     network_trial_confirmer = portal.get('network.confirm')
     factory_reset_handler = portal.get('factory_reset.request')
@@ -222,13 +179,19 @@ async def start_web_portal(portal):
                                 content_type='text/html; charset=utf-8',
                                 extra_headers=None):
             nonlocal response_keep_alive
+            response_headers = tuple(extra_headers or ())
             if content_type.startswith('text/html') and session_username:
                 body = portal_ui.personalise_page(
                     body, session_username, session_role, status_snapshot.get(), session.get('timeout_ms', 0) if session else 0
                 )
+            if content_type.startswith('text/html'):
+                nonce = new_session_id()
+                body, response_headers = secure_html_response(
+                    body, response_headers, nonce
+                )
             response_keep_alive = request_keep_alive
             await send_raw_response(
-                writer, status, body, content_type, extra_headers,
+                writer, status, body, content_type, response_headers,
                 response_keep_alive
             )
         async def close_writer():
@@ -238,16 +201,11 @@ async def start_web_portal(portal):
             nonlocal password_change_required, session, session_id
             nonlocal csrf_token, session_role, session_username, session_password_change_required
             if is_asset and method == 'GET':
-                asset = (
-                    portal_ui.PORTAL_CSS
-                    if route.endswith('.css') else portal_ui.PORTAL_JS
+                asset = portal_asset_response(
+                    route, headers, portal_ui.ASSET_VERSION,
+                    portal_ui.PORTAL_CSS, portal_ui.PORTAL_JS
                 )
-                await send_response(
-                    writer, '200 OK', asset,
-                    'text/css; charset=utf-8' if route.endswith('.css')
-                    else 'application/javascript; charset=utf-8',
-                    (('Cache-Control', 'public, max-age=31536000, immutable'),)
-                )
+                await send_response(writer, *asset)
             elif not path or method not in ('GET', 'POST'):
                 body = 'Method not allowed'
                 await send_response(writer, '405 Method Not Allowed', body, 'text/plain')
@@ -675,7 +633,8 @@ async def start_web_portal(portal):
                     writer, '200 OK',
                     render_logging_page(
                         csrf_token, loglevel_getter(), levels, log_getter(),
-                        log_refresh_ms, settings_getter() if settings_getter else {}
+                        log_refresh_ms, settings_getter() if settings_getter else {},
+                        filter_text=parse_query(action_path).get('filter', '')
                     )
                 )
             elif method == 'GET' and is_audit_logging:
@@ -899,7 +858,12 @@ async def start_web_portal(portal):
             return True
 
         async def handle_live_routes():
-            if method == 'POST' and path.startswith('/set-loglevel'):
+            if method == 'GET' and route in ('/task', '/update-task'):
+                await send_response(writer, '200 OK', render_persistent_task_route(
+                    route, action_path, csrf_token, task_status_getter,
+                    status_snapshot.get()
+                ))
+            elif method == 'POST' and path.startswith('/set-loglevel'):
                 try:
                     apply_logging_change(
                         form_params.get('level', ''),
@@ -929,6 +893,12 @@ async def start_web_portal(portal):
                 )
                 await send_response(
                     writer, '200 OK', json.dumps(current_task), 'application/json'
+                )
+            elif path.startswith('/api/tasks'):
+                await send_response(
+                    writer, '200 OK', json.dumps({
+                        'tasks': task_list_getter() if task_list_getter else []
+                    }), 'application/json'
                 )
             elif path.startswith('/api/wifi-networks'):
                 if wifi_scan_getter is None:
@@ -1111,12 +1081,8 @@ async def start_web_portal(portal):
                     'check-release', action_path, action_handler, log_output, form_params
                 )
                 if isinstance(result, dict) and result.get('task_id'):
-                    await send_response(
-                        writer, '202 Accepted',
-                        portal_ui.task_page(
-                            result['task_id'], result.get('message', 'Checking for updates'),
-                            '/updates'
-                        )
+                    await send_redirect(
+                        writer, '/task?id=' + str(result['task_id']) + '&return=updates'
                     )
                 else:
                     await send_redirect(writer, '/updates')
@@ -1125,13 +1091,8 @@ async def start_web_portal(portal):
                     'download-release', action_path, action_handler, log_output, form_params
                 )
                 if isinstance(result, dict) and result.get('task_id'):
-                    await send_response(
-                        writer, '202 Accepted',
-                        render_upgrade_task_page(
-                            csrf_token, result['task_id'],
-                            result.get('message', 'Downloading release'),
-                            status_snapshot.get(), '/update-install'
-                        )
+                    await send_redirect(
+                        writer, '/update-task?id=' + str(result['task_id'])
                     )
                 else:
                     await send_redirect(writer, '/update-install')
@@ -1195,7 +1156,9 @@ async def start_web_portal(portal):
 
             action_path = path or ''
             route = action_path.split('?', 1)[0]
-            cookie_session_id = parse_cookies(headers).get('iotmd_session', '')
+            cookie_session_id = parse_cookies(headers).get(
+                session_cookie_name(secure_cookie), ''
+            )
             session = sessions.get(cookie_session_id)
             session_id = cookie_session_id
             csrf_token = session.get('csrf', '') if session else ''
@@ -1280,7 +1243,7 @@ async def start_web_portal(portal):
 
             quiet_audit_routes = (
                 '/assets/portal.css', '/assets/portal.js', '/logs', '/partials',
-                '/api/status', '/api/overview', '/api/module-diagnostics',
+                '/api/status', '/api/overview', '/api/module-diagnostics', '/api/tasks',
                 '/update-progress', '/task-status', '/resumable-upload-status',
                 '/audit-logs',
                 '/api/restart-required'

@@ -48,6 +48,7 @@ import certificate_portal_actions
 import configuration_manager
 import api_security
 import portal_auth
+import portal_task_registry
 import fleet_management
 import support_bundle
 import resumable_upload
@@ -739,61 +740,22 @@ def request_device_shutdown():
 
 
 def start_portal_task(name, coroutine, message):
-    portal_tasks[name] = {
-        'phase': 'running',
-        'message': str(message),
-    }
-
-    async def runner():
-        try:
-            result = await coroutine
-        except Exception as exc:
-            portal_tasks[name] = {
-                'phase': 'failed',
-                'message': str(exc) or exc.__class__.__name__,
-            }
-            logOutput(
-                'Local', 'Task',
-                {'log': name + ' stopped - ' + str(exc)}, 'ERROR'
-            )
-        else:
-            portal_tasks[name] = {
-                'phase': 'complete',
-                'percent': 100,
-                'message': str(result or 'Complete'),
-            }
-
-    start_task('portal_' + str(name), runner())
-    return {
-        'task_id': name,
-        'message': str(message),
-    }
-
-
-def portal_task_status(name):
-    return portal_tasks.get(
-        str(name),
-        {'phase': 'failed', 'message': 'Task was not found'}
+    return portal_task_registry.start(
+        portal_tasks, name, coroutine, message, start_task, logOutput
     )
 
 
+def portal_task_status(name):
+    return portal_task_registry.status(portal_tasks, name)
+
+
+def portal_task_snapshot():
+    """Return a bounded, newest-first task inventory for portal reconnection."""
+    return portal_task_registry.snapshot(portal_tasks)
+
+
 def portal_task_progress(name):
-    labels = {
-        'receiving': 'Downloading release',
-        'writing': 'Writing core firmware',
-        'verification': 'Verifying release',
-    }
-
-    async def report(phase, completed=0, total=0):
-        total = int(total or 0)
-        completed = int(completed or 0)
-        portal_tasks[name] = {
-            'phase': 'running',
-            'message': labels.get(str(phase), str(phase).replace('_', ' ')),
-            'percent': max(0, min(100, int(completed * 100 / total))) if total else 0,
-        }
-
-    return report
+    return portal_task_registry.progress(portal_tasks, name)
 
 
 set_log_output(logOutput)
@@ -2532,6 +2494,7 @@ async def start_admin_portal():
             'certificates.apply': validate_uploaded_certificates,
             'certificates.get': installed_certificate_details,
             'tasks.status': portal_task_status,
+            'tasks.list': portal_task_snapshot,
             'network.confirm': confirm_network_settings,
             'network.scan': wifi_recovery.cached_wifi_networks,
             'factory_reset.request': request_factory_default,
