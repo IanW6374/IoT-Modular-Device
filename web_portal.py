@@ -1323,7 +1323,7 @@ async def start_web_portal(portal):
             ):
                 return
             try:
-                log_output('Local', 'Web portal', {'log': 'Request failed - ' + str(exc)}, 'ERROR')
+                log_output('Local', 'Web portal', {'log': 'Request failed for ' + str(method) + ' ' + str(route) + ' - ' + str(exc)}, 'ERROR')
             except Exception:
                 pass
             try:

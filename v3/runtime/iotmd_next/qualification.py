@@ -5,6 +5,8 @@ try:
 except ImportError:
     import json
 
+from .storage import StorageContractError
+
 
 CONTRACT_VERSION = 1
 STATE_VERSION = 2
@@ -342,6 +344,23 @@ class OperationalQualification:
             payload = json.dumps(self._history).encode()
         self._history_namespace.commit(generation, payload)
 
+    def _save_history_resilient(self):
+        """Persist derived history without making live qualification unavailable."""
+        while True:
+            try:
+                self._save_history()
+                return True
+            except StorageContractError as exc:
+                if str(exc) != 'encrypted transactional storage is full':
+                    raise
+                releases = self._history['releases']
+                if not releases:
+                    return False
+                # Earlier summaries are diagnostic convenience. Prefer a
+                # smaller, current record over failing the live recorder when
+                # the bounded NVS partition is under pressure.
+                self._history['releases'] = releases[1:]
+
     def _save_campaign(self):
         if self._campaign_namespace is None:
             return
@@ -407,7 +426,11 @@ class OperationalQualification:
         previous.pop('observed_at', None)
         if comparable != previous:
             self._history['current'] = summary
-            self._save_history()
+            if not self._save_history_resilient():
+                # Keep reads deterministic and retry the derived sidecar on a
+                # later evidence mutation. The authoritative counters have
+                # already been committed separately.
+                self._history['current'] = current
 
     def _release(self):
         release = self._release_getter()
@@ -454,7 +477,7 @@ class OperationalQualification:
                 releases.append(current)
                 self._history['releases'] = releases[-MAX_RELEASE_HISTORY:]
                 self._history['current'] = None
-                self._save_history()
+                self._save_history_resilient()
             self._state = _empty_state(
                 now, release['version'], release['sequence']
             )
@@ -575,7 +598,9 @@ class OperationalQualification:
         self._state['canary_paused'] = canary_paused
         self._state['last_sample_at'] = now
         self._save()
-        return self.snapshot()
+        result = self.snapshot()
+        self._sync_history(result)
+        return result
 
     def record_renewal(self, successful):
         self._record_boolean('renewal', successful)
@@ -594,6 +619,7 @@ class OperationalQualification:
         counters[key] = _bounded_increment(counters[key])
         self._save()
         self._record_campaign(('update_trials', key))
+        self._sync_history(self.snapshot())
 
     def record_power_recovery(self, successful):
         self._record_boolean('power', successful)
@@ -611,6 +637,7 @@ class OperationalQualification:
         counters[outcome] = _bounded_increment(counters[outcome])
         self._save()
         self._record_campaign((prefix + '_attempts', outcome))
+        self._sync_history(self.snapshot())
 
     def _record_boolean(self, kind, successful):
         self._require_started()
@@ -628,6 +655,7 @@ class OperationalQualification:
         self._record_campaign((
             attempt_key, success_key if successful else failure_key
         ))
+        self._sync_history(self.snapshot())
 
     def _record_campaign(self, keys):
         if self._campaign is None:
@@ -816,5 +844,4 @@ class OperationalQualification:
             'gates': gates,
             'promotion_ready': all(item['status'] == 'passed' for item in gates),
         }
-        self._sync_history(result)
         return result

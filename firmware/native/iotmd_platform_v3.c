@@ -1229,17 +1229,16 @@ static mp_obj_t iotmd_platform_v3_storage_commit(size_t n_args,
     );
     memcpy(buffer + IOTMD_V3_STORAGE_HEADER_BYTES, source.buf, source.len);
     const char *key = (next & 1) ? "snapshot_b" : "snapshot_a";
-    esp_err_t error = nvs_set_blob(handle->nvs, key, buffer, length);
-    if (error == ESP_ERR_NVS_NOT_ENOUGH_SPACE) {
-        /* The opposite key is the last committed generation, so reclaiming
-         * only this stale alternating slot preserves a recoverable snapshot. */
-        error = nvs_erase_key(handle->nvs, key);
-        if (error == ESP_OK || error == ESP_ERR_NVS_NOT_FOUND) {
-            error = nvs_commit(handle->nvs);
-        }
-        if (error == ESP_OK) {
-            error = nvs_set_blob(handle->nvs, key, buffer, length);
-        }
+    /* This parity slot is older than the currently selected generation.
+     * Reclaim it before allocating the replacement so bounded NVS never
+     * needs space for three generations. The latest valid slot remains
+     * recoverable across every erase, write and commit transition. */
+    esp_err_t error = nvs_erase_key(handle->nvs, key);
+    if (error == ESP_OK || error == ESP_ERR_NVS_NOT_FOUND) {
+        error = nvs_commit(handle->nvs);
+    }
+    if (error == ESP_OK) {
+        error = nvs_set_blob(handle->nvs, key, buffer, length);
     }
     if (error == ESP_OK) {
         error = nvs_commit(handle->nvs);

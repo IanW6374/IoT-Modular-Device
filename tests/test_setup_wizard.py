@@ -158,6 +158,46 @@ class SetupWizardTests(unittest.TestCase):
             'Portal-Cedar-47!River', credential_store.load()['portal']['password_verifier']
         ))
 
+    def test_configuration_reclaims_inactive_slot_before_replacing_it(self):
+        config = {'schema': credential_store.SCHEMA_VERSION, 'test': True}
+
+        class PressuredStore:
+            def __init__(self):
+                self.values = {'active': 0, 'cfg1': b'stale'}
+                self.events = []
+
+            def get_i32(self, key):
+                return self.values[key]
+
+            def erase_key(self, key):
+                self.events.append(('erase', key))
+                del self.values[key]
+
+            def set_blob(self, key, value):
+                self.events.append(('blob', key))
+                if key in self.values:
+                    raise OSError(-0x1105, 'ESP_ERR_NVS_NOT_ENOUGH_SPACE')
+                self.values[key] = bytes(value)
+
+            def set_i32(self, key, value):
+                self.events.append(('integer', key))
+                self.values[key] = value
+
+            def commit(self):
+                self.events.append(('commit', None))
+
+        store = PressuredStore()
+        with (
+            mock.patch.object(credential_store, '_nvs', return_value=store),
+            mock.patch.object(credential_store, 'validate')
+        ):
+            credential_store.save(config)
+        self.assertLess(
+            store.events.index(('erase', 'cfg1')),
+            store.events.index(('blob', 'cfg1'))
+        )
+        self.assertEqual(store.values['active'], 1)
+
     def test_setup_is_incomplete_until_signed_application_is_staged(self):
         config = credential_store.build_configuration(
             self.fields(), 'Portal-Cedar-47!River', 'Console-Ash-82!Stone'

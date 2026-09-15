@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator
 from v3.runtime.iotmd_next.qualification import (
     OperationalQualification, QualificationError,
 )
+from v3.runtime.iotmd_next.storage import StorageContractError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,16 @@ class MemoryNamespace:
 
     def close(self):
         self.closed = True
+
+
+class FullNamespace(MemoryNamespace):
+    def __init__(self):
+        super().__init__()
+        self.commit_attempts = 0
+
+    def commit(self, generation, payload):
+        self.commit_attempts += 1
+        raise StorageContractError('encrypted transactional storage is full')
 
 
 def profile(**changes):
@@ -210,6 +221,20 @@ class V3OperationalQualificationTests(unittest.TestCase):
         )
         result = restarted.start()
         self.assertEqual(result['counters']['samples'], 1)
+
+    def test_full_history_sidecar_does_not_break_live_status(self):
+        full_history = FullNamespace()
+        recorder = OperationalQualification(
+            self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), full_history,
+            self.campaign_namespace
+        )
+        recorder.start()
+        result = recorder.sample('healthy', 200, True)
+        self.assertEqual(result['counters']['samples'], 1)
+        self.assertEqual(full_history.commit_attempts, 1)
+        self.assertEqual(recorder.snapshot()['counters']['samples'], 1)
+        self.assertEqual(full_history.commit_attempts, 1)
 
     def test_new_release_starts_a_fresh_evidence_campaign(self):
         self.recorder.sample('healthy', 200, True)

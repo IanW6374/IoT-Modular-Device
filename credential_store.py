@@ -138,7 +138,13 @@ def save(config):
     except OSError:
         active = 1
     target = 1 if active == 0 else 0
-    store.set_blob('cfg' + str(target), encoded)
+    target_key = 'cfg' + str(target)
+    # Reclaim the inactive generation before allocating its replacement.
+    # The selected generation remains intact if power is lost or the new
+    # value cannot be written, while NVS does not need room for three copies.
+    _erase(store, target_key)
+    store.commit()
+    store.set_blob(target_key, encoded)
     store.commit()
     store.set_i32('active', target)
     store.commit()
