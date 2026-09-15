@@ -262,6 +262,7 @@ release_auto_download = device_settings.release_auto_download
 release_auto_activate = device_settings.release_auto_activate
 web_portal_session_timeout_s = device_settings.web_portal_session_timeout_s
 release_available = {}
+release_available_choices = []
 release_check_status = 'Not checked'
 release_last_checked = ''
 release_automatic_check_status = 'Not checked'
@@ -963,6 +964,9 @@ def portal_status():
     status['release_available_sequence'] = release_available.get('release_sequence', 0)
     status['release_available_notes'] = release_available.get('notes', '')
     status['release_available_published_at'] = release_available.get('published_at', '')
+    status['release_available_options'] = release_update.release_choice_options(
+        release_available_choices
+    )
     status['release_checks_enabled'] = bool(release_manifest_url)
     status['release_check_status'] = release_check_status
     status['release_last_checked'] = release_last_checked
@@ -1905,6 +1909,7 @@ def module_health_payload(driver):
 
 
 def portal_action(action, params):
+    global release_available
     if action == 'discover':
         request_homeassistant_discovery()
         return 'Discovery requested'
@@ -2090,8 +2095,28 @@ def portal_action(action, params):
     if action == 'download-release':
         if not release_manifest_url:
             return 'Release download failed: release checks are not configured'
-        if not release_available:
+        if not release_available_choices:
             return 'Release download failed: check for updates first'
+        selected_version = str(params.get('release_version', ''))
+        choice = next((
+            item for item in release_available_choices
+            if str(item.get('version', '')) == selected_version
+        ), None)
+        if not choice:
+            return (
+                'Release download failed: the selected automatic release is '
+                'no longer available; check for upgrades again'
+            )
+        update_orchestrator.begin(
+            choice.get('releases', ()),
+            app_update.running_release_sequence(),
+            firmware_update.running_release_sequence(),
+            app_update.running_version(device_settings.ha_device_info.get('sw', '')),
+            firmware_update.running_version(hardware_platform.runtime_version())
+        )
+        release_available = update_orchestrator.next_release() or {}
+        if not release_available:
+            return 'Release download failed: the selected release is already installed'
         return start_portal_task(
             'release_download_manual', download_release_once(
                 portal_task_progress('release_download_manual')
@@ -2263,48 +2288,59 @@ async def complete_portal_update(identifier, progress_callback=None):
 
 
 async def _check_release_once():
-    global release_available
-    releases = list(await release_update.fetch_releases(
+    global release_available, release_available_choices
+    catalogs = await release_update.fetch_release_catalogs(
         release_manifest_url, release_channel, release_ca_cert_path
-    ))
-    applicable = []
-    for candidate in releases:
-        if candidate.get('type') == 'application' and not release_update.application_release_applicable(
-            candidate.get('components'),
-            configured_driver_names(moduleSettings.get('devices', ())),
-            component_versions.RUNTIME_VERSION,
-            DRIVER_VERSIONS
-        ):
-            continue
-        applicable.append(candidate)
+    )
+    choices = []
+    application_sequence = app_update.running_release_sequence()
+    firmware_sequence = firmware_update.running_release_sequence()
+    application_version = app_update.running_version(
+        device_settings.ha_device_info.get('sw', '')
+    )
+    firmware_version = firmware_update.running_version(
+        hardware_platform.runtime_version()
+    )
+    for releases in catalogs:
+        applicable = []
+        for candidate in releases:
+            if candidate.get('type') == 'application' and not release_update.application_release_applicable(
+                candidate.get('components'),
+                configured_driver_names(moduleSettings.get('devices', ())),
+                component_versions.RUNTIME_VERSION,
+                DRIVER_VERSIONS
+            ):
+                continue
+            applicable.append(candidate)
+        selected = release_update.select_release(
+            applicable, application_sequence, firmware_sequence,
+            application_version, firmware_version
+        )
+        if selected:
+            choices.append({
+                'version': selected.get('version', ''),
+                'type': selected.get('type', ''),
+                'release_sequence': selected.get('release_sequence', 0),
+                'notes': selected.get('notes', ''),
+                'published_at': selected.get('published_at', ''),
+                'releases': applicable,
+            })
+    choices.sort(
+        key=lambda item: int(item.get('release_sequence', 0)), reverse=True
+    )
+    release_available_choices = choices
+    if not choices:
+        release_available = {}
+        return 'No newer compatible release'
+    selected_choice = choices[0]
     update_orchestrator.begin(
-        applicable,
-        app_update.running_release_sequence(),
-        firmware_update.running_release_sequence(),
-        app_update.running_version(device_settings.ha_device_info.get('sw', '')),
-        firmware_update.running_version(hardware_platform.runtime_version())
+        selected_choice['releases'], application_sequence, firmware_sequence,
+        application_version, firmware_version
     )
     release = update_orchestrator.next_release()
     if not release:
         release_available = {}
         return 'No newer compatible release'
-    running = (
-        app_update.running_version(device_settings.ha_device_info.get('sw', ''))
-        if release.get('type') == 'application' else
-        firmware_update.running_version(hardware_platform.runtime_version())
-    )
-    running_sequence = (
-        app_update.running_release_sequence()
-        if release.get('type') == 'application' else
-        firmware_update.running_release_sequence()
-    )
-    release_sequence = int(release.get('release_sequence', 0))
-    if (
-        (running_sequence and release_sequence <= running_sequence) or
-        (not running_sequence and str(release.get('version', '')) == str(running))
-    ):
-        release_available = {}
-        return 'No newer release'
     release_available = release
     logOutput(
         'Local', 'Release update',

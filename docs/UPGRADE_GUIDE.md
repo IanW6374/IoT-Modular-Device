@@ -129,10 +129,18 @@ reason.
 
 ### Automatic release checks
 
-**Maintenance > Upgrades > Automatic upgrade** separates an immediate manual
+**Maintenance > Upgrade > Automatic upgrade** separates an immediate manual
 check from saved scheduling preferences. A schedule can be disabled, daily at
 the selected device-local time, or weekly at the selected weekday and local
 time. The device time zone is configured under **Device > Time / Date**.
+
+After a check, **Install upgrade** presents Automatic and Manual as explicit
+methods in one workflow. Automatic offers up to eight newer compatible versions
+retained in the selected Management Suite channel, newest first; Manual instead
+requests a local `.iotuni`, `.iotapp` or `.iotcore` file. Every automatic option
+comes from an independently signed descriptor and is revalidated when selected.
+The milestone track then changes to the selected artifact type and reports each
+stage through its own circular percentage indicator.
 
 User-facing terminology is deliberately consistent across IoT-MD and its
 management services: an **upgrade** installs a newer signed version, a
@@ -226,7 +234,7 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha32.state.json \
   --evidence .qualification/alpha32.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.32 --sequence 2737 status
+  --device-id iot-md-001 --version 3.0.0-alpha.33 --sequence 2738 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
@@ -235,7 +243,7 @@ Monitor health over the mTLS Device API using the applicable JSON field paths:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha32.state.json \
   --evidence .qualification/alpha32.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.32 --sequence 2737 monitor \
+  --device-id iot-md-001 --version 3.0.0-alpha.33 --sequence 2738 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \

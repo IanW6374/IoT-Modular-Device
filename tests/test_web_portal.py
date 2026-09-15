@@ -2200,7 +2200,7 @@ class WebPortalTests(unittest.TestCase):
         )
         self.assertIn('.upgrade-grid{display:grid;grid-template-columns:1fr;', portal_ui.PORTAL_CSS)
         self.assertNotIn('id="update-upload-form"', updates)
-        self.assertIn('href="/update-install?source=manual"', updates)
+        self.assertIn('href="/update-install"', updates)
         self.assertIn('id="update-upload-form"', manual_update)
         self.assertIn('Initiate upgrade', manual_update)
         self.assertIn(
@@ -2225,8 +2225,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('id="update-cancel"', manual_update)
         self.assertIn('<strong>Current task: <span id="update-overall-label">', manual_update)
         self.assertIn('id="update-overall"', manual_update)
-        self.assertIn('id="update-overall-bar"', manual_update)
+        self.assertNotIn('id="update-overall-bar"', manual_update)
         self.assertIn('id="update-stage-list"', manual_update)
+        self.assertIn('class="upgrade-stage-name"', manual_update)
+        self.assertIn('class="upgrade-stage-ring" role="progressbar"', manual_update)
+        self.assertIn('class="upgrade-stage-percent">0%</span>', manual_update)
+        self.assertIn('--upgrade-step-count:5', manual_update)
+        self.assertIn('Manual upgrade selected', manual_update)
+        self.assertIn('<li class="complete" style="--step-progress:100%"', manual_update)
         self.assertIn('Current task', manual_update)
         self.assertNotIn('Step "+(index+1)+" of "+flow.length', manual_update)
         self.assertIn('overallLabel.textContent=flow[index][1]', manual_update)
@@ -2554,6 +2560,10 @@ class WebPortalTests(unittest.TestCase):
             '.upgrade-card-actions{justify-content:flex-end}', portal_ui.PORTAL_CSS
         )
         self.assertNotIn('id="update-upload-form"', idle)
+        chooser = web_portal.render_update_install_page('csrf', {})
+        self.assertIn('<h2>Select upgrade method</h2>', chooser)
+        self.assertIn('href="/update-install?source=manual"', chooser)
+        self.assertIn('aria-disabled="true"><strong>Automatic</strong>', chooser)
         manual = web_portal.render_update_install_page(
             'csrf', {}, source='manual'
         )
@@ -2566,14 +2576,12 @@ class WebPortalTests(unittest.TestCase):
             'update_status': 'idle',
             'firmware_update_status': 'idle',
         }, {})
-        self.assertIn(
-            'href="/update-install?source=automatic"', available
-        )
+        self.assertIn('href="/update-install"', available)
         automatic_section = available.split('<h2>Automatic upgrade</h2>', 1)[1].split(
             '</section>', 1
         )[0]
         self.assertLess(
-            automatic_section.index('Select automatic upgrade'),
+            automatic_section.index('Choose upgrade method'),
             automatic_section.index('Check for upgrades'),
         )
         self.assertNotIn('action="/download-release"', available)
@@ -2581,10 +2589,29 @@ class WebPortalTests(unittest.TestCase):
         automatic = web_portal.render_update_install_page('csrf', {
             'release_available_type': 'universal',
             'release_available_version': '3.0.0-alpha.29',
+            'release_available_options': (
+                {
+                    'type': 'universal', 'version': '3.0.0-alpha.29',
+                    'release_sequence': 3029,
+                },
+                {
+                    'type': 'universal', 'version': '3.0.0-alpha.28',
+                    'release_sequence': 3028,
+                },
+            ),
         }, source='automatic')
         self.assertIn('<h2>Automatic upgrade</h2>', automatic)
         self.assertIn('action="/download-release"', automatic)
+        self.assertIn('name="release_version" required', automatic)
+        self.assertIn('value="3.0.0-alpha.29"', automatic)
+        self.assertIn('value="3.0.0-alpha.28"', automatic)
+        self.assertIn('3.0.0-alpha.28 — Universal', automatic)
+        self.assertIn('data-kind="universal"', automatic)
+        self.assertIn('id="automatic-stage-list"', automatic)
+        self.assertIn('automaticSelect.onchange=renderAutomaticFlow', automatic)
         self.assertIn('>Initiate upgrade</button>', automatic)
+        self.assertIn('Automatic upgrade selected', automatic)
+        self.assertIn('Select version', automatic)
         self.assertIn('Inspect paired manifest', automatic)
         self.assertIn('Pair verified components', automatic)
         task = web_portal.render_upgrade_task_page(
@@ -2596,6 +2623,10 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<h1>Install upgrade</h1>', task)
         self.assertIn('id="upgrade-task-steps"', task)
         self.assertIn('id="upgrade-task-progress"', task)
+        self.assertIn('class="upgrade-stage-ring" role="progressbar"', task)
+        self.assertIn('Automatic upgrade selected', task)
+        self.assertIn('Select version', task)
+        self.assertIn('function setStep(x,state,percent)', task)
         self.assertIn('fetch("/task-status?id="', task)
         self.assertIn("location.replace('/update-install')", task)
         settings_idle = web_portal.render_update_settings_page('csrf', {})
@@ -2680,7 +2711,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Upload application', universal)
         self.assertIn('Verify and stage application', universal)
         self.assertIn('Pair verified components', universal)
-        self.assertEqual(universal.count('<li class="complete">'), 7)
+        self.assertEqual(universal.count('<li class="complete" style='), 7)
         self.assertNotIn('action="/activate-update"', universal)
         self.assertNotIn('action="/activate-firmware"', universal)
         self.assertNotIn('Upload and verify', ready)

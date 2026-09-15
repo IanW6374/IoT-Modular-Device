@@ -32,3 +32,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.30 power-cycle and portal resilience test](v3.0.0-alpha.30.md)
 - [v3.0.0-alpha.31 final portal and qualification-candidate test](v3.0.0-alpha.31.md)
 - [v3.0.0-alpha.32 IoT CA renewal-key test](v3.0.0-alpha.32.md)
+- [v3.0.0-alpha.33 upgrade workflow and release-selector test](v3.0.0-alpha.33.md)

@@ -49,6 +49,13 @@ class UpdateSecurityTests(unittest.TestCase):
             'https://iot-upgrade.home.arpa:8443/{channel}/latest.json',
         )
         self.assertEqual(
+            release_update.release_versions_request_url(
+                'https://iot-upgrade.home.arpa:8443/{channel}/latest.json',
+                'alpha',
+            ),
+            'https://iot-upgrade.home.arpa:8443/alpha/versions.json',
+        )
+        self.assertEqual(
             release_update.release_base_url(
                 'https://iot-upgrade.home.arpa:8443/{channel}/latest.json'
             ),
@@ -595,6 +602,51 @@ class UpdateSecurityTests(unittest.TestCase):
             release_update.release_descriptors(channel, 'alpha'),
             (descriptor,),
         )
+
+    def test_multi_version_inventory_accepts_only_signed_bounded_catalogs(self):
+        Path(update_security.CATALOG_VERIFICATION_KEY_PATH).write_bytes(
+            self.public_key
+        )
+
+        def catalog(version, sequence):
+            descriptor = {
+                'format_version': 3, 'target_board': 'esp32-s3',
+                'channel': 'alpha', 'type': 'universal',
+                'version': version, 'release_sequence': sequence,
+                'url': 'https://updates.example/' + version + '.iotuni',
+                'size': 512, 'sha256': ('a' if sequence == 30200 else 'b') * 64,
+                'minimum_core_api': 9, 'minimum_config_api': 3,
+                'maximum_config_api': 3, 'notes': version,
+                'published_at': '2026-09-15T08:00:00Z',
+                'signature_scheme': update_security.SIGNATURE_SCHEME,
+            }
+            descriptor['signature'] = update_security.sign_manifest(
+                'release-catalog', descriptor, self.private_key
+            )
+            document = dict(descriptor)
+            document['releases'] = [descriptor]
+            return document
+
+        newest = catalog('3.0.0-alpha.33', 30200)
+        previous = catalog('3.0.0-alpha.32', 30199)
+        inventory = {
+            'format_version': 1, 'channel': 'alpha',
+            'generated_at': '2026-09-15T08:00:00Z',
+            'catalogs': [newest, previous],
+        }
+        parsed = release_update.release_catalogs(inventory, 'alpha')
+        self.assertEqual(
+            [releases[0]['version'] for releases in parsed],
+            ['3.0.0-alpha.33', '3.0.0-alpha.32'],
+        )
+        duplicate = dict(inventory)
+        duplicate['catalogs'] = [newest, newest]
+        with self.assertRaisesRegex(ValueError, 'duplicate version'):
+            release_update.release_catalogs(duplicate, 'alpha')
+        tampered = json.loads(json.dumps(inventory))
+        tampered['catalogs'][0]['releases'][0]['notes'] = 'changed'
+        with self.assertRaisesRegex(ValueError, 'signature verification failed'):
+            release_update.release_catalogs(tampered, 'alpha')
 
     def test_release_notes_include_signed_source_revision(self):
         revision = '1' * 40

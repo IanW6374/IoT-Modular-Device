@@ -31,6 +31,8 @@ from tls_sessions import TLSSessionHandle, open_tls_connection
 
 
 MAX_DESCRIPTOR_BYTES = 16384
+MAX_INVENTORY_BYTES = 65536
+MAX_CHANNEL_VERSIONS = 8
 MAX_REDIRECTS = 4
 _TLS_SESSION = TLSSessionHandle()
 
@@ -315,6 +317,14 @@ def release_manifest_request_url(manifest_url, channel):
     return manifest_url + separator + 'channel=' + channel
 
 
+def release_versions_request_url(manifest_url, channel):
+    """Return the optional multi-version inventory URL for a channel."""
+    latest = release_manifest_request_url(manifest_url, channel)
+    if latest.endswith('/latest.json'):
+        return latest[:-len('latest.json')] + 'versions.json'
+    return latest
+
+
 async def _read_body(reader, length, maximum):
     payload = bytearray()
     if length is not None and length > maximum:
@@ -344,6 +354,22 @@ async def fetch_releases(manifest_url, channel, ca_path):
         return release_descriptors(document, channel)
     finally:
         await _close(writer)
+
+
+async def fetch_release_catalogs(manifest_url, channel, ca_path):
+    """Return authenticated release sets, falling back to the legacy latest index."""
+    url = release_versions_request_url(manifest_url, channel)
+    if url != release_manifest_request_url(manifest_url, channel):
+        try:
+            reader, writer, length = await _open_response(url, ca_path)
+            try:
+                payload = await _read_body(reader, length, MAX_INVENTORY_BYTES)
+                return release_catalogs(json.loads(payload.decode()), channel)
+            finally:
+                await _close(writer)
+        except OSError:
+            pass
+    return (await fetch_releases(manifest_url, channel, ca_path),)
 
 
 async def check_release(manifest_url, channel, ca_path):
@@ -378,6 +404,7 @@ def release_descriptors(document, channel=''):
         raise ValueError('release channel must contain between one and three releases')
     releases = []
     types = set()
+    sequences = set()
     for release in listed:
         if not isinstance(release, dict) or 'releases' in release:
             raise ValueError('release channel contains an invalid release')
@@ -389,10 +416,50 @@ def release_descriptors(document, channel=''):
         if release_type in types:
             raise ValueError('release channel contains a duplicate release type')
         types.add(release_type)
+        sequences.add(int(release.get('release_sequence', 0)))
         releases.append(release)
+    if len(sequences) != 1:
+        raise ValueError('release channel contains mismatched release sequences')
     if fallback not in releases:
         raise ValueError('release channel fallback is not in the signed release list')
     return tuple(releases)
+
+
+def release_catalogs(document, channel=''):
+    """Validate a bounded inventory of independently signed release sets."""
+    if not isinstance(document, dict) or int(document.get('format_version', 0)) != 1:
+        raise ValueError('release inventory format is invalid')
+    inventory_channel = str(document.get('channel', ''))
+    if inventory_channel not in ('stable', 'beta', 'alpha'):
+        raise ValueError('release inventory channel is invalid')
+    if channel and inventory_channel != str(channel):
+        raise ValueError('release inventory channel does not match the request')
+    listed = document.get('catalogs')
+    if not isinstance(listed, list) or not 1 <= len(listed) <= MAX_CHANNEL_VERSIONS:
+        raise ValueError('release inventory has an invalid number of versions')
+    catalogs = []
+    versions = set()
+    sequences = set()
+    for catalog in listed:
+        releases = release_descriptors(catalog, inventory_channel)
+        fallback = releases[0]
+        version = str(fallback.get('version', ''))
+        sequence = int(fallback.get('release_sequence', 0))
+        if version in versions or sequence in sequences:
+            raise ValueError('release inventory contains a duplicate version')
+        versions.add(version)
+        sequences.add(sequence)
+        catalogs.append(releases)
+    return tuple(catalogs)
+
+
+def release_choice_options(choices):
+    """Return the non-secret fields needed by the automatic version selector."""
+    fields = ('version', 'type', 'release_sequence', 'notes', 'published_at')
+    return [
+        {field: choice.get(field, '') for field in fields}
+        for choice in choices
+    ]
 
 
 def select_release(

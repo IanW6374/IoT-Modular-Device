@@ -128,14 +128,16 @@ IoT-MD uses three signed artifact types:
 | `.iotcore` | Secure MicroPython core firmware |
 | `.iotuni` | Matched application and core universal upgrade |
 
-Use **Maintenance > Upgrades** for normal installation. Release sequences must
+Use **Maintenance > Upgrade** for normal installation. Release sequences must
 increase monotonically. Verification occurs before staging, and activation uses
 trial health checks with rollback support. Automatic checks can be disabled or
 scheduled daily/weekly in device-local time, independently of automatic
 download and activation. When a promoted release includes `.iotuni`, automatic
 upgrades download it and use the same paired verification, activation and
 rollback transaction as a manual universal upload. The application and core
-descriptors remain available for first-time setup and recovery.
+descriptors remain available for first-time setup and recovery. Current devices
+can select from the Management Suite channel's bounded set of newer compatible,
+independently signed versions; the newest is selected by default.
 
 See the [upgrade guide](docs/UPGRADE_GUIDE.md) for release and USB recovery
 procedures.

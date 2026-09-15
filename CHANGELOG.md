@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.33 - 2026-09-15
+
+- Replace the upgrade ladder with a responsive horizontal milestone track whose
+  task names sit above circular per-stage progress indicators; retain a compact
+  vertical layout on narrow screens.
+- Make Automatic and Manual explicit selectable methods in the shared install
+  workflow, with a signed-file input for Manual and an authenticated release
+  version selector for Automatic.
+- Consume the Management Suite's bounded multi-version channel inventory,
+  filter every independently signed release set for compatibility and monotonic
+  sequence, preselect the newest valid version and reject stale submissions.
+- Retain native ABI 6 and use release sequence 2738.
+
 ## 3.0.0-alpha.32 - 2026-09-15
 
 - Decode the standard SEC1 DER renewal key written during IoT CA enrollment
