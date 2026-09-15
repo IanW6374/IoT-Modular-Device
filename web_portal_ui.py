@@ -392,9 +392,8 @@ LOGGING_NAVIGATION = (
 )
 
 UPGRADE_NAVIGATION = (
-    ('updates', '/updates', 'Available upgrades'),
-    ('update_install', '/update-install', 'Install upgrade'),
     ('update_settings', '/update-settings', 'Settings'),
+    ('updates', '/updates', 'Upgrade'),
 )
 
 

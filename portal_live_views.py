@@ -1272,13 +1272,13 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
     )
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Available upgrades',
+            'Maintenance', 'Upgrade',
             'Review upgrade state and choose an automatic or manual upgrade path.'
         ) + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>Summary</h2></div>' +
         render_update_summary_html(status, False) + '</section>' + staged + rollback + automatic + manual
     )
-    return portal_ui.shell('IoT-MD available upgrades', 'updates', body, token)
+    return portal_ui.shell('IoT-MD upgrade', 'updates', body, token)
 
 
 def render_update_install_page(token, status=None, message='', error=False, source=''):
@@ -1307,7 +1307,7 @@ def render_update_install_page(token, status=None, message='', error=False, sour
         ) + _notice(message, error) + workspace
     )
     return portal_ui.shell(
-        'IoT-MD install upgrade', 'update_install', body, token, script
+        'IoT-MD install upgrade', 'updates', body, token, script
     )
 
 
@@ -1350,7 +1350,7 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         repr(str(return_url)) + ');},1000);}return;}setTimeout(poll,600);}).catch(function(){setTimeout(poll,1200);});}poll();'
     )
     return portal_ui.shell(
-        'IoT-MD install upgrade', 'update_install', body, token, script
+        'IoT-MD install upgrade', 'updates', body, token, script
     )
 
 

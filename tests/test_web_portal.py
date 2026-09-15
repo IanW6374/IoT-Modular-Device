@@ -906,9 +906,13 @@ class WebPortalTests(unittest.TestCase):
 
         self.assertIn('aria-label="Maintenance submenu"', html)
         self.assertIn('aria-label="Upgrades submenu"', maintenance_menu)
-        self.assertIn('href="/updates">Available upgrades</a>', maintenance_menu)
-        self.assertIn('href="/update-install">Install upgrade</a>', maintenance_menu)
+        self.assertIn('href="/updates">Upgrade</a>', maintenance_menu)
+        self.assertNotIn('href="/update-install">Install upgrade</a>', maintenance_menu)
         self.assertIn('href="/update-settings">Settings</a>', maintenance_menu)
+        self.assertLess(
+            maintenance_menu.index('href="/update-settings">Settings</a>'),
+            maintenance_menu.index('href="/updates">Upgrade</a>'),
+        )
         self.assertNotIn('/updates?check=1', maintenance_menu)
         self.assertIn('class="nav-subgroup">', maintenance_menu)
         self.assertIn('aria-expanded="false">Certificates</button>', maintenance_menu)
@@ -1485,7 +1489,7 @@ class WebPortalTests(unittest.TestCase):
                      session_id + '\r\n\r\n').encode()
                 )
                 self.assertIn('200 OK', automatic_check)
-                self.assertIn('<h1>Available upgrades</h1>', automatic_check)
+                self.assertIn('<h1>Upgrade</h1>', automatic_check)
                 self.assertIn('Not checked', automatic_check)
                 self.assertEqual(len(portal_actions), action_count)
                 settings_body = (
@@ -2157,7 +2161,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('href="/download-diagnostics"', logging)
         self.assertIn('aria-label="Maintenance submenu"', logging)
 
-        self.assertIn('<h1>Available upgrades</h1>', updates)
+        self.assertIn('<h1>Upgrade</h1>', updates)
         self.assertIn('<h2>Summary</h2>', updates)
         self.assertIn('<h2>Upgrade already staged</h2>', updates)
         self.assertIn('<h2>Rollback</h2>', updates)

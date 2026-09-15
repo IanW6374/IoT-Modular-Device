@@ -4,6 +4,9 @@
 
 - Present the sole-administrator protection explanation as hover and accessible
   help on the protected user controls instead of permanent form text.
+- Remove the redundant **Install upgrade** navigation entry, retain its route
+  as the transient installation workflow, and rename **Available upgrades** to
+  **Upgrade**.
 
 ## 3.0.0-alpha.29 - 2026-09-14
 
