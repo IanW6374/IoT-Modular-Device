@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Present the sole-administrator protection explanation as hover and accessible
+  help on the protected user controls instead of permanent form text.
+
 ## 3.0.0-alpha.29 - 2026-09-14
 
 - Consolidate upgrade discovery into ordered Summary, staged-upgrade,

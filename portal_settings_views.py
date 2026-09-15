@@ -488,6 +488,10 @@ def render_user_settings_page(
         sole_administrator = bool(
             enabled and role == 'administrator' and enabled_administrators == 1
         )
+        administrator_safety_tip = (
+            'Protected: enable another administrator before changing this account’s role '
+            'or disabling it.'
+        )
         change_required = bool(user.get('password_change_required'))
         timeout_minutes = max(5, min(
             1440, (int(user.get('session_timeout_s', 3600) or 3600) + 59) // 60
@@ -512,8 +516,8 @@ def render_user_settings_page(
             html_escape(name) + '"></label>'
             '<label class="field">Role' + (
                 '<input type="hidden" name="role" value="administrator">'
-                '<select disabled aria-describedby="administrator-safety-' +
-                html_escape(name) + '">' + options + '</select>'
+                '<select disabled title="' + html_escape(administrator_safety_tip) + '">' +
+                options + '</select>'
                 if sole_administrator else
                 '<select name="role">' + options + '</select>'
             ) + '</label>'
@@ -526,11 +530,9 @@ def render_user_settings_page(
             html_escape(max_retries) + '</span></div>' +
             (
                 '<input type="hidden" name="enabled" value="true">'
-                '<label class="check"><input type="checkbox" checked disabled '
-                'aria-describedby="administrator-safety-' + html_escape(name) + '">Enabled</label>'
-                '<p id="administrator-safety-' + html_escape(name) + '" class="field-hint">'
-                'Protected: enable another administrator before changing this account’s role '
-                'or disabling it.</p>'
+                '<label class="check" title="' + html_escape(administrator_safety_tip) + '">'
+                '<input type="checkbox" checked disabled aria-label="Enabled. ' +
+                html_escape(administrator_safety_tip) + '">Enabled</label>'
                 if sole_administrator else
                 '<label class="check"><input type="checkbox" name="enabled" value="true"' +
                 (' checked' if enabled else '') + '>Enabled</label>'

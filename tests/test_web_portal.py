@@ -837,8 +837,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('name="enabled" value="false"', user)
         self.assertIn('name="enabled" value="true" checked>Enabled', user)
         self.assertIn('name="role" value="administrator"', user)
-        self.assertIn('select disabled aria-describedby="administrator-safety-admin"', user)
-        self.assertIn('Protected: enable another administrator', user)
+        self.assertIn('select disabled title="Protected: enable another administrator', user)
+        self.assertIn(
+            '<label class="check" title="Protected: enable another administrator', user
+        )
+        self.assertIn(
+            'aria-label="Enabled. Protected: enable another administrator', user
+        )
+        self.assertNotIn('<p id="administrator-safety-', user)
         self.assertIn('Require password change at next sign-in', user)
         self.assertIn('Require password change at first sign-in', user)
         self.assertIn('.portal-user-card .actions button{width:10rem}', portal_ui.PORTAL_CSS)
