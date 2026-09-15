@@ -29,3 +29,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.27 qualification storage and workflow test](v3.0.0-alpha.27.md)
 - [v3.0.0-alpha.28 constrained universal-upload test](v3.0.0-alpha.28.md)
 - [v3.0.0-alpha.29 unified upgrade workflow test](v3.0.0-alpha.29.md)
+- [v3.0.0-alpha.30 power-cycle and portal resilience test](v3.0.0-alpha.30.md)

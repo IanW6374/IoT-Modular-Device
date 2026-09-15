@@ -224,18 +224,18 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha29.state.json \
-  --evidence .qualification/alpha29.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.29 --sequence 2734 status
+  --state .qualification/alpha30.state.json \
+  --evidence .qualification/alpha30.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.30 --sequence 2735 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
 
 ```sh
 python3 v3/host/qualification_runner.py \
-  --state .qualification/alpha29.state.json \
-  --evidence .qualification/alpha29.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.29 --sequence 2734 monitor \
+  --state .qualification/alpha30.state.json \
+  --evidence .qualification/alpha30.evidence.json \
+  --device-id iot-md-001 --version 3.0.0-alpha.30 --sequence 2735 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \

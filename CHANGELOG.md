@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.30 - 2026-09-15
+
 - Present the sole-administrator protection explanation as hover and accessible
   help on the protected user controls instead of permanent form text.
 - Remove the redundant **Install upgrade** navigation entry, retain its route
@@ -9,6 +11,16 @@
   **Upgrade**.
 - Right-align the Automatic upgrade action row and keep **Check for upgrades**
   as its rightmost action, matching the other upgrade sections.
+- Make qualification status reads side-effect free so an NVS capacity error
+  cannot prevent the portal or its error page from rendering.
+- Preserve authoritative qualification counters while pruning older derived
+  release summaries when encrypted NVS is under pressure.
+- Reclaim the inactive encrypted configuration and native transactional slots
+  before allocating their replacements, while retaining the selected valid
+  generation throughout every power-loss transition.
+- Record the HTTP method and route with future portal request failures.
+- Retain native ABI 6 and use release sequence 2735.
+
 
 ## 3.0.0-alpha.29 - 2026-09-14
 
