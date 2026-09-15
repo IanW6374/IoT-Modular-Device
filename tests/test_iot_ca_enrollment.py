@@ -35,6 +35,22 @@ class IoTCAEnrollmentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'another device hostname'):
             iot_ca_enrollment._package(self.package(), 'other.local')
 
+    def test_renewal_key_decoder_accepts_current_der_and_legacy_scalar(self):
+        private = bytes(range(1, 33))
+        self.assertEqual(
+            iot_ca_enrollment._ec_private_key_scalar(
+                iot_ca_enrollment._ec_private_key_der(private)
+            ),
+            private,
+        )
+        self.assertEqual(
+            iot_ca_enrollment._ec_private_key_scalar(private), private
+        )
+
+    def test_renewal_key_decoder_rejects_malformed_key(self):
+        with self.assertRaises(ValueError):
+            iot_ca_enrollment._ec_private_key_scalar(b'not-a-private-key')
+
     def test_dns_failure_is_reported_with_endpoint_context(self):
         error = OSError(-202)
         self.assertEqual(
@@ -303,7 +319,9 @@ class IoTCAEnrollmentTests(unittest.TestCase):
                     Path(iot_ca_enrollment.RENEWAL_CERTIFICATE_PATH).write_bytes(
                         b'current-renewal-certificate'
                     )
-                    Path(iot_ca_enrollment.RENEWAL_KEY_PATH).write_bytes(renewal_key)
+                    Path(iot_ca_enrollment.RENEWAL_KEY_PATH).write_bytes(
+                        iot_ca_enrollment._ec_private_key_der(renewal_key)
+                    )
                     Path(iot_ca_enrollment.STATE_PATH).write_text(json.dumps({
                         'endpoint': 'https://iot-ca.home.arpa:9010',
                         'enrollment_id': 'enrollment-1',

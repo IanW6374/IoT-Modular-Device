@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.32 - 2026-09-15
+
+- Decode the standard SEC1 DER renewal key written during IoT CA enrollment
+  before signing a manual or scheduled renewal request.
+- Retain compatibility with early development installations that persisted the
+  P-256 renewal scalar directly, while rejecting malformed or out-of-range
+  renewal keys.
+- Retain native ABI 6 and use release sequence 2737.
+
 ## 3.0.0-alpha.31 - 2026-09-15
 
 - Keep manual uploads moving when their browser tab is hidden by scheduling

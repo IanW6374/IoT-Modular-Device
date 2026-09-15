@@ -257,6 +257,30 @@ def _ec_private_key_der(private_key):
         _der(0xa1, _der(0x03, b'\x00' + _public_key(private_key)))
     )
 
+def _ec_private_key_scalar(payload):
+    """Return the raw P-256 scalar from a SEC1 DER key.
+
+    Early development builds could persist the scalar directly, so accept that
+    representation as well. Current enrollment stores the standard SEC1
+    ECPrivateKey structure produced by :func:`_ec_private_key_der`.
+    """
+    payload = bytes(payload)
+    if len(payload) == 32:
+        scalar = payload
+    else:
+        outer_tag, outer_start, outer_end, outer_next = _asn1_item(payload)
+        if outer_tag != 0x30 or outer_next != len(payload):
+            raise ValueError('EC private key is not a single DER sequence')
+        fields = list(_asn1_items(payload, outer_start, outer_end))
+        if len(fields) < 2 or fields[0][0] != 0x02 or fields[1][0] != 0x04:
+            raise ValueError('EC private key fields are invalid')
+        version = payload[fields[0][1]:fields[0][2]]
+        scalar = payload[fields[1][1]:fields[1][2]]
+        if version != b'\x01' or len(scalar) != 32:
+            raise ValueError('EC private key value is invalid')
+    update_security.public_key_bytes(scalar)
+    return scalar
+
 def _signature_der(raw_signature):
     raw = bytes(raw_signature)
     return _seq(_integer(raw[:32]), _integer(raw[32:]))

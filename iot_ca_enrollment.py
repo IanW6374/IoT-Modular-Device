@@ -25,7 +25,8 @@ import time
 import certificate_manager
 import update_security
 from certificate_codec import (
-    _b64decode, _csr, _ec_private_key_der, _iso_epoch, _new_private_key,
+    _b64decode, _csr, _ec_private_key_der, _ec_private_key_scalar, _iso_epoch,
+    _new_private_key,
 )
 
 
@@ -358,8 +359,10 @@ async def renew(config, paths, validate, progress=None):
     with open(RENEWAL_CERTIFICATE_PATH, 'rb') as stream:
         current_renewal_certificate = stream.read()
     with open(RENEWAL_KEY_PATH, 'rb') as stream:
-        current_renewal_key = stream.read()
-    if len(current_renewal_key) != 32:
+        persisted_renewal_key = stream.read()
+    try:
+        current_renewal_key = _ec_private_key_scalar(persisted_renewal_key)
+    except Exception:
         raise ValueError('IoT CA renewal private key is invalid')
 
     portal_key = _new_private_key()
