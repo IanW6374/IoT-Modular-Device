@@ -2520,6 +2520,10 @@ class WebPortalTests(unittest.TestCase):
             idle.index('<h2>Manual upgrade</h2>'),
         )
         self.assertIn('action="/check-release"', idle)
+        self.assertIn('class="update-actions upgrade-card-actions"', idle)
+        self.assertIn(
+            '.upgrade-card-actions{justify-content:flex-end}', portal_ui.PORTAL_CSS
+        )
         self.assertNotIn('id="update-upload-form"', idle)
         manual = web_portal.render_update_install_page(
             'csrf', {}, source='manual'
@@ -2535,6 +2539,13 @@ class WebPortalTests(unittest.TestCase):
         }, {})
         self.assertIn(
             'href="/update-install?source=automatic"', available
+        )
+        automatic_section = available.split('<h2>Automatic upgrade</h2>', 1)[1].split(
+            '</section>', 1
+        )[0]
+        self.assertLess(
+            automatic_section.index('Select automatic upgrade'),
+            automatic_section.index('Check for upgrades'),
         )
         self.assertNotIn('action="/download-release"', available)
         self.assertEqual(available.count('3.0.0-alpha.29'), 1)

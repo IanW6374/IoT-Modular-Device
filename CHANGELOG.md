@@ -7,6 +7,8 @@
 - Remove the redundant **Install upgrade** navigation entry, retain its route
   as the transient installation workflow, and rename **Available upgrades** to
   **Upgrade**.
+- Right-align the Automatic upgrade action row and keep **Check for upgrades**
+  as its rightmost action, matching the other upgrade sections.
 
 ## 3.0.0-alpha.29 - 2026-09-14
 

@@ -423,7 +423,7 @@ def render_release_check_html(status, token, select_only=False):
         '<button class="secondary" type="submit" title="Check the configured signed release channel now.">'
         'Check for upgrades</button></form>'
     )
-    return check + download
+    return download + check
 
 def render_update_actions_html(status, token):
     activation = (
@@ -1262,7 +1262,8 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
     automatic = (
         '<section class="card"><div class="section-title"><h2>Automatic upgrade</h2></div>'
         '<p class="muted">Check the configured signed release channel and select an available upgrade.</p>'
-        '<div class="update-actions">' + render_release_check_html(status, token, True) + '</div></section>'
+        '<div class="update-actions upgrade-card-actions">' +
+        render_release_check_html(status, token, True) + '</div></section>'
     )
     manual = (
         '<section class="card"><div class="section-title"><h2>Manual upgrade</h2></div>'

@@ -184,6 +184,7 @@ PORTAL_CSS = (
     'align-items:center;flex-wrap:wrap;padding:8px;border:1px solid var(--line);border-radius:9px}'
     '.release-available{display:flex;align-items:center;gap:13px;flex:1 1 32rem;min-width:0}'
     '.release-available p{margin:0;overflow-wrap:anywhere}.release-available form{margin-left:auto;flex:0 0 auto}'
+    '.upgrade-card-actions{justify-content:flex-end}'
     '.upgrade-source-block{padding:4px 0}.upgrade-source-block>h3{margin-bottom:4px}'
     '.upgrade-source-divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--muted);'
     'font-size:.76rem;font-weight:750;letter-spacing:.05em;text-transform:uppercase}'
