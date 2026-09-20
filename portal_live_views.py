@@ -445,7 +445,7 @@ def render_universal_update_html(status, token):
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<button class="secondary" type="submit" title="Boot the staged core and application '
         'together and confirm both after the portal health check.">Restart and install universal upgrade' +
-        ((' ' + html_escape(version)) if version else '') + ' and reboot</button></form>'
+        ((' ' + html_escape(version)) if version else '') + '</button></form>'
     )
 
 def render_application_rollback_html(status, token):
