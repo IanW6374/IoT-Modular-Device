@@ -41,7 +41,7 @@ configurations are in [`examples/`](examples/).
 - Experimental USB NCM application support in v2.5, capability-gated and
   unavailable on the current ESP32-S3 core; it is never required for setup,
   recovery or normal operation.
-- MicroPython 1.29.0 built with ESP-IDF 5.5.1.
+- MicroPython 1.29.0 built with ESP-IDF 5.5.5 (from v3 Alpha34).
 - Python 3.12 or newer for host tooling.
 - ESP-IDF and the pinned MicroPython checkout for core builds.
 

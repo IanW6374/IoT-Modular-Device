@@ -1,6 +1,6 @@
 # MicroPython and firmware baseline
 
-IoT-MD 2.5 uses MicroPython 1.29.0 at commit
+IoT-MD uses MicroPython 1.29.0 at commit
 `0fd6c573ea815774668bbb16b8e197c8822368b2`. The complete ESP32-S3 core is
 built reproducibly with the project-owned board definition, frozen Python
 manifest, native cryptography module, signed OTA wrapper and secure factory
@@ -8,11 +8,13 @@ image.
 
 ## Toolchain policy
 
-The qualified toolchain remains ESP-IDF 5.5.1 at commit
-`fcae32885b0296b32044cb99ecbdc50d98dddb83`. MicroPython 1.29 recommends
-ESP-IDF 5.5.2 and supports 5.5.1. Keeping the existing IDF patch release avoids
-changing two major runtime dependencies in the same device release. The exact
-MicroPython and ESP-IDF revisions are enforced by `firmware/build-lock.json`.
+From v3 Alpha34 the build uses ESP-IDF 5.5.5 at commit
+`b774170ff46c393eeb5e495ea37936038d3f4f4f`, replacing the 5.5.1 baseline.
+MicroPython 1.29 recommends ESP-IDF 5.5.2; Alpha34 updates within that SDK's
+5.5 maintenance series while retaining the exact MicroPython source revision.
+The new pairing requires device qualification before production promotion.
+The exact revisions are enforced by `firmware/build-lock.json` and CI uses
+the same ESP-IDF patch release.
 
 ESP-IDF 6 is not used for v2.5. MicroPython 1.29's ESP32 port requires the
 supported IDF 5 family, and the v2.5 transport changes must be qualified against the

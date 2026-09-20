@@ -214,7 +214,7 @@ PORTAL_ROUTE_SPLITS = (
         'handle_live_routes', 'portal_route_live',
         (
             'action_handler', 'action_path', 'audit_log_getter',
-            'config_backup_getter', 'csrf_token', 'form_params',
+            'config_backup_getter', 'csrf_token', 'form_params', 'headers',
             'is_json_validation', 'levels', 'log_buffer_lines_setter',
             'log_getter', 'log_output', 'login_url', 'loglevel_setter',
             'method', 'module_snapshot', 'path', 'secure_cookie',

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.34 - 2026-09-20
+
+- Open the shared upgrade workflow directly, with Automatic, Manual and
+  conditional Staged and Rollback methods together above the milestones.
+- Fix horizontal milestone layout under the strict portal CSP without inline
+  style attributes or a horizontal scrollbar; retain a mobile vertical layout.
+- Make staging explicit, keep the same milestones after staging, and separate
+  the subsequent restart action. Keep release checks inline without percentages.
+- Keep automatic upgrade form actions inside their card and map receiving
+  progress to the appropriate component milestone.
+- Pin ESP-IDF 5.5.5 in the build lock and CI, retaining MicroPython 1.29.0 and
+  native ABI 6. Use release sequence 2739; renew hardware qualification for the
+  changed SDK baseline.
+
 ## 3.0.0-alpha.33 - 2026-09-15
 
 - Replace the upgrade ladder with a responsive horizontal milestone track whose
