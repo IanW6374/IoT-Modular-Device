@@ -4,8 +4,8 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.35` simplifies upgrade status and history and adds audited,
-administrator-only retries for failed qualification gates. See [release notes](../docs/V3_ALPHA35.md).
+Version `3.0.0-alpha.36` handles qualification retry archival under storage pressure
+and aligns the Automatic badge top-right. See [release notes](../docs/V3_ALPHA36.md).
 It retains native ABI 6, preflights paired application
 capacity before selecting a new core and can release verified staging blocks
 while extracting the application from PSRAM on a constrained filesystem. It

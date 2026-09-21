@@ -105,6 +105,12 @@ with sync_playwright() as p:
             assert page.locator('h1').inner_text() == 'Upgrade'
             assert page.get_by_role('heading', name='Upgrade history', exact=True).is_visible()
             assert page.locator('#upgrade-check-result').count() == 1
+            assert page.locator('#upgrade-check-result').evaluate('''(badge)=>{
+                const card=badge.parentElement, title=card.querySelector('strong');
+                const b=badge.getBoundingClientRect(), t=title.getBoundingClientRect();
+                const c=card.getBoundingClientRect();
+                return Math.abs(b.top-t.top)<2 && Math.abs(c.right-b.right-15)<2 && b.left>=t.right;
+            }'''), (width, route, 'badge not top right')
             assert page.locator('.metric.update-status').count() == 0
             rings = page.locator('.upgrade-stage-ring').evaluate_all('(els)=>els.map(e=>({x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y}))')
             assert len({round(r['y']) if width > 600 else round(r['x']) for r in rings}) == 1, (width, route, rings)

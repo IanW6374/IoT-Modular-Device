@@ -43,6 +43,15 @@ class FullNamespace(MemoryNamespace):
         raise StorageContractError('encrypted transactional storage is full')
 
 
+class LimitedNamespace(MemoryNamespace):
+    maximum = 4096
+
+    def commit(self, generation, payload):
+        if len(payload) > self.maximum:
+            raise StorageContractError('encrypted transactional storage is full')
+        return super().commit(generation, payload)
+
+
 def profile(**changes):
     value = {
         'name': 'test',
@@ -164,6 +173,43 @@ class V3OperationalQualificationTests(unittest.TestCase):
             self.recorder.restart_failed_gate('power-recovery', 'admin', 'Supply fixed', 0)
         self.assertEqual(self.recorder.snapshot(), before)
         self.assertEqual(self.recorder.retry_generation(), 0)
+
+    def test_retry_trims_old_diagnostics_when_free_storage_is_below_capability(self):
+        limited = LimitedNamespace()
+        self.recorder._history_namespace = limited
+        self.recorder.record_renewal(False)
+        self.recorder.restart_failed_gate('certificate-renewal', 'admin', 'Key fixed', 0)
+        # Only a minimal current summary plus one failure fits, despite the
+        # advertised 4096-byte payload capability.
+        minimal = dict(self.recorder._history)
+        minimal['releases'] = []
+        limited.maximum = len(json.dumps(minimal, sort_keys=True, separators=(',', ':')).encode())
+        self.recorder._history['releases'] = [dict(self.recorder._history['current'])]
+        self.recorder.record_renewal(False)
+        self.recorder.record_power_recovery(True)
+        self.recorder.restart_failed_gate('certificate-renewal', 'admin', 'Key fixed', 1)
+        saved = json.loads(limited.payload)
+        self.assertEqual(saved['releases'], [])
+        self.assertEqual(len(saved['retries']), 1)
+        self.assertEqual(saved['retry_generation'], 2)
+        self.assertEqual(saved['retries'][0]['reason'], 'Key fixed')
+        self.assertEqual(self.recorder.snapshot()['counters']['renewal_attempts'], 0)
+        self.assertEqual(self.recorder.snapshot()['counters']['power_recoveries'], 1)
+        restarted = OperationalQualification(self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), limited, self.campaign_namespace)
+        restarted.start()
+        self.assertEqual(restarted.retry_history(), saved['retries'])
+
+    def test_failed_archive_compaction_preserves_committed_history_and_gate(self):
+        self.recorder.record_renewal(False)
+        self.recorder.restart_failed_gate('certificate-renewal', 'admin', 'Key fixed', 0)
+        previous = json.loads(json.dumps(self.recorder._history))
+        self.recorder.record_renewal(False)
+        self.recorder._history_namespace = FullNamespace()
+        with self.assertRaises(StorageContractError):
+            self.recorder.restart_failed_gate('certificate-renewal', 'admin', 'Try again', 1)
+        self.assertEqual(self.recorder._history, previous)
+        self.assertEqual(self.recorder.snapshot()['counters']['renewal_failures'], 1)
 
     def test_failed_state_commit_preserves_failure_and_archived_request(self):
         self.recorder.record_power_recovery(False)

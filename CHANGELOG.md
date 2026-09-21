@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.36 - 2026-09-21
+
+- Retry qualification history writes under encrypted-storage pressure by trimming
+  older diagnostic records, while retaining the latest failure and failing closed
+  if it cannot be archived. Align the Automatic method badge at the top right.
+
 ## 3.0.0-alpha.35 - 2026-09-21
 
 - Replace the upgrade status summary with a concise Automatic method badge;

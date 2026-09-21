@@ -375,14 +375,30 @@ class OperationalQualification:
             except TypeError:
                 payload = json.dumps(self._history).encode()
             if len(payload) <= MAX_HISTORY_BYTES:
-                break
-            if self._history['releases']:
-                self._history['releases'] = self._history['releases'][1:]
-            elif len(self._history['retries']) > 1:
-                self._history['retries'] = self._history['retries'][1:]
-            else:
+                try:
+                    self._history_namespace.commit(generation, payload)
+                    return
+                except StorageContractError as exc:
+                    if str(exc) != 'encrypted transactional storage is full':
+                        raise
+                    # The payload capability is not a reservation of free NVS.
+                    # Keep the current summary and newest failure, shrinking
+                    # older diagnostics until an atomic replacement fits.
+                    if not self._trim_history():
+                        raise
+                    continue
+            if not self._trim_history():
                 raise QualificationError('qualification retry history exceeds storage capacity')
-        self._history_namespace.commit(generation, payload)
+
+    def _trim_history(self):
+        """Never discard the newest archived failure to make a retry succeed."""
+        if self._history['releases']:
+            self._history['releases'] = self._history['releases'][1:]
+            return True
+        if len(self._history['retries']) > 1:
+            self._history['retries'] = self._history['retries'][1:]
+            return True
+        return False
 
     def _save_history_resilient(self):
         """Persist derived history without making live qualification unavailable."""
