@@ -271,6 +271,19 @@ def apply_logging_change(
     )
     return level, line_count
 
+def restart_qualification_gate(params, actor, handler):
+    try:
+        if handler is None:
+            raise ValueError('qualification restart is unavailable')
+        if params.get('confirm') != 'yes':
+            raise ValueError('confirm that the failed test should be restarted')
+        handler(params.get('gate', ''), actor, params.get('reason', ''),
+                int(params.get('generation', '-1')))
+        return 'Failed test restarted. New evidence is required; other gates are unchanged.', False
+    except Exception as exc:
+        return 'Test could not be restarted: ' + (str(exc) or exc.__class__.__name__), True
+
+
 def apply_portal_action(action, path, action_handler, log_output, params=None):
     result = ''
     if action_handler:

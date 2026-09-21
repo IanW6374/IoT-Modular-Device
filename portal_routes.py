@@ -72,6 +72,7 @@ ROUTES = {
     '/ntp-settings': ('administrator', 'system'),
     '/portal-settings': ('administrator', 'system'),
     '/reset-health-history': ('administrator', 'maintenance'),
+    '/restart-qualification-gate': ('administrator', 'maintenance'),
     '/restart-device': ('administrator', 'operations'),
     '/shutdown-device': ('administrator', 'operations'),
     '/api/restart-required': ('viewer', 'operations'),

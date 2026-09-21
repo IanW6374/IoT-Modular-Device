@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.35 - 2026-09-21
+
+- Replace the upgrade status summary with a concise Automatic method badge;
+  retain conditional Staged activation and explicit stage/restart actions.
+- Show upgrade history without expansion and persist a separate bounded history
+  of manual and scheduled release checks, including outcomes and versions.
+- Allow administrators to restart only a failed qualification test with a reason
+  and confirmation, archiving its evidence before resetting its observation window.
+  Preserve unrelated gates and migrate existing evidence without clearing failures.
+- Retain MicroPython 1.29.0, ESP-IDF 5.5.5 and native ABI 6; release sequence 2740.
+
 ## 3.0.0-alpha.34 - 2026-09-20
 
 - Open the shared upgrade workflow directly, with Automatic, Manual and

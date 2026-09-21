@@ -9,10 +9,12 @@ from .storage import StorageContractError
 
 
 CONTRACT_VERSION = 1
-STATE_VERSION = 2
+STATE_VERSION = 3
 CAMPAIGN_STATE_VERSION = 1
 MAX_COUNTER = 1000000
 MAX_RELEASE_HISTORY = 4
+MAX_RETRY_HISTORY = 8
+MAX_HISTORY_BYTES = 4096
 GATE_NAMES = (
     'soak', 'health', 'storage', 'network-recovery', 'certificate-renewal',
     'paired-updates', 'power-recovery', 'canary-health',
@@ -183,6 +185,7 @@ def _empty_state(started_at, release_version='', release_sequence=0):
         'network_up': None,
         'network_outage_started_at': 0,
         'canary_paused': False,
+        'gate_started_at': {'health': started_at, 'storage': started_at},
         'counters': _counters(),
     }
 
@@ -226,7 +229,8 @@ def _validate_history(value):
 
 
 def _empty_history():
-    return {'history_version': 1, 'current': None, 'releases': []}
+    return {'history_version': 2, 'current': None, 'releases': [],
+            'retries': [], 'retry_generation': 0}
 
 
 def _decode_history(payload):
@@ -236,9 +240,26 @@ def _decode_history(payload):
         value = json.loads(payload.decode())
     except Exception:
         raise QualificationError('qualification history is invalid')
+    if isinstance(value, dict) and value.get('history_version') == 1:
+        value.update(history_version=2, retries=[], retry_generation=0)
     if (not isinstance(value, dict) or set(value) != set(_empty_history()) or
-            value['history_version'] != 1):
+            value['history_version'] != 2):
         raise QualificationError('qualification history has invalid fields')
+    _integer(value['retry_generation'], 'qualification retry generation')
+    if not isinstance(value['retries'], list) or len(value['retries']) > MAX_RETRY_HISTORY:
+        raise QualificationError('qualification retry history is invalid')
+    for retry in value['retries']:
+        if not isinstance(retry, dict) or set(retry) != {
+                'gate', 'time', 'actor', 'reason', 'release_version',
+                'release_sequence', 'observed', 'required', 'detail'}:
+            raise QualificationError('qualification retry record is invalid')
+        if retry['gate'] not in GATE_NAMES:
+            raise QualificationError('qualification retry gate is invalid')
+        for field in ('time', 'release_sequence', 'observed', 'required'):
+            _integer(retry[field], 'qualification retry ' + field)
+        for field, limit in (('actor', 64), ('reason', 160),
+                             ('release_version', 48), ('detail', 512)):
+            _text(retry[field], 'qualification retry ' + field, limit)
     _validate_history(value['releases'])
     if value['current'] is not None:
         _validate_history([value['current']])
@@ -253,6 +274,11 @@ def _decode(payload):
     except Exception:
         raise QualificationError('qualification state is invalid')
     template = _empty_state(1)
+    if isinstance(value, dict) and value.get('state_version') == 2:
+        value['state_version'] = STATE_VERSION
+        value['gate_started_at'] = {
+            'health': value.get('started_at'), 'storage': value.get('started_at')
+        }
     if not isinstance(value, dict) or set(value) != set(template):
         raise QualificationError('qualification state has invalid fields')
     if value['state_version'] != STATE_VERSION:
@@ -269,6 +295,11 @@ def _decode(payload):
         raise QualificationError('qualification network state is invalid')
     if value['canary_paused'] not in (True, False):
         raise QualificationError('qualification canary state is invalid')
+    starts = value['gate_started_at']
+    if not isinstance(starts, dict) or set(starts) != {'health', 'storage'}:
+        raise QualificationError('qualification gate start times are invalid')
+    for started in starts.values():
+        _integer(started, 'qualification gate start')
     counters = value['counters']
     if not isinstance(counters, dict) or set(counters) != set(_counters()):
         raise QualificationError('qualification counters are invalid')
@@ -336,12 +367,21 @@ class OperationalQualification:
         if self._history_namespace is None:
             return
         generation, unused = self._history_namespace.snapshot()
-        try:
-            payload = json.dumps(
-                self._history, sort_keys=True, separators=(',', ':')
-            ).encode()
-        except TypeError:
-            payload = json.dumps(self._history).encode()
+        while True:
+            try:
+                payload = json.dumps(
+                    self._history, sort_keys=True, separators=(',', ':')
+                ).encode()
+            except TypeError:
+                payload = json.dumps(self._history).encode()
+            if len(payload) <= MAX_HISTORY_BYTES:
+                break
+            if self._history['releases']:
+                self._history['releases'] = self._history['releases'][1:]
+            elif len(self._history['retries']) > 1:
+                self._history['retries'] = self._history['retries'][1:]
+            else:
+                raise QualificationError('qualification retry history exceeds storage capacity')
         self._history_namespace.commit(generation, payload)
 
     def _save_history_resilient(self):
@@ -531,6 +571,97 @@ class OperationalQualification:
         self._require_started()
         return [dict(item) for item in self._history['releases']]
 
+    def retry_history(self):
+        self._require_started()
+        return [dict(item) for item in self._history['retries']]
+
+    def retry_generation(self):
+        self._require_started()
+        return self._history['retry_generation']
+
+    def restart_failed_gate(self, name, actor, reason, generation):
+        """Archive failed evidence before clearing only its active test window."""
+        self._require_started()
+        if self._history_namespace is None:
+            raise QualificationError('persistent retry history is unavailable')
+        if _integer(generation, 'retry generation') != self.retry_generation():
+            raise QualificationError('qualification changed; refresh before retrying')
+        actor = _text(actor, 'administrator', 64)
+        reason = _text(reason.strip(), 'retry reason', 160)
+        evidence = self.snapshot()
+        gate = next((item for item in evidence['gates'] if item['name'] == name), None)
+        if gate is None or gate['status'] != 'failed':
+            raise QualificationError('only a failed qualification gate can be restarted')
+        if name == 'canary-health':
+            raise QualificationError('resolve the active canary pause; this gate clears automatically')
+        if name == 'paired-updates' and self._campaign is None:
+            raise QualificationError('persistent campaign is required to preserve canary evidence')
+        keys = {
+            'health': ('health_samples', 'unhealthy_samples',
+                       'consecutive_unhealthy', 'maximum_consecutive_unhealthy'),
+            'storage': ('storage_samples',),
+            'network-recovery': ('network_interruptions', 'network_recoveries'),
+            'certificate-renewal': ('renewal_attempts', 'renewal_successes', 'renewal_failures'),
+            'paired-updates': ('update_trials', 'update_confirmations',
+                              'update_failures', 'update_rollbacks'),
+            'power-recovery': ('power_interruptions', 'power_recoveries', 'power_failures'),
+        }.get(name)
+        if name in VALIDATION_COUNTERS:
+            keys = tuple(VALIDATION_COUNTERS[name] + suffix for suffix in
+                         ('_attempts', '_successes', '_failures'))
+        if not keys:
+            raise QualificationError('this qualification gate cannot be restarted')
+        now = _integer(int(self._now()), 'qualification time', 1)
+        archived = dict(self._history)
+        archived['retries'] = (list(archived['retries']) + [{
+            'gate': name, 'time': now, 'actor': actor, 'reason': reason,
+            'release_version': evidence['release']['version'],
+            'release_sequence': evidence['release']['sequence'],
+            'observed': gate['observed'], 'required': gate['required'],
+            'detail': json.dumps({
+                'counters': {key: evidence['counters'][key] for key in keys},
+                'measurements': evidence['measurements'],
+            }),
+        }])[-MAX_RETRY_HISTORY:]
+        _text(archived['retries'][-1]['detail'], 'archived failure detail', 512)
+        archived['retry_generation'] += 1
+        previous_history = self._history
+        self._history = archived
+        try:
+            self._save_history()  # Fail closed: no reset without durable evidence.
+        except Exception:
+            self._history = previous_history
+            raise
+        campaign = self._campaign is not None and all(key in CAMPAIGN_COUNTERS for key in keys)
+        previous = self._campaign if campaign else self._state
+        updated = dict(previous)
+        updated['counters'] = dict(previous['counters'])
+        for key in keys:
+            updated['counters'][key] = 0
+        if not campaign:
+            updated['gate_started_at'] = dict(previous['gate_started_at'])
+            if name in ('health', 'storage'):
+                updated['gate_started_at'][name] = now
+            if name == 'storage':
+                updated['minimum_storage_free_bytes'] = None
+            elif name == 'network-recovery':
+                updated.update(maximum_network_recovery_s=0, network_up=None,
+                               network_outage_started_at=0)
+        try:
+            if campaign:
+                self._campaign = updated
+                self._save_campaign()
+            else:
+                self._state = updated
+                self._save()
+        except Exception:
+            if campaign:
+                self._campaign = previous
+            else:
+                self._state = previous
+            raise
+        return self.snapshot()
+
     def _require_started(self):
         if self._state is None:
             raise QualificationError('qualification recorder is not started')
@@ -713,7 +844,7 @@ class OperationalQualification:
             'failed' if unhealthy > profile['maximum_consecutive_unhealthy']
             else ('not-run' if not health_samples else
                   ('passed' if (
-                      soak_passed and
+                      now - self._state['gate_started_at']['health'] >= profile['minimum_soak_s'] and
                       health_samples >= profile['minimum_health_samples']
                   ) else 'in-progress'))
         )
@@ -729,7 +860,7 @@ class OperationalQualification:
             storage_status = (
                 'failed' if minimum_free < profile['minimum_storage_free_bytes']
                 else ('passed' if (
-                    soak_passed and
+                    now - self._state['gate_started_at']['storage'] >= profile['minimum_soak_s'] and
                     storage_samples >= profile['minimum_storage_samples']
                 ) else 'in-progress')
             )

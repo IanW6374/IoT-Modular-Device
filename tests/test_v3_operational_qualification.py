@@ -94,6 +94,125 @@ class V3OperationalQualificationTests(unittest.TestCase):
         self.assertEqual(states['release-confirmation'], 'passed')
         self.assertFalse(result['promotion_ready'])
 
+    def test_health_retry_is_scoped_and_requires_a_new_observation_window(self):
+        self.recorder.record_power_recovery(True)
+        self.recorder.sample('failed', 50, True)
+        self.recorder.sample('failed', 50, True)
+        self.now[0] += 61
+        self.recorder.sample('healthy', 200, True)
+        result = self.recorder.restart_failed_gate('health', 'admin', 'MQTT fixed', 0)
+        gates = {item['name']: item['status'] for item in result['gates']}
+        self.assertEqual(gates['health'], 'not-run')
+        self.assertEqual(gates['storage'], 'failed')
+        self.assertEqual(gates['power-recovery'], 'passed')
+        self.assertEqual(gates['soak'], 'passed')
+        retry = self.recorder.retry_history()[-1]
+        self.assertEqual(retry['actor'], 'admin')
+        self.assertEqual(json.loads(retry['detail'])['counters']['maximum_consecutive_unhealthy'], 2)
+        self.recorder.sample('healthy', 200, True)
+        self.assertEqual(self.recorder.snapshot()['gates'][1]['status'], 'in-progress')
+        self.now[0] += 61
+        self.assertEqual(self.recorder.snapshot()['gates'][1]['status'], 'passed')
+        with self.assertRaisesRegex(QualificationError, 'refresh'):
+            self.recorder.restart_failed_gate('storage', 'admin', 'Space fixed', 0)
+
+    def test_storage_retry_starts_fresh_window_and_preserves_health(self):
+        self.recorder.sample('healthy', 50, True)
+        self.now[0] += 61
+        self.recorder.restart_failed_gate('storage', 'admin', 'Space reclaimed', 0)
+        self.recorder.sample('healthy', 200, True)
+        gates = {g['name']: g['status'] for g in self.recorder.snapshot()['gates']}
+        self.assertEqual(gates['health'], 'passed')
+        self.assertEqual(gates['storage'], 'in-progress')
+        self.now[0] += 61
+        gates = {g['name']: g['status'] for g in self.recorder.snapshot()['gates']}
+        self.assertEqual(gates['storage'], 'passed')
+
+    def test_paired_retry_without_campaign_cannot_erase_canary_evidence(self):
+        recorder = OperationalQualification(self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), self.history_namespace)
+        recorder.start()
+        recorder.record_update('failed')
+        before = recorder.snapshot()
+        with self.assertRaisesRegex(QualificationError, 'persistent campaign'):
+            recorder.restart_failed_gate('paired-updates', 'admin', 'Trial repaired', 0)
+        self.assertEqual(recorder.snapshot(), before)
+        self.assertEqual(recorder.retry_generation(), 0)
+
+    def test_campaign_retry_does_not_erase_unrelated_or_release_evidence(self):
+        self.recorder.record_renewal(False)
+        self.recorder.record_renewal(True)
+        self.recorder.record_update('confirmed')
+        before = self.recorder.snapshot()
+        self.assertEqual(next(g for g in before['gates'] if g['name'] == 'certificate-renewal')['status'], 'failed')
+        self.recorder.restart_failed_gate('certificate-renewal', 'admin', 'Renewal key fixed', 0)
+        after = self.recorder.snapshot()
+        self.assertEqual(after['counters']['renewal_attempts'], 0)
+        self.assertEqual(after['counters']['update_confirmations'], before['counters']['update_confirmations'])
+        self.recorder.record_renewal(True)
+        restarted = OperationalQualification(self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), self.history_namespace, self.campaign_namespace)
+        self.assertEqual(next(g for g in restarted.start()['gates'] if g['name'] == 'certificate-renewal')['status'], 'passed')
+        self.assertEqual(restarted.retry_generation(), 1)
+        self.assertEqual(restarted.retry_history(), self.recorder.retry_history())
+
+    def test_retry_refuses_to_clear_failure_without_durable_archive(self):
+        self.recorder.record_power_recovery(False)
+        before = self.recorder.snapshot()
+        self.recorder._history_namespace = FullNamespace()
+        with self.assertRaises(StorageContractError):
+            self.recorder.restart_failed_gate('power-recovery', 'admin', 'Supply fixed', 0)
+        self.assertEqual(self.recorder.snapshot(), before)
+        self.assertEqual(self.recorder.retry_generation(), 0)
+
+    def test_failed_state_commit_preserves_failure_and_archived_request(self):
+        self.recorder.record_power_recovery(False)
+        before = self.recorder.snapshot()
+        self.recorder._campaign_namespace = FullNamespace()
+        with self.assertRaises(StorageContractError):
+            self.recorder.restart_failed_gate('power-recovery', 'admin', 'Supply fixed', 0)
+        self.assertEqual(self.recorder.snapshot(), before)
+        self.assertEqual(len(self.recorder.retry_history()), 1)
+
+    def test_retries_remain_within_native_namespace_capacity(self):
+        for index in range(16):
+            self.recorder.record_renewal(False)
+            self.recorder.restart_failed_gate('certificate-renewal', 'admin', 'x' * 160, index)
+            self.assertLessEqual(len(self.history_namespace.payload), 4096)
+        self.assertLessEqual(len(self.recorder.retry_history()), 8)
+        restarted = OperationalQualification(self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), self.history_namespace, self.campaign_namespace)
+        restarted.start()
+        self.assertEqual(restarted.retry_generation(), 16)
+
+    def test_previous_state_and_history_migrate_without_losing_failures(self):
+        self.recorder.sample('failed', 50, True)
+        self.recorder.sample('failed', 50, True)
+        state = json.loads(self.namespace.payload)
+        state['state_version'] = 2
+        state.pop('gate_started_at')
+        self.namespace.payload = json.dumps(state).encode()
+        history = json.loads(self.history_namespace.payload)
+        history['history_version'] = 1
+        history.pop('retries')
+        history.pop('retry_generation')
+        self.history_namespace.payload = json.dumps(history).encode()
+        restarted = OperationalQualification(self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), self.history_namespace, self.campaign_namespace)
+        self.assertEqual(restarted.start()['gates'][1]['status'], 'failed')
+        self.assertEqual(restarted.retry_generation(), 0)
+
+    def test_only_failed_gates_with_reason_can_be_restarted(self):
+        for name in ('unknown', 'soak', 'health', 'release-confirmation'):
+            with self.assertRaises(QualificationError):
+                self.recorder.restart_failed_gate(name, 'admin', 'Retest', 0)
+        self.recorder.sample('healthy', 200, True, canary_paused=True)
+        with self.assertRaisesRegex(QualificationError, 'canary pause'):
+            self.recorder.restart_failed_gate('canary-health', 'admin', 'Retest', 0)
+        self.recorder.record_renewal(False)
+        with self.assertRaises(QualificationError):
+            self.recorder.restart_failed_gate('certificate-renewal', 'admin', ' ', 0)
+
     def test_close_releases_all_owned_namespaces(self):
         self.assertEqual(self.recorder.close(), 3)
         self.assertTrue(self.namespace.closed)
@@ -212,7 +331,7 @@ class V3OperationalQualificationTests(unittest.TestCase):
     def test_history_sidecar_does_not_change_current_state_contract(self):
         self.recorder.sample('healthy', 200, True)
         state = json.loads(self.namespace.payload.decode())
-        self.assertEqual(state['state_version'], 2)
+        self.assertEqual(state['state_version'], 3)
         self.assertNotIn('history', state)
         self.assertNotEqual(self.history_namespace.payload, b'')
         restarted = OperationalQualification(

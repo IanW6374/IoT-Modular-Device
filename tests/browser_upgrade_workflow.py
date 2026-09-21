@@ -20,6 +20,8 @@ import web_portal_ui as ui
 from playwright.sync_api import sync_playwright
 
 STATUS = {
+    'update_history': [{'time': 1700000000, 'event': 'confirmed', 'kind': 'universal', 'version': '3.0.0-alpha.34'}],
+    'release_check_history': [{'time': 1700001000, 'event': 'Release available', 'kind': 'automatic check', 'version': '3.0.0-alpha.35'}],
     'release_checks_enabled': True, 'update_status': 'idle',
     'firmware_update_supported': True, 'firmware_update_status': 'idle',
     'firmware_update_availability': 'ready', 'previous_slot': 'a',
@@ -58,6 +60,12 @@ class Handler(BaseHTTPRequestHandler):
                 status.pop('release_available_version')
                 status.pop('release_available_options')
             body = views.render_updates_page('test-csrf', status, source=query.get('source', [''])[0])
+            if path.path == '/release-qualification':
+                body = views.render_release_qualification_page('test-csrf', {
+                    'available': True, 'summary': 'Blocked', 'retry_generation': 0,
+                    'evidence': {'gates': [{'name': 'health', 'status': 'failed', 'observed': 200, 'required': 2400},
+                                           {'name': 'storage', 'status': 'passed', 'observed': 2400, 'required': 2400}]},
+                })
             body = body.replace('<!--session-timeout-->', '3600000')
             body, headers = portal_http.secure_html_response(body, (), 'test-nonce')
         data = body.encode()
@@ -95,6 +103,9 @@ with sync_playwright() as p:
             page.goto(base + route)
             page.wait_for_selector('.upgrade-stage-ring')
             assert page.locator('h1').inner_text() == 'Upgrade'
+            assert page.get_by_role('heading', name='Upgrade history', exact=True).is_visible()
+            assert page.locator('#upgrade-check-result').count() == 1
+            assert page.locator('.metric.update-status').count() == 0
             rings = page.locator('.upgrade-stage-ring').evaluate_all('(els)=>els.map(e=>({x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y}))')
             assert len({round(r['y']) if width > 600 else round(r['x']) for r in rings}) == 1, (width, route, rings)
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, route, 'overflow')
@@ -134,8 +145,18 @@ with sync_playwright() as p:
     page.set_viewport_size({'width':390, 'height':844})
     page.goto(base + '/updates?source=automatic')
     page.screenshot(path='build/alpha34-automatic-mobile.png', full_page=True)
+    for width in (1440, 390):
+        page.set_viewport_size({'width':width, 'height':1080})
+        page.goto(base + '/release-qualification')
+        page.get_by_text('Restart failed test', exact=True).click()
+        form = page.locator('form[action="/restart-qualification-gate"]')
+        assert not form.evaluate('(e)=>e.checkValidity()')
+        form.get_by_label('Reason for retry').fill('MQTT configuration corrected')
+        form.locator('input[name="confirm"]').check()
+        assert form.evaluate('(e)=>e.checkValidity()')
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        page.screenshot(path='build/alpha35-qualification-'+str(width)+'.png', full_page=True)
     assert not errors, errors
     browser.close()
 server.shutdown()
 print('Upgrade controls and CSP checks passed')
-

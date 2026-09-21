@@ -17,6 +17,7 @@ except ImportError:
 
 
 HISTORY_PATH = '.update-history.json'
+RELEASE_CHECK_HISTORY_PATH = '.release-check-history.json'
 MAX_HISTORY = 20
 DEFAULT_STORAGE_RESERVE = 96 * 1024
 _locked = False
@@ -164,9 +165,9 @@ def commit_json_with_backup(value, target, temporary_suffix='.tmp'):
         raise
 
 
-def _read_history():
+def _read_history(path=None):
     try:
-        with open(HISTORY_PATH, 'r') as stream:
+        with open(path or HISTORY_PATH, 'r') as stream:
             value = json.load(stream)
         return value if isinstance(value, list) else []
     except Exception:
@@ -178,8 +179,25 @@ def update_history():
 
 
 def record_update_event(kind, event, version='', detail='', digest=''):
+    return _record_history(HISTORY_PATH, kind, event, version, detail, digest)
+
+
+def release_check_history():
+    return _read_history(RELEASE_CHECK_HISTORY_PATH)
+
+
+def record_release_check(automatic, result, version=''):
+    """Keep bounded check results separate so checks cannot evict upgrades."""
+    return _record_history(
+        RELEASE_CHECK_HISTORY_PATH,
+        'automatic check' if automatic else 'manual check',
+        result, version
+    )
+
+
+def _record_history(path, kind, event, version='', detail='', digest=''):
     try:
-        history = _read_history()
+        history = _read_history(path)
         timestamp = 0
         try:
             timestamp = int(time.time()) if time else 0
@@ -188,16 +206,16 @@ def record_update_event(kind, event, version='', detail='', digest=''):
         history.append({
             'time': timestamp,
             'kind': str(kind),
-            'event': str(event),
+            'event': str(event)[:160],
             'version': str(version),
             'detail': str(detail)[:160],
             'sha256': str(digest),
         })
         history = history[-MAX_HISTORY:]
-        temp = HISTORY_PATH + '.tmp'
+        temp = path + '.tmp'
         with open(temp, 'w') as stream:
             json.dump(history, stream)
-        _replace(temp, HISTORY_PATH)
+        _replace(temp, path)
         return True
     except Exception:
         return False

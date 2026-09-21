@@ -70,6 +70,18 @@ class UpdateSecurityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release_update.normalize_release_base_url(invalid)
 
+    def test_release_checks_are_persistent_bounded_and_do_not_evict_updates(self):
+        update_support.record_update_event('universal', 'confirmed', '3.0.0-alpha.35')
+        for index in range(30):
+            self.assertTrue(update_support.record_release_check(True, 'Release available', str(index)))
+        checks = update_support.release_check_history()
+        self.assertEqual(len(checks), 20)
+        self.assertEqual(checks[-1]['version'], '29')
+        self.assertEqual(checks[-1]['kind'], 'automatic check')
+        self.assertEqual(update_support.update_history()[0]['event'], 'confirmed')
+        update_support.record_release_check(False, 'Check failed: offline')
+        self.assertEqual(update_support.release_check_history()[-1]['kind'], 'manual check')
+
     def test_highest_bit_does_not_require_int_bit_length(self):
         self.assertEqual(update_security._highest_bit(0), 0)
         self.assertEqual(update_security._highest_bit(1), 1)

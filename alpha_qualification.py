@@ -155,6 +155,11 @@ class AlphaQualificationService:
     def record_validation(self, name, successful):
         return self._record('record_validation', name, successful)
 
+    def restart_failed_gate(self, name, actor, reason, generation):
+        if not self.start():
+            raise ValueError('qualification recorder unavailable: ' + self.error)
+        return self.recorder.restart_failed_gate(name, actor, reason, generation)
+
     def _record(self, method, *values):
         if not self.start():
             return False
@@ -213,6 +218,14 @@ class AlphaQualificationService:
             'history': (
                 self.recorder.history()
                 if callable(getattr(self.recorder, 'history', None)) else []
+            ),
+            'retry_history': (
+                self.recorder.retry_history()
+                if callable(getattr(self.recorder, 'retry_history', None)) else []
+            ),
+            'retry_generation': (
+                self.recorder.retry_generation()
+                if callable(getattr(self.recorder, 'retry_generation', None)) else 0
             ),
             'native_update': self._native_update_status(),
             'implementation_gates': self._implementation_gates(),

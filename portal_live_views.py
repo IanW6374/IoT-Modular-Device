@@ -10,7 +10,7 @@ from portal_http import (
     html_escape, js_escape, log_upgrade_upload_failure, parse_query,
     render_logs_html,
 )
-from portal_settings_views import _notice, render_operational_hidden_fields
+from portal_settings_views import _notice, _health_time_text, render_operational_hidden_fields
 from portal_view_models import overview_metrics, update_check_summary
 from device_modules.base import module_diagnostics_need_attention
 from portal_presenters import (
@@ -558,7 +558,23 @@ def render_overview_status(status):
     return '<div id="overview-status" class="metrics">' + ''.join(values) + '</div>'
 
 
-def render_release_qualification_page(token, status=None):
+def _qualification_retry_form(token, gate, generation):
+    if gate.get('status') != 'failed' or gate.get('name') == 'canary-health':
+        return ''
+    return (
+        '<details class="qualification-retry"><summary>Restart failed test</summary>'
+        '<form action="/restart-qualification-gate" method="post">'
+        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+        '<input type="hidden" name="gate" value="' + html_escape(gate['name']) + '">'
+        '<input type="hidden" name="generation" value="' + html_escape(generation) + '">'
+        '<label class="field">Reason for retry<input name="reason" required maxlength="160"></label>'
+        '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
+        'Restart this test from zero; retain the failed result.</label>'
+        '<div class="actions"><span></span><button type="submit">Restart test</button></div></form></details>'
+    )
+
+
+def render_release_qualification_page(token, status=None, message='', error=False):
     status = status or {}
     evidence = status.get('evidence')
     if not status.get('available') or not isinstance(evidence, dict):
@@ -599,7 +615,8 @@ def render_release_qualification_page(token, status=None):
                 '</span><strong>' + html_escape(state) + '</strong>' +
                 '<small>' + html_escape(gate.get('observed', 0)) + ' / ' +
                 html_escape(gate.get('required', 0)) + ' · ' +
-                source_label + detail + '</small></div>'
+                source_label + detail + '</small>' +
+                _qualification_retry_form(token, gate, status.get('retry_generation', 0)) + '</div>'
             )
         history_rows = []
         for item in reversed(status.get('history') or ()):
@@ -624,6 +641,15 @@ def render_release_qualification_page(token, status=None):
             '<div class="metrics">' + ''.join(history_rows) + '</div>'
             if history_rows else ''
         )
+        retries = status.get('retry_history') or ()
+        if retries:
+            history_content += '<h3>Failed test retry history</h3><ul>' + ''.join(
+                '<li><strong>' + html_escape(item.get('gate', '')) + '</strong> — ' +
+                html_escape(_health_time_text(item.get('time'))) + ' UTC · ' +
+                html_escape(item.get('actor', '')) + ': ' + html_escape(item.get('reason', '')) +
+                '<br><small>Previous failed evidence: ' + html_escape(item.get('detail', '')) +
+                '</small></li>' for item in reversed(retries)
+            ) + '</ul>'
         native = status.get('native_update') or {}
         snapshot = native.get('snapshot') or {}
         native_content = ''
@@ -693,10 +719,14 @@ def render_release_qualification_page(token, status=None):
             if implementation_rows else ''
         )
         content = (
-            '<div class="notice"><strong>' +
+            '<div class="' + ('notice' if evidence.get('promotion_ready') else 'warning') + '"><strong>' +
             html_escape(status.get('summary', 'Not started')) +
             '</strong> — promotion remains closed until every gate has observed '
-            'evidence and passes.</div><div class="metrics">' +
+            'evidence and passes.</div><p class="muted">A later successful observation does not clear a '
+            'latched failure. Restart failed test archives the failed evidence '
+            'and requires fresh testing. Health and storage need a new full observation window. '
+            'An active canary pause must instead be resolved; that gate updates automatically.</p>'
+            '<div class="metrics qualification-gates">' +
             ''.join(rows) + '</div>' + history_content +
             implementation_content + native_content
         )
@@ -704,7 +734,7 @@ def render_release_qualification_page(token, status=None):
         portal_ui.page_heading(
             'Maintenance', 'Release qualification',
             'Review soak, recovery, renewal, upgrade and canary evidence for this release.'
-        ) + '<section class="card"><div class="section-title">'
+        ) + _notice(message, error) + '<section class="card"><div class="section-title">'
         '<h2>Promotion gates</h2></div>' + content + '</section>'
     )
     return portal_ui.shell(
@@ -1275,6 +1305,49 @@ def _upgrade_ready(status):
     )
 
 
+def _upgrade_check_badge(status, identifier=''):
+    check = str(status.get('release_check_status') or 'Not checked')
+    if check == 'Not checked':
+        check = update_check_summary(status)['status']
+    label, tone = 'Not checked', ''
+    if check.lower().startswith('check failed'):
+        label, tone = 'Check failed', ' warn'
+    elif check == 'Checking':
+        label = 'Checking…'
+    elif status.get('release_available_version') or check == 'Release available':
+        label, tone = 'Upgrade available', ' good'
+    elif check != 'Not checked':
+        label, tone = 'Up to date', ' good'
+    return (
+        '<span class="badge' + tone + '"' +
+        (' id="' + html_escape(identifier) + '" role="status" aria-live="polite"'
+         if identifier else '') + '>' + html_escape(label) + '</span>'
+    )
+
+
+def render_upgrade_history(status):
+    rows = []
+    history = list(status.get('update_history') or ()) + list(
+        status.get('release_check_history') or ()
+    )
+    history.sort(key=lambda item: int(item.get('time', 0) or 0), reverse=True)
+    for entry in history[:40]:
+        rows.append(
+            '<li><small>' + html_escape(_health_time_text(entry.get('time'), status.get('timezone_name', 'UTC'))) +
+            '</small> · <strong>' + html_escape(entry.get('event', '')) + '</strong> · ' +
+            html_escape(entry.get('kind', '')) +
+            (' · ' + html_escape(display_release_version(entry['version']))
+             if entry.get('version') else '') +
+            (' — ' + html_escape(entry['detail']) if entry.get('detail') else '') +
+            '</li>'
+        )
+    return (
+        '<section class="card"><div class="section-title"><h2>Upgrade history</h2></div>' +
+        ('<ul class="update-history">' + ''.join(rows) + '</ul>' if rows else
+         '<p class="muted">No upgrades or version checks recorded yet.</p>') + '</section>'
+    )
+
+
 def _upgrade_method_choices(status, source=''):
     choices = [
         ('automatic', 'Automatic', 'Choose a version from the release server.'),
@@ -1300,7 +1373,8 @@ def _upgrade_method_choices(status, source=''):
         tag = 'span' if disabled else 'a'
         items.append(
             '<' + tag + ' class="upgrade-method-choice"' + attributes + '><strong>' +
-            title + '</strong><small>' + html_escape(
+            title + '</strong>' + (_upgrade_check_badge(status, 'upgrade-check-result') if key == 'automatic' else '') +
+            '<small>' + html_escape(
                 'Discard the staged upgrade to choose a new release.' if disabled else description
             ) + '</small></' + tag + '>'
         )
@@ -1353,9 +1427,7 @@ def _automatic_upgrade_workspace(token, status):
     choices = release_offer_options(status)
     check = (
         '<form id="upgrade-check-form" action="/check-release" method="post">'
-        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
-        '<p id="upgrade-check-result" role="status" aria-live="polite" class="muted">' +
-        html_escape(update_check_summary(status)['text']) + '</p>'
+        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
         '<div class="actions manual-upgrade-buttons"><button class="secondary" '
         'type="submit">Check for upgrades</button></div></form>'
         if status.get('release_checks_enabled') else
@@ -1434,7 +1506,8 @@ def upgrade_check_script():
         'var checkForm=document.getElementById("upgrade-check-form");if(checkForm){'
         'checkForm.onsubmit=function(e){e.preventDefault();var button=checkForm.querySelector("button"),'
         'result=document.getElementById("upgrade-check-result");button.disabled=true;'
-        'result.textContent="Checking for upgrades…";function failed(message){result.textContent=message;'
+        'result.className="badge";result.textContent="Checking…";function failed(message){result.className="badge warn";'
+        'result.textContent="Check failed";result.title=message;'
         'button.disabled=false;}function checked(s){result.textContent=s.message||"Check complete";'
         'if(s.phase==="failed"){failed(s.message||"Upgrade check failed");return;}'
         'if(s.phase==="complete"){location.replace("/updates?source=automatic");return;}'
@@ -1538,8 +1611,7 @@ def render_update_install_page(token, status=None, message='', error=False, sour
             'Maintenance', 'Upgrade',
             'Select a method, stage a release, then restart when ready.'
         ) + _notice(message, error) + workspace +
-        '<details class="card upgrade-summary-details"><summary>Upgrade status and history</summary>' +
-        render_update_summary_html(status, False) + '</details>'
+        render_upgrade_history(status)
     )
     return portal_ui.shell(
         'IoT-MD upgrade', 'updates', body, token, script

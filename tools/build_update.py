@@ -181,7 +181,7 @@ PORTAL_ROUTE_SPLITS = (
             'csrf_token', 'form_params', 'headers', 'is_audit_logging',
             'is_certificate_request', 'is_configuration_backup',
             'is_diagnostics', 'is_health_history', 'is_logging',
-            'is_qualification', 'qualification_getter',
+            'is_qualification', 'qualification_getter', 'qualification_restart',
             'is_module_settings', 'is_operational_settings', 'is_updates',
             'is_update_install', 'is_update_settings',
             'is_user_management', 'levels', 'log_getter', 'log_output',

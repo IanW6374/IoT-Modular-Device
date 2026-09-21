@@ -46,6 +46,13 @@ def enrich_runtime_status(status, runtime_inventory, boot_snapshot,
     return status
 
 
+def saved_automatic_check_status(health, format_time):
+    saved = (health or {}).get('observations', {}).get('last_release_check', {})
+    if isinstance(saved, dict) and saved.get('status'):
+        return str(saved['status']), format_time(saved.get('time'))
+    return 'Not checked', ''
+
+
 def update_check_summary(status):
     """Normalise scheduler state before HTML rendering or API serialisation."""
     status = status or {}

@@ -105,6 +105,7 @@ async def start_web_portal(portal):
     restart_request_handler = portal.get('restart.request')
     shutdown_request_handler = portal.get('shutdown.request')
     qualification_getter = portal.get('qualification.get')
+    qualification_restart = portal.get('qualification.restart')
     username = settings.get('username', 'admin') or 'admin'
     password_verifier = settings.get('password_verifier', '')
     authenticator = settings.get('authenticator')
@@ -684,6 +685,11 @@ async def start_web_portal(portal):
                         qualification_getter() if qualification_getter else {}
                     )
                 )
+            elif method == 'POST' and route == '/restart-qualification-gate':
+                message, error = restart_qualification_gate(form_params, session_username, qualification_restart)
+                await send_response(writer, '400 Bad Request' if error else '200 OK',
+                    render_release_qualification_page(csrf_token,
+                        qualification_getter() if qualification_getter else {}, message, error))
             elif method == 'POST' and route == '/reset-health-history':
                 apply_portal_action(
                     'reset-health-history', action_path, action_handler, log_output,

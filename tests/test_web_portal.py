@@ -1186,6 +1186,7 @@ class WebPortalTests(unittest.TestCase):
                 factory_resets = []
                 restart_requests = []
                 shutdown_requests = []
+                qualification_restarts = []
 
                 def get_settings():
                     return {
@@ -1230,6 +1231,7 @@ class WebPortalTests(unittest.TestCase):
                     'events.log': lambda *args: portal_events.append(args),
                     'status.get': lambda: {'device_name': 'Controller'},
                     'actions.apply': handle_action,
+                    'qualification.restart': lambda *args: qualification_restarts.append(args),
                     'settings.get': get_settings,
                     'settings.apply': set_settings,
                     'network.confirm': (
@@ -1533,6 +1535,16 @@ class WebPortalTests(unittest.TestCase):
                 )
                 self.assertIn('403 Forbidden', rejected_check)
                 self.assertEqual(len(portal_actions), action_count)
+                for csrf, confirm, expected in (('bad', 'yes', '403 Forbidden'),
+                                                 (csrf_token, '', '400 Bad Request'),
+                                                 (csrf_token, 'yes', '200 OK')):
+                    retry_body = ('csrf=' + csrf + '&confirm=' + confirm +
+                        '&gate=health&reason=MQTT+fixed&generation=0&actor=forged').encode()
+                    retry_response = await request(
+                        ('POST /restart-qualification-gate HTTP/1.1\r\nCookie: iotmd_session=' +
+                         session_id + '\r\nContent-Length: ' + str(len(retry_body)) + '\r\n\r\n').encode() + retry_body)
+                    self.assertIn(expected, retry_response)
+                self.assertEqual(qualification_restarts, [('health', 'admin', 'MQTT fixed', 0)])
                 settings_body = (
                     'csrf=' + csrf_token + '&device_name=New+Controller'
                     '&wifi_ssid=new-network&wifi_dhcp=true'
@@ -2206,7 +2218,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('aria-label="Maintenance submenu"', logging)
 
         self.assertIn('<h1>Upgrade</h1>', updates)
-        self.assertIn('<summary>Upgrade status and history</summary>', updates)
+        self.assertIn('<h2>Upgrade history</h2>', updates)
         self.assertIn('<h2>Select upgrade method</h2>', updates)
         self.assertIn('href="/updates?source=automatic"', updates)
         self.assertIn('href="/updates?source=manual"', updates)
@@ -2557,7 +2569,10 @@ class WebPortalTests(unittest.TestCase):
             'update_status': 'idle',
             'firmware_update_status': 'idle',
         }, {})
-        self.assertIn('<summary>Upgrade status and history</summary>', idle)
+        self.assertIn('<h2>Upgrade history</h2>', idle)
+        self.assertNotIn('<summary>Upgrade status and history', idle)
+        self.assertNotIn('class="metric update-status', idle)
+        self.assertNotIn('Last automatic check', idle)
         self.assertIn('<h2>Select upgrade method</h2>', idle)
         self.assertNotIn('href="/updates?source=staged"', idle)
         self.assertNotIn('href="/updates?source=rollback"', idle)
@@ -2585,6 +2600,7 @@ class WebPortalTests(unittest.TestCase):
         }, {})
         self.assertIn('href="/updates?source=automatic"', available)
         self.assertNotIn('action="/download-release"', available)
+        self.assertIn('>Upgrade available</span>', available)
         self.assertNotIn('Choose upgrade method</a>', available)
         automatic = web_portal.render_update_install_page('csrf', {
             'release_checks_enabled': True,
@@ -2723,6 +2739,37 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('class="actions manual-upgrade-buttons"', ready)
         self.assertIn('action="/discard-update"', ready)
         self.assertIn('Restart and install', ready)
+
+    def test_upgrade_history_is_visible_and_escapes_version_checks(self):
+        page = web_portal.render_updates_page('csrf', {
+            'update_history': [{'time': 200, 'event': 'confirmed', 'kind': 'universal', 'version': '3.0.0-alpha.34'}],
+            'release_check_history': [{'time': 300, 'event': 'Check failed: <offline>', 'kind': 'automatic check'}],
+        })
+        self.assertIn('<h2>Upgrade history</h2>', page)
+        self.assertIn('Check failed: &lt;offline&gt;', page)
+        self.assertIn('automatic check', page)
+        self.assertLess(page.index('Check failed:'), page.index('>confirmed</strong>'))
+        self.assertNotIn('<details', page)
+
+    def test_qualification_retry_requires_confirmation_and_admin_route(self):
+        import portal_routes
+        calls = []
+        handler = lambda *args: calls.append(args)
+        params = {'gate': 'health', 'reason': 'MQTT fixed', 'generation': '3'}
+        self.assertTrue(portal_http.restart_qualification_gate(params, 'admin', handler)[1])
+        self.assertEqual(calls, [])
+        params['confirm'] = 'yes'
+        self.assertFalse(portal_http.restart_qualification_gate(params, 'admin', handler)[1])
+        self.assertEqual(calls, [('health', 'admin', 'MQTT fixed', 3)])
+        self.assertEqual(portal_routes.required_role('POST', '/restart-qualification-gate'), 'administrator')
+        page = web_portal.render_release_qualification_page('csrf', {
+            'available': True, 'retry_generation': 3,
+            'evidence': {'gates': [{'name': 'health', 'status': 'failed', 'observed': 5, 'required': 10}]},
+        })
+        self.assertIn('action="/restart-qualification-gate"', page)
+        self.assertIn('name="generation" value="3"', page)
+        self.assertIn('name="confirm" value="yes" required', page)
+        self.assertIn('disabled', portal_ui.restrict_actions(page, 'operator'))
 
         downloading = web_portal.render_update_summary_html({
             'update_status': 'verification', 'firmware_update_status': 'idle',

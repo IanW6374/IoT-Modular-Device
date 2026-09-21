@@ -4,8 +4,8 @@ This directory is the isolated starting point for the v3 architecture rewrite.
 Stable v2.5 maintenance continues from `main`; v3 development continues on
 `alpha/v3-platform-rewrite` until its own promotion gates pass.
 
-Version `3.0.0-alpha.34` updates ESP-IDF to 5.5.5 and fixes the shared upgrade
-workflow layout under the portal CSP. See [release notes](../docs/V3_ALPHA34.md).
+Version `3.0.0-alpha.35` simplifies upgrade status and history and adds audited,
+administrator-only retries for failed qualification gates. See [release notes](../docs/V3_ALPHA35.md).
 It retains native ABI 6, preflights paired application
 capacity before selecting a new core and can release verified staging blocks
 while extracting the application from PSRAM on a constrained filesystem. It

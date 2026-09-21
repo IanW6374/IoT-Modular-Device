@@ -71,7 +71,7 @@ from services.startup_service import StartupService
 from services.certificate_renewal_service import CertificateRenewalService
 from services.mqtt_startup_service import MQTTStartupService
 from portal_contracts import PortalDependencies
-from portal_view_models import enrich_runtime_status, module_summaries as build_module_summaries
+from portal_view_models import enrich_runtime_status, saved_automatic_check_status, module_summaries as build_module_summaries
 from application import ApplicationContext, RuntimeState
 import settings_loader as device_settings
 try:
@@ -410,12 +410,9 @@ resumable_update_store = resumable_upload.ResumableUploadStore(
     storage_reclaimer=reclaim_resumable_update_storage
 )
 runtime_health.record_boot(hardware_platform.reset_cause())
-saved_release_check = runtime_health.snapshot().get('observations', {}).get(
-    'last_release_check', {}
+release_automatic_check_status, release_automatic_last_checked = saved_automatic_check_status(
+    runtime_health.snapshot(), wall_time_text
 )
-if isinstance(saved_release_check, dict) and saved_release_check.get('status'):
-    release_automatic_check_status = str(saved_release_check.get('status'))
-    release_automatic_last_checked = wall_time_text(saved_release_check.get('time'))
 mqtt_publish_queue = BoundedPublishQueue(state_limit=64, critical_limit=96)
 module_broker = ModuleBroker(lambda: outputDevices + inputDevices)
 event_service = EventService(runtime_health)
@@ -957,6 +954,7 @@ def portal_status():
     status['storage_free_bytes'] = storage.get('free_bytes', 0)
     status['storage_total_bytes'] = storage.get('total_bytes', 0)
     status['update_history'] = update_support.update_history()
+    status['release_check_history'] = update_support.release_check_history()
     status['release_channel'] = release_channel
     status['release_base_url'] = release_base_url
     status['release_available_version'] = release_available.get('version', '')
@@ -2369,6 +2367,7 @@ async def check_release_once(automatic=False):
         release_last_checked = wall_time_text()
         detail = str(exc).strip() or exc.__class__.__name__
         release_check_status = 'Check failed: ' + detail
+        update_support.record_release_check(automatic, release_check_status)
         if automatic:
             release_automatic_check_status = release_check_status
             release_automatic_last_checked = release_last_checked
@@ -2383,6 +2382,7 @@ async def check_release_once(automatic=False):
         raise
     release_last_checked = wall_time_text()
     release_check_status = str(result)
+    update_support.record_release_check(automatic, release_check_status, release_available.get('version', ''))
     if automatic:
         release_automatic_check_status = release_check_status
         release_automatic_last_checked = release_last_checked
@@ -2542,6 +2542,7 @@ async def start_admin_portal():
             'restart.request': request_pending_restart,
             'shutdown.request': request_device_shutdown,
             'qualification.get': qualification_service.status,
+            'qualification.restart': qualification_service.restart_failed_gate,
         })
         web_portal_server = await portal_service.start(dependencies)
     except Exception as exc:
