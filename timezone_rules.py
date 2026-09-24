@@ -100,6 +100,11 @@ def _runtime_to_unix(epoch):
     return int(epoch or 0) + _runtime_epoch_offset()
 
 
+def runtime_to_unix(epoch):
+    """Convert a runtime timestamp to the Unix timestamp used by contracts."""
+    return _runtime_to_unix(epoch)
+
+
 def _weekday(year, month, day):
     # Monday=0, matching time.localtime().  1970-01-01 was Thursday.
     days = _days_before_year(year) + _days_before_month(year, month) + day - 1

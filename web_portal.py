@@ -101,11 +101,14 @@ async def start_web_portal(portal):
     resumable_status = portal.get('updates.upload.status')
     resumable_append = portal.get('updates.upload.append')
     resumable_complete = portal.get('updates.upload.complete')
+    resumable_discard = portal.get('updates.upload.discard')
     restart_status_getter = portal.get('restart.status')
     restart_request_handler = portal.get('restart.request')
     shutdown_request_handler = portal.get('shutdown.request')
     qualification_getter = portal.get('qualification.get')
     qualification_restart = portal.get('qualification.restart')
+    qualification_event = portal.get('qualification.event')
+    qualification_scenario = portal.get('qualification.scenario')
     username = settings.get('username', 'admin') or 'admin'
     password_verifier = settings.get('password_verifier', '')
     authenticator = settings.get('authenticator')
@@ -690,6 +693,14 @@ async def start_web_portal(portal):
                 await send_response(writer, '400 Bad Request' if error else '200 OK',
                     render_release_qualification_page(csrf_token,
                         qualification_getter() if qualification_getter else {}, message, error))
+            elif method == 'POST' and route in ('/record-qualification-event',
+                                                '/run-qualification-scenario'):
+                message, error, success_status = apply_qualification_action(
+                    route, form_params, session_username,
+                    qualification_event, qualification_scenario)
+                await send_response(writer, '400 Bad Request' if error else success_status,
+                    render_release_qualification_page(csrf_token,
+                        qualification_getter() if qualification_getter else {}, message, error))
             elif method == 'POST' and route == '/reset-health-history':
                 apply_portal_action(
                     'reset-health-history', action_path, action_handler, log_output,
@@ -761,10 +772,9 @@ async def start_web_portal(portal):
                     )
                 else:
                     await send_redirect(writer, '/update-settings')
-            elif method == 'POST' and route == '/revoke-api-client':
-                result = apply_portal_action(
-                    'revoke-api-client', action_path, action_handler, log_output,
-                    form_params
+            elif method == 'POST' and route in ('/revoke-api-client', '/update-api-client-scopes'):
+                apply_portal_action(
+                    route[1:], action_path, action_handler, log_output, form_params
                 )
                 await send_redirect(writer, form_params.get('return_to', '/device-api'))
             elif method == 'POST' and route == '/acme-settings':
@@ -782,7 +792,6 @@ async def start_web_portal(portal):
             else:
                 return False
             return True
-
         async def handle_upload_routes():
             if method == 'POST' and route == '/resumable-upload-begin':
                 if resumable_begin is None:
@@ -862,10 +871,17 @@ async def start_web_portal(portal):
                         json.dumps({'phase': 'verification', 'percent': 0}),
                         'application/json'
                     )
+            elif method == 'POST' and route == '/resumable-upload-discard':
+                if resumable_discard is None:
+                    await send_response(writer, '503 Service Unavailable', 'Resumable uploads are unavailable', 'text/plain')
+                else:
+                    identifier = str(json.loads(body.decode()).get('id', ''))[:64]
+                    removed = bool(resumable_discard(identifier))
+                    upload_progress_by_id.pop(identifier, None)
+                    await send_response(writer, '200 OK', json.dumps({'discarded': removed}), 'application/json')
             else:
                 return False
             return True
-
         async def handle_live_routes():
             if method == 'GET' and route in ('/task', '/update-task'):
                 await send_response(writer, '200 OK', render_persistent_task_route(
@@ -1253,7 +1269,6 @@ async def start_web_portal(portal):
                 )
             elif method == 'POST' and is_upload:
                 csrf_error = headers.get('x-csrf-token', '') != csrf_token
-
             quiet_audit_routes = (
                 '/assets/portal.css', '/assets/portal.js', '/logs', '/partials',
                 '/api/status', '/api/overview', '/api/module-diagnostics', '/api/tasks',

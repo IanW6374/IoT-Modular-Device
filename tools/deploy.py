@@ -33,6 +33,7 @@ FILES = (
     "release_update.py",
     "settings_loader.py",
     "component_versions.py",
+    "qualification_control.py",
     "app_settings.json",
     "module_settings.json",
     "display.py",

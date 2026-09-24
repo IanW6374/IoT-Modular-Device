@@ -431,7 +431,7 @@ def render_firmware_update_html(status, token):
         return (
             '<form action="/activate-firmware" method="post">' +
             '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
-            '<button class="secondary" type="submit" title="Boot the verified inactive firmware partition and require a healthy startup confirmation.">Restart and install core firmware</button>' +
+            '<button class="secondary" type="submit" title="Boot the verified inactive firmware partition and require a healthy startup confirmation.">Restart and install</button>' +
             '</form>'
         )
     return ''
@@ -439,24 +439,20 @@ def render_firmware_update_html(status, token):
 def render_universal_update_html(status, token):
     if not status or status.get('universal_update_status') != 'ready':
         return ''
-    version = str(status.get('universal_update_version', ''))
     return (
         '<form action="/activate-universal" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<button class="secondary" type="submit" title="Boot the staged core and application '
-        'together and confirm both after the portal health check.">Restart and install universal upgrade' +
-        ((' ' + html_escape(version)) if version else '') + '</button></form>'
+        'together and confirm both after the portal health check.">Restart and install</button></form>'
     )
 
 def render_application_rollback_html(status, token):
     if not status or not status.get('previous_slot'):
         return ''
-    version = status.get('previous_slot_version', '')
     return (
         '<form action="/rollback-application" method="post">' +
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
-        '<button class="secondary" type="submit" title="Select the retained previous application slot and reboot.">Rollback application' +
-        (' to ' + html_escape(version) if version else '') + '</button></form>'
+        '<button class="secondary" type="submit" title="Select the retained previous application slot and reboot.">Restart and rollback</button></form>'
     )
 
 def render_release_check_html(status, token, select_only=False):
@@ -577,6 +573,50 @@ def _qualification_retry_form(token, gate, generation):
 def render_release_qualification_page(token, status=None, message='', error=False):
     status = status or {}
     evidence = status.get('evidence')
+    controlled_options = ''.join(
+            '<option value="' + name + '">' +
+            html_escape(name.replace('-', ' ')) + '</option>'
+            for name in (
+                'native-recovery', 'watchdog-recovery',
+                'identity-interoperability', 'fleet-interoperability',
+                'migration-rollback', 'driver-hardware',
+            )
+        )
+    qualification_controls = (
+            '<h3>Record controlled evidence</h3>'
+            '<p class="muted">Record only an observed HIL or interoperability result. '
+            'The device derives gate status from the evidence counters; this does not '
+            'directly set a gate to passed.</p>'
+            '<form action="/record-qualification-event" method="post">'
+            '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+            '<div class="grid"><label class="field">Gate<select name="gate">' +
+            controlled_options + '</select></label>'
+            '<label class="field">Outcome<select name="outcome">'
+            '<option value="success">Success</option><option value="failure">Failure</option>'
+            '</select></label><label class="field">Run ID'
+            '<input name="run_id" required maxlength="64" placeholder="hil-20260921-001"></label>'
+            '<label class="field">Evidence digest (optional)'
+            '<input name="evidence_digest" maxlength="96" placeholder="sha256:..."></label></div>'
+            '<label class="field">Notes (optional)<input name="notes" maxlength="160"></label>'
+            '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
+            'I confirm this result was observed; simulation alone is not qualification evidence.</label>'
+            '<div class="actions"><span></span><button type="submit">Record evidence</button></div>'
+            '</form><h3>Automated disruptive scenarios</h3>'
+            '<p class="muted">Alpha builds only. These scenarios restart or divert the device. '
+            'They initiate a real fault but do not record success; an independent observer must '
+            'verify recovery and submit the evidence above.</p>'
+            '<form action="/run-qualification-scenario" method="post">'
+            '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+            '<div class="grid"><label class="field">Scenario<select name="scenario">'
+            '<option value="watchdog-recovery">watchdog recovery</option>'
+            '<option value="native-recovery">native recovery</option></select></label>'
+            '<label class="field">Run ID<input name="run_id" required maxlength="64"></label>'
+            '<label class="field">Typed confirmation'
+            '<input name="confirmation" required maxlength="80" '
+            'placeholder="execute watchdog-recovery"></label></div>'
+            '<div class="actions"><span></span><button class="danger" type="submit">'
+            'Start scenario</button></div></form>'
+        )
     if not status.get('available') or not isinstance(evidence, dict):
         detail = status.get('error', '')
         content = (
@@ -727,7 +767,7 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
             'and requires fresh testing. Health and storage need a new full observation window. '
             'An active canary pause must instead be resolved; that gate updates automatically.</p>'
             '<div class="metrics qualification-gates">' +
-            ''.join(rows) + '</div>' + history_content +
+            ''.join(rows) + '</div>' + qualification_controls + history_content +
             implementation_content + native_content
         )
     body = (
@@ -1055,103 +1095,122 @@ def update_upload_script():
         'cancelButton=document.getElementById("update-cancel"),primaryButton=document.getElementById('
         '"update-primary"),fileSelection=document.getElementById("update-file-selection"),'
         'fileGuidance=document.getElementById("update-file-guidance"),'
-        'activeRequest=null,updateCancelled=false,uploadInProgress=false,pollTimer=null,stageList='
+        'activeRequest=null,updateCancelled=false,uploadInProgress=false,pollTimer=null,uploadIds=[],stageList='
         'document.getElementById("update-stage-list"),workflows={application:[["method","Manual upgrade selected"],'
         '["select","Select signed file"],["prepare","Prepare and hash file"],'
         '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
-        '["ready","Ready to restart"]],firmware:[["method","Manual upgrade selected"],'
+        '["ready","Restart and install"]],firmware:[["method","Manual upgrade selected"],'
         '["select","Select signed file"],["prepare","Prepare and hash file"],'
         '["upload_core","Upload core firmware"],["write_core","Write core firmware"],'
-        '["verify_core","Verify core firmware"],["ready","Ready to restart"]],universal:'
+        '["verify_core","Verify core firmware"],["ready","Restart and install"]],universal:'
         '[["method","Manual upgrade selected"],["select","Select signed file"],'
         '["inspect","Inspect paired manifest"],'
         '["upload_core","Upload core firmware"],'
         '["write_core","Write core firmware"],["verify_core","Verify core firmware"],'
         '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
-        '["pair","Pair verified components"],["ready","Ready to restart"]]},defaultWorkflow='
+        '["pair","Pair verified components"],["ready","Restart and install"]]},defaultWorkflow='
         '[["method","Manual upgrade selected"],["select","Select signed file"],["upload","Upload release"],'
         '["verify","Verify and stage"],'
         '["activate","Restart and install"]];'
         'function workflowKind(file){if(!file)return "";return /\\.iotuni$/i.test(file.name)?"universal":'
         '(/\\.iotcore$/i.test(file.name)?"firmware":(/\\.iotapp$/i.test(file.name)?"application":""));}'
         'function setMilestone(li,state,percent){percent=Math.max(0,Math.min(100,Math.round(Number(percent)||0)));'
-        'li.className=state;li.style.setProperty("--step-progress",percent+"%");var ring=li.querySelector('
-        '".upgrade-stage-ring"),value=li.querySelector(".upgrade-stage-percent");ring.setAttribute('
+        'var ring=li.querySelector(".upgrade-stage-ring");if(!ring){li.className=(state?state+" ":"")+'
+        '"upgrade-stage-action";if(state==="active")li.setAttribute("aria-current","step");else li.removeAttribute('
+        '"aria-current");return;}li.className=state;li.style.setProperty("--step-progress",percent+"%");var value='
+        'li.querySelector(".upgrade-stage-percent");ring.setAttribute('
         '"aria-valuenow",String(percent));value.textContent=percent+"%";if(state==="active")li.setAttribute('
         '"aria-current","step");else li.removeAttribute("aria-current");}'
         'function milestone(item,index,active){var li=document.createElement("li"),name=document.createElement('
         '"span"),ring=document.createElement("span"),value=document.createElement("span");name.className='
-        '"upgrade-stage-name";name.textContent=item[1];ring.className="upgrade-stage-ring";ring.setAttribute('
+        '"upgrade-stage-name";name.textContent=item[1];li.appendChild(name);li.dataset.stage=item[0];if(item[0]==='
+        '"ready"||item[0]==="activate"){var control=document.createElement("span"),button='
+        'document.createElement("button");control.className="upgrade-stage-action-control";button.className='
+        '"secondary";button.type="button";button.disabled=true;button.textContent="Restart and install";'
+        'control.appendChild(button);li.appendChild(control);setMilestone(li,"",0);return li;}'
+        'ring.className="upgrade-stage-ring";ring.setAttribute('
         '"role","progressbar");ring.setAttribute("aria-label",item[1]+" progress");ring.setAttribute('
         '"aria-valuemin","0");ring.setAttribute("aria-valuemax","100");value.className="upgrade-stage-percent";'
-        'ring.appendChild(value);li.appendChild(name);li.appendChild(ring);li.dataset.stage=item[0];setMilestone('
+        'ring.appendChild(value);li.appendChild(ring);if(item[0]==="select"&&uploadForm){var control='
+        'document.createElement("div");control.className="upgrade-stage-step-control";control.appendChild('
+        'uploadForm);li.appendChild(control);}setMilestone('
         'li,active&&index===0?"complete":(active&&index===1?"active":""),active&&index===0?100:0);return li;}'
         'function renderWorkflow(kind){var items=workflows[kind]||defaultWorkflow,current=kind?2:1;'
         'stageList.replaceChildren();'
         'items.forEach(function(item,index){var li=milestone(item,index,false);stageList.appendChild(li);setMilestone('
         'li,index<current?"complete":(index===current?"active":""),index<current?100:0);});}'
+        'function discardSessions(){var ids=uploadIds.splice(0);ids.forEach(function(identifier){fetch('
+        '"/resumable-upload-discard",{method:"POST",credentials:"same-origin",headers:{"Content-Type":'
+        '"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify({id:identifier})}).catch(function(){});});}'
         'document.getElementById("update-bundle").onchange=function(){var selected=this.files&&this.files[0],'
-        'box=document.getElementById("update-overall"),out=document.getElementById("update-result");document.getElementById('
+        'out=document.getElementById("update-result");document.getElementById('
         '"update-file-name").textContent=selected?selected.name:"No file selected";cancelButton.disabled=!selected;'
-        'primaryButton.disabled=!selected;primaryButton.textContent="Stage upgrade";renderWorkflow(workflowKind(selected));'
+        'cancelButton.hidden=!selected;primaryButton.hidden=false;primaryButton.disabled=!selected;'
+        'primaryButton.textContent="Stage upgrade";renderWorkflow(workflowKind(selected));'
+        'fileSelection.classList.toggle("has-selection",!!selected);'
         'fileGuidance.hidden=!!selected;'
-        'if(selected){box.hidden=true;box.classList.remove("complete","failed");out.className="portal-status";'
-        'out.textContent="";}};'
+        'if(selected){out.className="portal-status";out.textContent="";}};'
         'cancelButton.onclick=function(){updateCancelled=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";if(pollTimer)clearTimeout(pollTimer);'
-        'if(activeRequest)activeRequest.abort();uploadForm.reset();document.getElementById("update-file-name").textContent='
-        '"No file selected";cancelButton.disabled=true;primaryButton.disabled=true;primaryButton.textContent="Stage upgrade";'
+        'if(activeRequest)activeRequest.abort();discardSessions();uploadForm.reset();document.getElementById("update-file-name").textContent='
+        '"No file selected";cancelButton.disabled=true;cancelButton.hidden=true;primaryButton.hidden=false;primaryButton.disabled=true;'
+        'primaryButton.textContent="Stage upgrade";fileSelection.classList.remove("busy");'
+        'fileSelection.classList.remove("has-selection");'
         'fileGuidance.hidden=false;'
-        'renderWorkflow("");fileSelection.hidden=false;var box=document.getElementById("update-overall");box.hidden=true;'
-        'box.classList.remove("complete","failed");document.getElementById("update-result").className="portal-status";'
+        'renderWorkflow("");document.getElementById("update-result").className="portal-status";'
         'document.getElementById("update-result").textContent="";};'
         'window.addEventListener("beforeunload",function(e){if(!uploadInProgress)return;e.preventDefault();e.returnValue="";});'
         'uploadForm.onsubmit=function(e){e.preventDefault();uploadForm.dataset.portalDirty="0";updateCancelled=false;uploadInProgress=true;primaryButton.disabled=true;'
-        'primaryButton.textContent="Working…";cancelButton.disabled=false;var input='
+        'primaryButton.hidden=true;cancelButton.disabled=false;cancelButton.hidden=false;fileSelection.classList.add("busy");var input='
         'document.getElementById("update-bundle"),f=input.files&&input.files[0],out=document.getElementById('
-        '"update-result"),overall=document.getElementById("update-overall"),box=overall,'
-        'label=document.getElementById("update-overall-label"),'
-        'overallLabel=document.getElementById("update-overall-label");if(!f){portalRequire(input,'
+        '"update-result");if(!f){portalRequire(input,'
         '"Choose a .iotapp, .iotcore or .iotuni upgrade bundle");primaryButton.disabled=true;'
-        'primaryButton.textContent="Stage upgrade";cancelButton.disabled=true;return;}var firmware=/\\.iotcore$/i.test(f.name),'
+        'primaryButton.hidden=false;cancelButton.disabled=true;cancelButton.hidden=true;fileSelection.classList.remove('
+        '"busy");return;}var firmware=/\\.iotcore$/i.test(f.name),'
         'application=/\\.iotapp$/i.test(f.name),universal=/\\.iotuni$/i.test(f.name);'
         'var flow=[],stagePosition=-1;'
         'function configureWorkflow(kind){flow=workflows[kind]||[];stagePosition=-1;stageList.replaceChildren();'
         'flow.forEach(function(item,index){'
         'stageList.appendChild(milestone(item,index,false));});setMilestone(stageList.children[0],"complete",100);'
-        'setMilestone(stageList.children[1],"complete",100);overall.hidden=false;setStage(flow[2][0],0);}'
+        'setMilestone(stageList.children[1],"complete",100);setStage(flow[2][0],0);}'
         'function setStage(key,fraction){var index=flow.findIndex(function(item){return item[0]===key;});if(index<0)return;'
         'fraction=Math.max(0,Math.min(1,Number(fraction)||0));if(index<stagePosition)return;stagePosition=index;'
         'var taskValue=Math.round(fraction*100);Array.from(stageList.children).forEach(function(item,itemIndex){'
         'setMilestone(item,itemIndex<index?"complete":(itemIndex===index?"active":""),'
-        'itemIndex<index?100:(itemIndex===index?taskValue:0));});'
-        'overallLabel.textContent=flow[index][1];}'
+        'itemIndex<index?100:(itemIndex===index?taskValue:0));});}'
         'function failure(text){out.className="portal-status error";out.textContent=text;}'
         'function terminalFailure(text){finished=true;uploadInProgress=false;if(pollTimer)clearTimeout(pollTimer);'
-        'box.classList.add("failed");box.hidden=false;label.textContent="Failed";failure(text);'
+        'discardSessions();failure(text);'
         'input.value="";document.getElementById("update-file-name").textContent="No file selected";'
-        'fileGuidance.hidden=false;fileSelection.hidden=false;cancelButton.disabled=true;primaryButton.disabled=true;'
-        'primaryButton.textContent="Stage upgrade";}'
+        'fileGuidance.hidden=false;fileSelection.classList.remove("busy");cancelButton.disabled=true;cancelButton.hidden=true;'
+        'fileSelection.classList.remove("has-selection");'
+        'primaryButton.hidden=false;primaryButton.disabled=true;primaryButton.textContent="Stage upgrade";}'
         'if(!firmware&&!application&&!universal){terminalFailure("Choose a .iotapp, .iotcore or .iotuni upgrade bundle.");'
         'renderWorkflow("");return;}'
         'var selectedKind=universal?"universal":(firmware?"firmware":"application");configureWorkflow(selectedKind);'
-        'fileSelection.hidden=true;box.classList.remove("complete","failed");box.hidden=false;label.textContent=universal?'
-        '"Inspecting universal bundle…":"Preparing file…";out.className="portal-status";out.replaceChildren();'
-        'var id="",polling=false,finished=false;function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
+        'out.className="portal-status";out.replaceChildren();'
+        'var id="",polling=false,finished=false;function showStaged(){setStage("ready",1);return fetch('
+        '"/updates?source=staged",{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){'
+        'location.replace("/login?reason=expired");throw new Error("Session expired");}if(!r.ok)throw new Error('
+        '"Unable to load staged upgrade");return r.text();}).then(function(html){var parsed=new DOMParser().parseFromString('
+        'html,"text/html"),fresh=parsed.querySelector("main .card"),current=uploadForm.closest(".card");if(!fresh||!current)'
+        'throw new Error("Staged upgrade view is unavailable");history.replaceState(null,"","/updates?source=staged");'
+        'current.replaceWith(fresh);var restart=fresh.querySelector(".upgrade-stage-action button");if(restart)restart.focus();'
+        '}).catch(function(){out.className="portal-status success";out.textContent="Upgrade staged. You can leave this page and restart later.";});}'
+        'function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
         'function startPolling(){if(polling)return;polling=true;poll();}function poll(){fetch("/update-progress?id="+encodeURIComponent(id),'
         '{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){location.replace('
         '"/login?reason=expired");return null;}return r.json();}).then(function(s){if(!s)return;if(s.phase==="writing"){'
-        'label.textContent="Writing firmware "+(s.percent||0)+"%";setStage("write_core",(s.percent||0)/100);}'
-        'else if(s.phase==="verification"){label.textContent="Verifying "+(s.percent||0)+"%";'
+        'setStage("write_core",(s.percent||0)/100);}'
+        'else if(s.phase==="verification"){'
         'setStage(firmware?"verify_core":"verify_application",(s.percent||0)/100);}'
-        'else if(s.phase==="firmware_writing"){label.textContent="Writing core firmware "+(s.percent||0)+"%";'
+        'else if(s.phase==="firmware_writing"){'
         'setStage("write_core",(s.percent||0)/100);}'
         'else if(s.phase==="firmware_verification"){'
-        'label.textContent="Verifying core firmware "+(s.percent||0)+"%";setStage("verify_core",(s.percent||0)/100);}'
-        'else if(s.phase==="application_verification"){label.textContent="Verifying application "+(s.percent||0)+"%";'
+        'setStage("verify_core",(s.percent||0)/100);}'
+        'else if(s.phase==="application_verification"){'
         'setStage("verify_application",(s.percent||0)/100);}'
-        'else if(s.phase==="complete"){finished=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";box.classList.add("complete");label.textContent="Verification complete";'
-        'setStage("ready",1);'
-        'setTimeout(function(){location.replace("/updates?source=staged");},900);return;}else if(s.phase==="failed"){'
+        'else if(s.phase==="complete"){finished=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";'
+        'showStaged();return;}else if(s.phase==="failed"){'
         'terminalFailure(s.message||"Verification failed");return;}'
         'schedulePoll();}).catch(function(){schedulePoll();});}'
         'function jsonPost(url,value){return fetch(url,{method:"POST",credentials:"same-origin",headers:{'
@@ -1162,14 +1221,14 @@ def update_upload_script():
         'request.open("POST",url,true);request.withCredentials=true;request.setRequestHeader("Content-Type","application/octet-stream");'
         'request.setRequestHeader("X-CSRF-Token",csrfToken);request.upload.onprogress=function(event){'
         'var percent=Math.min(99,Math.round((base+Math.max(0,Number(event.loaded||0)))*100/total));'
-        'label.textContent=prefix+percent+"%";setStage(stageKey,percent/100);};'
+        'setStage(stageKey,percent/100);};'
         'request.onload=function(){if(request.status===401){location.replace("/login?reason=expired");reject(new Error("Session expired"));return;}'
         'if(request.status<200||request.status>=300){reject(new Error(request.responseText||"Chunk upload failed"));return;}'
         'try{resolve(JSON.parse(request.responseText));}catch(error){reject(new Error("Invalid upload response"));}};'
         'request.onerror=function(){reject(new Error("Chunk upload failed"));};request.onabort=function(){reject(new Error("Upgrade cancelled"));};'
         'request.onloadend=function(){if(activeRequest===request)activeRequest=null;};request.send(blob);});}'
         'function sendChunk(offset){var uploadStage=firmware?"upload_core":"upload_application";if(offset>=f.size){'
-        'setStage(uploadStage,1);label.textContent="Checking uploaded "+(firmware?"core firmware":"application")+" bytes";'
+        'setStage(uploadStage,1);'
         'startPolling();'
         'return fetch("/resumable-upload-complete",{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify({id:id})}).then(function(r){'
@@ -1177,7 +1236,7 @@ def update_upload_script():
         'throw new Error(t||"Verification failed");});});}var end=Math.min(offset+65536,f.size),url='
         '"/resumable-upload-chunk?id="+encodeURIComponent(id)+"&offset="+offset;return uploadChunk('
         'url,f.slice(offset,end),offset,f.size,"Uploading ",uploadStage).then(function(s){'
-        'var received=Number(s.received_bytes||end),n=Math.round(received*100/f.size);label.textContent="Uploading "+n+"%";'
+        'var received=Number(s.received_bytes||end),n=Math.round(received*100/f.size);'
         'setStage(uploadStage,n/100);return sendChunk(received);});}'
         'function componentName(kind){return kind==="firmware"?"core firmware":"application";}'
         'function waitForComponent(uploadId,kind){return new Promise(function(resolve,reject){function check(){fetch('
@@ -1185,17 +1244,18 @@ def update_upload_script():
         'if(r.status===401){location.replace("/login?reason=expired");throw new Error("Session expired");}'
         'if(!r.ok)throw new Error("Unable to read component progress");return r.json();}).then(function(s){var name=componentName(kind);'
         'if(s.phase==="verification"||s.phase==="application_verification"||s.phase==="firmware_verification")'
-        '{label.textContent="Verifying signed "+name+" "+(s.percent||0)+"%";setStage(kind==="firmware"?'
+        '{setStage(kind==="firmware"?'
         '"verify_core":"verify_application",(s.percent||0)/100);}else if(s.phase==="writing"||s.phase==="firmware_writing")'
-        '{label.textContent="Writing "+name+" "+(s.percent||0)+"%";setStage("write_core",(s.percent||0)/100);}'
-        'else if(s.phase==="compacting"){label.textContent="Staging "+name+" "+(s.percent||0)+"%";'
+        '{setStage("write_core",(s.percent||0)/100);}'
+        'else if(s.phase==="compacting"){'
         'setStage("verify_application",(s.percent||0)/100);}if(s.phase==="complete")'
         '{setStage(kind==="firmware"?"verify_core":"verify_application",1);resolve(s);return;}'
         'if(s.phase==="failed"){reject(new Error(s.message||"Component verification failed"));return;}'
         'setTimeout(check,500);}).catch(reject);}check();});}'
         'function uploadUniversalComponent(blob,kind,digest,planId){var uploadId=digest.slice(0,20)+"-"+kind.charAt(0)+"-"+blob.size;'
+        'if(uploadIds.indexOf(uploadId)<0)uploadIds.push(uploadId);'
         'return jsonPost("/resumable-upload-begin",{id:uploadId,kind:kind,total_bytes:blob.size,sha256:digest,'
-        'universal_plan:planId}).then(function(s){function chunk(offset){if(offset>=blob.size){label.textContent="Checking uploaded "+componentName(kind)+" bytes";'
+        'universal_plan:planId}).then(function(s){function chunk(offset){if(offset>=blob.size){'
         'return fetch("/resumable-upload-complete",{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify({id:uploadId})}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");throw new Error("Session expired");}if(r.status!==202&&!r.ok)'
@@ -1203,7 +1263,7 @@ def update_upload_script():
         'var end=Math.min(offset+65536,blob.size),url="/resumable-upload-chunk?id="+encodeURIComponent(uploadId)+'
         '"&offset="+offset,uploadStage=kind==="firmware"?"upload_core":"upload_application";return uploadChunk('
         'url,blob.slice(offset,end),offset,blob.size,"Uploading "+componentName(kind)+" ",uploadStage).then(function(progress){var received=Number('
-        'progress.received_bytes||end),percent=Math.round(received*100/blob.size);label.textContent="Uploading "+componentName(kind)+" "+percent+"%";'
+        'progress.received_bytes||end),percent=Math.round(received*100/blob.size);'
         'setStage(uploadStage,percent/100);return chunk(received);});}return chunk(Number(s.received_bytes||0));});}'
         'function startUniversalUpload(){return f.slice(0,10).arrayBuffer().then(function(header){var bytes=new Uint8Array(header),'
         'magic=String.fromCharCode.apply(null,bytes.slice(0,6));if(magic!=="IOTU1\\n")throw new Error("Invalid universal update header");'
@@ -1220,17 +1280,17 @@ def update_upload_script():
         'if(plan.application&&plan.application.required){sequence=sequence.then(function(){'
         'setStage("upload_application",0);'
         'return uploadUniversalComponent(f.slice(prefix+firmwareSize),"application",String(manifest.application.sha256),plan.id);});}'
-        'return sequence.then(function(){setStage("pair",0);label.textContent="Pairing verified components";return jsonPost('
+        'return sequence.then(function(){setStage("pair",0);return jsonPost('
         '"/universal-upload-finalize",{id:plan.id});});});});});}'
-        'if(universal){startUniversalUpload().then(function(){finished=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";box.classList.add("complete");label.textContent='
-        '"Universal verification complete";setStage("ready",1);setTimeout(function(){location.replace('
-        '"/updates?source=staged");},900);}).catch(function(err){if(updateCancelled)return;terminalFailure('
+        'if(universal){startUniversalUpload().then(function(){finished=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";'
+        'showStaged();}).catch(function(err){if(updateCancelled)return;terminalFailure('
         'err&&err.message?err.message:"Universal upload failed");});return;}'
-        'setStage("prepare",0);label.textContent="Preparing and hashing file…";Promise.resolve().then(function(){return '
+        'setStage("prepare",0);Promise.resolve().then(function(){return '
         'f.arrayBuffer();}).then(function(data){return crypto.subtle.digest("SHA-256",data);}).then(function(hash){'
         'var hex=Array.from(new Uint8Array(hash)).map(function(b){'
         'return b.toString(16).padStart(2,"0");}).join("");id=hex.slice(0,24)+"-"+f.size;var kind=universal?"universal":'
-        '(firmware?"firmware":"application");setStage("prepare",1);setStage(firmware?"upload_core":"upload_application",0);'
+        '(firmware?"firmware":"application");if(uploadIds.indexOf(id)<0)uploadIds.push(id);setStage("prepare",1);'
+        'setStage(firmware?"upload_core":"upload_application",0);'
         'return jsonPost("/resumable-upload-begin",'
         '{id:id,kind:kind,total_bytes:f.size,sha256:hex});'
         '}).then(function(s){startPolling();return sendChunk(Number(s.received_bytes||0));}).catch(function(err){'
@@ -1271,10 +1331,12 @@ def _upgrade_steps(kind, method=''):
     return (str(method) + ' upgrade selected', selection) + steps
 
 
-def _upgrade_step_list(steps, active=0, completed=0, identifier=''):
+def _upgrade_step_list(steps, active=0, completed=0, identifier='',
+                       manual_action='', step_controls=None):
     attributes = (
         ' id="' + html_escape(identifier) + '"' if identifier else ''
     )
+    step_controls = step_controls or {}
     items = []
     for index, label in enumerate(steps):
         state = (
@@ -1282,6 +1344,21 @@ def _upgrade_step_list(steps, active=0, completed=0, identifier=''):
             ('active' if index == active else '')
         )
         percent = 100 if state == 'complete' else 0
+        manual = index == len(steps) - 1 and 'restart' in label.lower()
+        if manual:
+            control = (
+                '<span class="upgrade-stage-action-control">' + manual_action +
+                '</span>' if manual_action else
+                '<span class="upgrade-stage-action-control"><button class="secondary" '
+                'type="button" disabled>Restart and install</button></span>'
+            )
+            items.append(
+                '<li class="' + state + ' upgrade-stage-action"' +
+                (' aria-current="step"' if state == 'active' else '') + '>'
+                '<span class="upgrade-stage-name">' + html_escape(label) +
+                '</span>' + control + '</li>'
+            )
+            continue
         items.append(
             '<li class="' + state + '"' +
             (' aria-current="step"' if state == 'active' else '') + '>'
@@ -1289,7 +1366,9 @@ def _upgrade_step_list(steps, active=0, completed=0, identifier=''):
             '<span class="upgrade-stage-ring" role="progressbar" aria-label="' +
             html_escape(label) + ' progress" aria-valuemin="0" aria-valuemax="100" '
             'aria-valuenow="' + str(percent) + '"><span class="upgrade-stage-percent">' +
-            str(percent) + '%</span></span></li>'
+            str(percent) + '%</span></span>' +
+            ('<div class="upgrade-stage-step-control">' + step_controls[index] + '</div>'
+             if index in step_controls else '') + '</li>'
         )
     return (
         '<ol' + attributes + ' class="upgrade-stage-list">' + ''.join(items) + '</ol>'
@@ -1396,27 +1475,32 @@ def _upgrade_method_workspace(status):
 
 
 def _manual_upgrade_workspace(token):
+    selection = (
+        '<form id="update-upload-form" class="upgrade-file-selection" data-csrf="' +
+        html_escape(token) + '"><div id="update-file-selection" class="upgrade-file-selection-fields">'
+        '<input id="update-bundle" class="file-input-hidden" type="file" required '
+        'accept=".iotapp,.iotcore,.iotuni"><label class="button secondary file-button" '
+        'for="update-bundle">Choose upgrade file</label>'
+        '<span class="selected-release-label">Selected file</span>'
+        '<span id="update-file-name" class="file-name">No file selected</span>'
+        '<span id="update-file-guidance" class="file-guidance">Use a universal upgrade for '
+        'routine updates. Application and core files are intended for recovery.</span>'
+        '<span class="stage-only-hint">Staging does not restart the device.</span>'
+        '<div class="upgrade-step-actions">'
+        '<button id="update-primary" type="submit" disabled>Stage upgrade</button></div></div></form>'
+    )
     return (
         '<section class="card"><div class="section-title"><h2>Manual upgrade</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list(
             ('Manual upgrade selected', 'Select signed file', 'Upload release',
              'Verify and stage', 'Restart and install'), active=1, completed=1,
-            identifier='update-stage-list'
+            identifier='update-stage-list', step_controls={1: selection}
         ) + '</aside><div class="upgrade-operation">'
-        '<form id="update-upload-form" data-csrf="' + html_escape(token) + '">'
-        '<div id="update-file-selection"><input id="update-bundle" class="file-input-hidden" type="file" required '
-        'accept=".iotapp,.iotcore,.iotuni"><label class="button secondary file-button" for="update-bundle">'
-        'Choose upgrade file</label> <span id="update-file-name" class="file-name">No file selected</span>'
-        '<span id="update-file-guidance" class="file-guidance"> Use a universal upgrade for routine updates. '
-        'Application and core files are intended for recovery.</span></div>'
-        '<div id="update-overall" class="upgrade-overall" hidden><div class="upgrade-overall-head">'
-        '<strong>Current task: <span id="update-overall-label">Waiting to start</span></strong></div></div>'
         '<p id="update-result" class="portal-status" role="status" aria-live="polite"></p>'
         '<div class="actions manual-upgrade-buttons">'
-        '<button id="update-cancel" class="secondary" type="button" disabled>Cancel</button>'
-        '<button id="update-primary" type="submit" disabled>Stage upgrade</button></div>'
-        '</form></div></div></section>'
+        '<button id="update-cancel" class="danger" type="button" hidden>Discard</button></div>'
+        '</div></div></section>'
     )
 
 
@@ -1441,8 +1525,8 @@ def _automatic_upgrade_workspace(token, status):
             _upgrade_step_list((
                 'Automatic upgrade selected', 'Select version', 'Download release',
                 'Verify and stage', 'Restart and install',
-            ), active=1, completed=1) + '</aside><div class="upgrade-operation">' +
-            check + '</div></div></section>'
+            ), active=1, completed=1, step_controls={1: check}) +
+            '</aside></div></section>'
         )
     option_html = ''.join(
         '<option value="' + html_escape(str(option.get('version', ''))) + '" data-kind="' +
@@ -1452,51 +1536,56 @@ def _automatic_upgrade_workspace(token, status):
         ) else '') + '>' + html_escape(release_option_label(option)) + '</option>'
         for option in choices
     )
+    version_control = (
+        '<div id="automatic-release-control" class="upgrade-version-selection">'
+        '<form action="/download-release" method="post"><input type="hidden" name="csrf" value="' +
+        html_escape(token) + '"><select id="automatic-release-version-select" '
+        'name="release_version" aria-label="Version" required>' + option_html + '</select>'
+        '<span class="stage-only-hint">Stages only; restart when ready.</span>'
+        '<button type="submit">Stage upgrade</button></form>' + check + '</div>'
+    )
     return (
         '<section class="card"><div class="section-title"><h2>Automatic upgrade</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
-        _upgrade_step_list(steps, active=1, completed=1, identifier='automatic-stage-list') +
-        '</aside><div class="upgrade-operation">' + check +
-        '<div class="staged-upgrade-copy"><span class="badge">Selected</span>'
-        '<h3 id="automatic-release-kind">' + html_escape(kind) +
-        '</h3><p><strong id="automatic-release-version">' + html_escape(version) +
-        '</strong> is available from the configured signed release channel.</p></div>'
-        '<form action="/download-release" method="post"><input type="hidden" name="csrf" value="' +
-        html_escape(token) + '"><label class="field">Version<select id="automatic-release-version-select" '
-        'name="release_version" required>'
-        + option_html + '</select><span class="field-hint">Only authenticated, compatible '
-        'releases offered by the selected channel are shown.</span></label>'
-        '<div class="actions manual-upgrade-buttons">'
-        '<button type="submit">Stage upgrade</button></div></form>' +
-        '</div></div></section>'
+        _upgrade_step_list(
+            steps, active=1, completed=1, identifier='automatic-stage-list',
+            step_controls={1: version_control}
+        ) +
+        '</aside></div></section>'
     )
 
 
 def automatic_upgrade_selection_script():
     return (
         'var automaticSelect=document.getElementById("automatic-release-version-select"),automaticSteps='
-        'document.getElementById("automatic-stage-list"),automaticKind=document.getElementById('
-        '"automatic-release-kind"),automaticVersion=document.getElementById("automatic-release-version");'
+        'document.getElementById("automatic-stage-list"),automaticControl=document.getElementById('
+        '"automatic-release-control");'
         'var automaticFlows={application:["Automatic upgrade selected","Select version","Inspect signed release",'
-        '"Download application","Verify and stage application","Ready to restart"],firmware:'
+        '"Download application","Verify and stage application","Restart and install"],firmware:'
         '["Automatic upgrade selected","Select version","Inspect signed release","Download core firmware",'
-        '"Write core firmware","Verify core firmware","Ready to restart"],universal:'
+        '"Write core firmware","Verify core firmware","Restart and install"],universal:'
         '["Automatic upgrade selected","Select version","Inspect paired manifest","Download core firmware",'
         '"Write core firmware","Verify core firmware","Download application","Verify and stage application",'
-        '"Pair verified components","Ready to restart"]};'
+        '"Pair verified components","Restart and install"]};'
         'function renderAutomaticFlow(){if(!automaticSelect)return;var option=automaticSelect.options['
         'automaticSelect.selectedIndex],kind=option.dataset.kind||"application",labels=automaticFlows[kind]||'
-        'automaticFlows.application,parts=option.textContent.split(" — ");automaticVersion.textContent=parts[0];'
-        'automaticKind.textContent=(parts.slice(1).join(" — ")||"Upgrade")+" upgrade";automaticSteps.replaceChildren();'
+        'automaticFlows.application;automaticSteps.replaceChildren();'
         'labels.forEach(function(label,index){'
         'var li=document.createElement("li"),name=document.createElement("span"),ring=document.createElement("span"),'
         'value=document.createElement("span"),complete=index<1,active=index===1,percent=complete?100:0;li.className='
         'complete?"complete":(active?"active":"");li.style.setProperty("--step-progress",percent+"%");if(active)'
-        'li.setAttribute("aria-current","step");name.className="upgrade-stage-name";name.textContent=label;ring.className='
+        'li.setAttribute("aria-current","step");name.className="upgrade-stage-name";name.textContent=label;if(index==='
+        'labels.length-1){li.className+=(li.className?" ":"")+"upgrade-stage-action";var control='
+        'document.createElement("span"),button=document.createElement("button");control.className='
+        '"upgrade-stage-action-control";button.className="secondary";button.type="button";button.disabled=true;'
+        'button.textContent="Restart and install";control.appendChild(button);li.appendChild(name);'
+        'li.appendChild(control);automaticSteps.appendChild(li);return;}ring.className='
         '"upgrade-stage-ring";ring.setAttribute("role","progressbar");ring.setAttribute("aria-label",label+" progress");'
         'ring.setAttribute("aria-valuemin","0");ring.setAttribute("aria-valuemax","100");ring.setAttribute('
         '"aria-valuenow",String(percent));value.className="upgrade-stage-percent";value.textContent=percent+"%";'
-        'ring.appendChild(value);li.appendChild(name);li.appendChild(ring);automaticSteps.appendChild(li);});}'
+        'ring.appendChild(value);li.appendChild(name);li.appendChild(ring);if(index===1&&automaticControl){var control='
+        'document.createElement("div");control.className="upgrade-stage-step-control";control.appendChild('
+        'automaticControl);li.appendChild(control);}automaticSteps.appendChild(li);});}'
         'if(automaticSelect){automaticSelect.onchange=renderAutomaticFlow;renderAutomaticFlow();}'
     )
 
@@ -1546,37 +1635,42 @@ def _staged_update_workspace(token, status):
     ready_steps = ('Upgrade method selected', 'Release selected') + tuple(
         step.replace('Upload ', 'Transfer ') for step in ready_steps
     )
+    selected_release = (
+        '<div class="selected-release-summary"><span>Selected release</span><strong>' +
+        html_escape(staged_version_text(status)) + '</strong>'
+        '<small>Staged and ready. Restart when ready.</small></div>'
+    )
     return (
         '<section class="card"><div class="section-title"><h2>Staged upgrade</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list(
             ready_steps, active=len(ready_steps) - 1,
-            completed=len(ready_steps) - 1
+            completed=len(ready_steps) - 1, manual_action=activation,
+            step_controls={1: selected_release}
         ) + '</aside><div class="upgrade-operation">'
-        '<div class="staged-upgrade-copy"><span class="badge good">Verified</span>'
-        '<h3>Ready to activate</h3><p><strong>' +
-        html_escape(staged_version_text(status)) + '</strong> is staged. Installation will restart '
-        'the device and retain the current release for rollback. You can leave this page and install later.</p></div>'
-        '<div class="actions manual-upgrade-buttons">'
-        '<form action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
-        html_escape(token) + '"><button class="secondary" type="submit">Discard</button></form>' +
-        activation + '</div></div></div></section>'
+        '<div class="actions manual-upgrade-buttons"><form action="/discard-update" method="post">'
+        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+        '<button class="danger" type="submit">Discard</button></form></div>'
+        '</div></div></section>'
     )
 
 
 def _rollback_upgrade_workspace(token, status):
+    retained = str(status.get('previous_slot_version') or 'Previous application')
+    selection = (
+        '<div class="selected-release-summary"><span>Rollback target</span><strong>' +
+        html_escape('Application — ' + retained) + '</strong>'
+        '<small>Retained application. Core firmware is unchanged.</small></div>'
+    )
     return (
         '<section class="card"><div class="section-title"><h2>Rollback application</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list((
-            'Rollback selected', 'Previous application retained', 'Restart and restore',
-        ), active=2, completed=2) + '</aside><div class="upgrade-operation">'
-        '<p>Restore the retained application' + (
-            ' <strong>' + html_escape(status.get('previous_slot_version')) + '</strong>'
-            if status.get('previous_slot_version') else ''
-        ) + '. This restarts the device. The core firmware version stays the same.</p>'
-        '<div class="actions manual-upgrade-buttons">' +
-        render_application_rollback_html(status, token) + '</div></div></div></section>'
+            'Rollback selected', 'Previous application retained', 'Restart and rollback',
+        ), active=2, completed=2,
+            manual_action=render_application_rollback_html(status, token),
+            step_controls={1: selection}
+        ) + '</aside></div></section>'
     )
 
 
@@ -1622,6 +1716,12 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
     status = status or {}
     release_kind = str(status.get('release_available_type', 'application'))
     steps = _upgrade_steps(release_kind, 'Automatic')
+    selected_kind, selected_version = release_offer_text(status)
+    selection = (
+        '<div class="selected-release-summary"><span>Selected release</span><strong>' +
+        html_escape(selected_kind + ' — ' + selected_version) + '</strong>'
+        '<small>Downloading, verifying and staging.</small></div>'
+    )
     body = (
         portal_ui.page_heading(
             'Maintenance', 'Upgrade',
@@ -1630,21 +1730,24 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         html_escape(title) + '</h2></div><div class="manual-upgrade-workspace">'
         '<aside class="upgrade-steps-panel">' +
         _upgrade_step_list(
-            steps, active=2, completed=2, identifier='upgrade-task-steps'
+            steps, active=2, completed=2, identifier='upgrade-task-steps',
+            step_controls={1: selection}
         ) +
         '</aside><div class="upgrade-operation">' +
-        portal_ui.progress('upgrade-task-progress', 'Starting…') +
+        '<p id="upgrade-task-status" class="portal-status" role="status" aria-live="polite"></p>' +
         '<div class="actions manual-upgrade-buttons"><a id="upgrade-task-return" '
         'class="button secondary" href="' + html_escape(return_url) + '" hidden>'
         'Return to upgrades</a></div></div></div></section>'
     )
     script = (
-        'var i=' + repr(str(task_id)) + ',b=document.getElementById("upgrade-task-progress"),'
-        'l=b.querySelector(".status-text"),r=document.getElementById("upgrade-task-return"),'
+        'var i=' + repr(str(task_id)) + ',b=document.getElementById("upgrade-task-status"),'
+        'r=document.getElementById("upgrade-task-return"),'
         'steps=Array.from(document.querySelectorAll("#upgrade-task-steps li"));'
         'function setStep(x,state,percent){percent=Math.max(0,Math.min(100,Math.round(Number(percent)||0)));'
-        'x.className=state;x.style.setProperty("--step-progress",percent+"%");var ring=x.querySelector('
-        '".upgrade-stage-ring");ring.setAttribute("aria-valuenow",String(percent));x.querySelector('
+        'var ring=x.querySelector(".upgrade-stage-ring");if(!ring){x.className=(state?state+" ":"")+'
+        '"upgrade-stage-action";if(state==="active")x.setAttribute("aria-current","step");else x.removeAttribute('
+        '"aria-current");return;}x.className=state;x.style.setProperty("--step-progress",percent+"%");'
+        'ring.setAttribute("aria-valuenow",String(percent));x.querySelector('
         '".upgrade-stage-percent").textContent=percent+"%";if(state==="active")x.setAttribute('
         '"aria-current","step");else x.removeAttribute("aria-current");}'
         'var stagePosition=2;function stage(message,percent){var m=String(message||"").toLowerCase().replace(/_/g," "),n=2;'
@@ -1657,15 +1760,22 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         'n=Math.min(n,Math.max(0,steps.length-2));if(n<stagePosition)return;stagePosition=n;'
         'steps.forEach(function(x,k){setStep(x,k<n?'
         '"complete":(k===n?"active":""),k<n?100:(k===n?percent:0));});}'
+        'function showReady(){fetch(' + repr(str(return_url)) + ',{cache:"no-store",credentials:"same-origin"})'
+        '.then(function(x){if(x.status===401){location.replace("/login");throw new Error("Session expired");}'
+        'if(!x.ok)throw new Error("Unable to load staged upgrade");return x.text();}).then(function(html){var parsed='
+        'new DOMParser().parseFromString(html,"text/html"),fresh=parsed.querySelector("main"),current=document.getElementById('
+        '"main-content");if(!fresh||!current)throw new Error("Staged upgrade view is unavailable");current.innerHTML='
+        'fresh.innerHTML;history.replaceState(null,"",' + repr(str(return_url)) + ');var restart=current.querySelector('
+        '".upgrade-stage-action button");if(restart)restart.focus();}).catch(function(){r.hidden=false;});}'
         'function poll(){fetch("/task-status?id="+encodeURIComponent(i),{cache:"no-store",credentials:'
         '"same-origin"}).then(function(x){if(x.status===401){location.replace("/login");return null;}'
         'return x.json();}).then(function(s){if(!s)return;var message=s.message||s.phase||"Working…",'
         'percent=typeof s.percent==="number"?s.percent:0,done=s.phase==="complete"||s.phase==="failed";'
-        'if(!done&&typeof s.percent==="number")message+=" · "+s.percent+"%";l.textContent=message;stage('
-        'message,percent);if(done){b.classList.add(s.phase);r.hidden=false;if(s.phase==="complete"){'
+        'stage(message,percent);if(done){if(s.phase==="failed"){b.className="portal-status error";b.textContent='
+        'message;r.hidden=false;}if(s.phase==="complete"){'
         'steps.forEach(function(x,k){setStep(x,k<steps.length-1?"complete":(k===steps.length-1?'
-        '"active":""),k<steps.length-1?100:0);});setTimeout(function(){location.replace(' +
-        repr(str(return_url)) + ');},1000);}return;}setTimeout(poll,600);}).catch(function(){setTimeout(poll,1200);});}poll();'
+        '"active":""),k<steps.length-1?100:0);});showReady();}return;}setTimeout(poll,600);}).catch(function(){'
+        'setTimeout(poll,1200);});}poll();'
     )
     return portal_ui.shell(
         'IoT-MD install upgrade', 'updates', body, token, script

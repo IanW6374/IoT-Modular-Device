@@ -42,7 +42,13 @@ class BufferedReader:
         if size <= 0:
             return b''
         while len(self.buffer) < size:
-            chunk = await self.reader.read(max(self.chunk_size, size - len(self.buffer)))
+            # Body readers ask for the exact remaining Content-Length.  Do not
+            # inflate a small read to the header chunk size: MicroPython TLS
+            # streams may wait for that larger amount when headers and body
+            # arrive in separate records, then close without dispatching the
+            # request. Header parsing still uses chunk_size in
+            # read_bounded_line(), where bounded over-read is intentional.
+            chunk = await self.reader.read(size - len(self.buffer))
             if not chunk:
                 break
             self.buffer.extend(chunk)

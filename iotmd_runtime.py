@@ -69,6 +69,8 @@ from services.portal_service import PortalService
 from services.update_service import UpdateService
 from services.startup_service import StartupService
 from services.certificate_renewal_service import CertificateRenewalService
+from services.qualification_control_service import QualificationControlService
+from services.configuration_profile_service import ConfigurationProfileService
 from services.mqtt_startup_service import MQTTStartupService
 from portal_contracts import PortalDependencies
 from portal_view_models import enrich_runtime_status, saved_automatic_check_status, module_summaries as build_module_summaries
@@ -550,6 +552,14 @@ def logOutput(mode, action, data, logtype):
             )
 
 
+qualification_controls = QualificationControlService(
+    qualification_service, runtime_health, logOutput,
+    component_versions.PRODUCT_VERSION, lambda: watchdog,
+    recovery_boot.request_recovery,
+    lambda name, delay: schedule_hardware_reset(name, delay),
+)
+
+
 def record_upgrade_failure(kind, phase, exc, version=''):
     """Persist an actionable upgrade error in both operator-visible stores."""
     detail = str(exc).strip() or exc.__class__.__name__
@@ -699,6 +709,11 @@ def pending_restart_status():
         'reason_count': len(pending_restart_reasons),
         'reasons': list(pending_restart_reasons),
     }
+
+
+configuration_profile_service = ConfigurationProfileService(
+    credential_store, timezone_rules, runtime_health, mark_restart_required
+)
 
 
 def _configured_portal_login_url(settings=None):
@@ -1494,6 +1509,9 @@ def update_module_settings(payload):
 
     mark_restart_required('Module configuration changed')
     return 'Module settings saved and verified. Restart the device to activate them.'
+
+
+
 async def upload_certificate_file(kind, reader, length):
     paths = {
         'trust-ca': mqtt_ca_cert_path,
@@ -1503,6 +1521,7 @@ async def upload_certificate_file(kind, reader, length):
         'api-client-ca': 'certs/api-client-ca-stage.der',
         'api-client-cert': 'certs/api-client-enrol.der',
         'fleet-client-cert': 'certs/fleet-client-enrol.der',
+        'qualification-client-cert': 'certs/qualification-client-enrol.der',
         'iot-ca-enrollment': 'certs/.iot-ca-enrollment.manual',
         'syslog-ca': device_settings.syslog_ca_path,
         'portal-cert': web_portal_cert_path,
@@ -1521,13 +1540,16 @@ async def upload_certificate_file(kind, reader, length):
         payload.extend(chunk)
     if b'-----BEGIN' in payload and kind != 'portal-cert':
         raise ValueError('only the portal certificate chain may use PEM')
-    if kind in ('api-client-ca', 'api-client-cert', 'fleet-client-cert'):
+    if kind in ('api-client-ca', 'api-client-cert', 'fleet-client-cert',
+                'qualification-client-cert'):
         certificate_manager.decode_certificate(bytes(payload))
         fingerprint = api_security.certificate_fingerprint(payload)[:24]
         path = (
             'certs/.api-ca-stage-' if kind == 'api-client-ca' else
             ('certs/.fleet-client-stage-' if kind == 'fleet-client-cert' else
-             'certs/.api-client-stage-')
+             ('certs/.qualification-client-stage-'
+              if kind == 'qualification-client-cert' else
+              'certs/.api-client-stage-'))
         ) + fingerprint + '.der'
     temporary = path + '.manual'
     with open(temporary, 'wb') as stream:
@@ -1645,17 +1667,7 @@ def validate_uploaded_certificates():
         'certs/' + name for name in staged_names
         if name.startswith('.api-ca-stage-') and name.endswith('.der.manual')
     ]
-    client_stages = [
-        'certs/' + name for name in staged_names
-        if name.startswith('.api-client-stage-') and name.endswith('.der.manual')
-    ]
-    fleet_client_stages = [
-        'certs/' + name for name in staged_names
-        if name.startswith('.fleet-client-stage-') and name.endswith('.der.manual')
-    ]
     api_ca_payloads = []
-    client_payloads = []
-    fleet_client_payloads = []
     for staged in api_ca_stages:
         with open(staged, 'rb') as stream:
             payload = stream.read()
@@ -1666,18 +1678,11 @@ def validate_uploaded_certificates():
         except TypeError:
             context.load_verify_locations(cadata=payload)
         api_ca_payloads.append((staged, payload))
-    for staged in client_stages:
-        with open(staged, 'rb') as stream:
-            payload = stream.read()
-        certificate_manager.decode_certificate(payload)
-        client_payloads.append((staged, payload))
-    for staged in fleet_client_stages:
-        with open(staged, 'rb') as stream:
-            payload = stream.read()
-        certificate_manager.decode_certificate(payload)
-        fleet_client_payloads.append((staged, payload))
+    client_stages = api_security.staged_clients(
+        'certs', staged_names, certificate_manager.decode_certificate
+    )
     if not (pairs or management_suite_key_stage or api_ca_payloads or
-            client_payloads or fleet_client_payloads):
+            client_stages):
         raise ValueError('no staged certificate files were found')
     if pairs:
         certificate_manager.commit_certificate_files(tuple(pairs))
@@ -1696,18 +1701,7 @@ def validate_uploaded_certificates():
             os.remove(staged)
         except OSError:
             pass
-    for staged, payload in client_payloads:
-        api_client_registry.enrol(payload, scopes=('read', 'write'))
-        try:
-            os.remove(staged)
-        except OSError:
-            pass
-    for staged, payload in fleet_client_payloads:
-        api_client_registry.enrol(payload, scopes=('fleet:read', 'fleet:write'))
-        try:
-            os.remove(staged)
-        except OSError:
-            pass
+    api_security.enrol_staged_clients(api_client_registry, client_stages)
     if all(portal_staged):
         credential_store.update_certificate_settings('manual', method='manual')
 
@@ -1782,6 +1776,10 @@ async def start_module_api():
         device_api_info, logOutput, fleet_service, device_support_bundle,
         feature_flags=runtime_features,
         configuration_getter=device_api_configuration,
+        configuration_profile_applier=configuration_profile_service.apply,
+        qualification_getter=qualification_service.status,
+        qualification_event=qualification_controls.record,
+        qualification_scenario=qualification_controls.scenario,
     )
     try:
         migrated = certificate_manager.ensure_server_identity(
@@ -1999,7 +1997,16 @@ def portal_action(action, params):
         if not api_client_registry.revoke(fingerprint):
             return 'API client was not found'
         return 'API client certificate revoked'
-
+    if action == 'update-api-client-scopes':
+        fingerprint = str(params.get('fingerprint', '')).strip().lower()
+        submitted = params.get('scopes', ())
+        submitted = submitted if isinstance(submitted, (list, tuple)) else (submitted,)
+        client = api_client_registry.update_scopes(fingerprint, submitted)
+        runtime_health.record_event(
+            'api_client_scopes_updated', client.get('label', 'API client'), {
+                'fingerprint': fingerprint[:16], 'scopes': ','.join(client.get('scopes', ()))
+            }, force=True, severity='info', component='security')
+        return 'API scopes updated for ' + client.get('label', 'client')
     certificate_action = certificate_portal_actions.apply(action, params)
     if certificate_action is not None: return certificate_action
 
@@ -2068,7 +2075,7 @@ def portal_action(action, params):
         return 'Universal core and application update staged; rebooting into trial versions'
 
     if action == 'discard-update':
-        return ('Staged upgrade cancelled' if universal_update.discard_all_ready()
+        return ('Staged upgrade cancelled' if update_service.discard_staged()
                 else 'No staged upgrade to cancel')
     if action == 'rollback-application':
         try:
@@ -2158,14 +2165,14 @@ async def fleet_policy_monitor():
         for command in fleet_service.pending_commands():
             identifier = command.get('id', '')
             action = command.get('action', '')
+            policy_channel, target_sequence = fleet_service.command_release(command, release_channel)
+            if action == 'activate-update' and not fleet_service.within_maintenance_window(): continue
             try:
                 if action == 'check-update':
-                    await check_release_once(False)
+                    await check_release_once(False, policy_channel, target_sequence)
                 elif action == 'download-update':
                     await download_release_once()
                 elif action == 'activate-update':
-                    if not fleet_service.within_maintenance_window():
-                        raise RuntimeError('outside fleet maintenance window')
                     status = universal_update.update_status()
                     if status.get('status') == 'ready':
                         result = portal_action('activate-universal', {})
@@ -2267,9 +2274,9 @@ update_service = UpdateService(
         'paired': update_orchestrator.status(),
     },
     maximum_chunk_bytes=resumable_upload.MAX_CHUNK_BYTES,
-)
+    discard_handlers=(universal_upload.discard, update_orchestrator.clear,
+                      universal_update.discard_all_ready))
 application_context.register('updates', update_service)
-
 
 async def complete_portal_update(identifier, progress_callback=None):
     """Include upload-store and installer failures in persistent history."""
@@ -2285,11 +2292,10 @@ async def complete_portal_update(identifier, progress_callback=None):
         raise
 
 
-async def _check_release_once():
+async def _check_release_once(channel=None, target_sequence=0):
     global release_available, release_available_choices
     catalogs = await release_update.fetch_release_catalogs(
-        release_manifest_url, release_channel, release_ca_cert_path
-    )
+        release_manifest_url, str(channel or release_channel), release_ca_cert_path)
     choices = []
     application_sequence = app_update.running_release_sequence()
     firmware_sequence = firmware_update.running_release_sequence()
@@ -2300,6 +2306,7 @@ async def _check_release_once():
         hardware_platform.runtime_version()
     )
     for releases in catalogs:
+        releases = release_update.for_release_sequence(releases, target_sequence)
         applicable = []
         for candidate in releases:
             if candidate.get('type') == 'application' and not release_update.application_release_applicable(
@@ -2350,19 +2357,19 @@ async def _check_release_once():
     return await download_release_once()
 
 
-async def check_release_once(automatic=False):
+async def check_release_once(automatic=False, channel=None, target_sequence=0):
     global release_check_status, release_last_checked
     global release_automatic_check_status, release_automatic_last_checked
     release_check_status = 'Checking'
     request_url = release_update.release_manifest_request_url(
-        release_manifest_url, release_channel
+        release_manifest_url, str(channel or release_channel)
     )
     logOutput(
         'Local', 'Release update',
         {'log': 'Checking ' + request_url, 'force': True}, 'INFO'
     )
     try:
-        result = await _check_release_once()
+        result = await _check_release_once(channel, target_sequence)
     except Exception as exc:
         release_last_checked = wall_time_text()
         detail = str(exc).strip() or exc.__class__.__name__
@@ -2514,6 +2521,7 @@ async def start_admin_portal():
             'updates.upload.status': update_service.status,
             'updates.upload.append': update_service.append,
             'updates.upload.complete': complete_portal_update,
+            'updates.upload.discard': update_service.discard,
             'updates.universal.prepare': universal_upload.prepare,
             'updates.universal.finalize': universal_upload.finalize,
             'configuration.backup': configuration_backup,
@@ -2543,6 +2551,8 @@ async def start_admin_portal():
             'shutdown.request': request_device_shutdown,
             'qualification.get': qualification_service.status,
             'qualification.restart': qualification_service.restart_failed_gate,
+            'qualification.event': qualification_controls.record,
+            'qualification.scenario': qualification_controls.scenario,
         })
         web_portal_server = await portal_service.start(dependencies)
     except Exception as exc:
@@ -3166,7 +3176,7 @@ async def main(client):
     startup.finalise(application_context.state, ntp_ready, device_api_enabled,
                      api_server, mqtt_configured, mqtt_started)
     while True:
-        if watchdog:
+        if watchdog and qualification_controls.should_feed_watchdog():
             watchdog.feed()
         if gc and hasattr(gc, 'mem_free'):
             runtime_health.observe_heap(
@@ -3195,7 +3205,7 @@ async def main(client):
         if main_device_error:
             continue
         status_led(0)
-        if watchdog:
+        if watchdog and qualification_controls.should_feed_watchdog():
             watchdog.feed()
 
 

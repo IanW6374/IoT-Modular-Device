@@ -99,11 +99,14 @@ class UpdateService:
     """Own resumable upload state and dispatch verified artifacts to installers."""
 
     def __init__(self, resumable_store, receivers=None, status_getter=None,
-                 maximum_chunk_bytes=64 * 1024):
+                 maximum_chunk_bytes=64 * 1024, discard_handlers=()):
         self.store = resumable_store
         self.receivers = {}
         self._status_getter = status_getter
         self._installing = False
+        self._installing_id = ''
+        self._discard_requested = False
+        self.discard_handlers = tuple(discard_handlers or ())
         self.maximum_chunk_bytes = max(1024, int(maximum_chunk_bytes))
         for kind, receiver in (receivers or {}).items():
             if receiver is not None:
@@ -154,7 +157,16 @@ class UpdateService:
         if self._installing:
             raise ValueError('another update is already being installed')
         self._installing = True
+        self._installing_id = str(identifier)
+        self._discard_requested = False
         reader = None
+        async def progress(*values):
+            if self._discard_requested:
+                raise ValueError('update was discarded')
+            if progress_callback:
+                result = progress_callback(*values)
+                if result is not None:
+                    await result
         try:
             artifact = self.store.complete(identifier)
             handoff = getattr(self.store, 'handoff', None)
@@ -162,20 +174,37 @@ class UpdateService:
                 handoff(identifier)
             reader = _ArtifactReader(artifact['path'])
             installer = self.receiver(artifact['kind'])
-            return await installer(
+            result = await installer(
                 reader, artifact['total_bytes'],
-                {'_progress': progress_callback}
+                {'_progress': progress}
             )
+            if self._discard_requested:
+                raise ValueError('update was discarded')
+            return result
         finally:
             if reader is not None:
                 reader.close()
             self.store.remove(identifier)
+            if self._discard_requested:
+                self.discard_staged()
+            self._installing_id = ''
+            self._discard_requested = False
             self._installing = False
 
     def discard(self, identifier):
         if self._installing:
-            raise ValueError('another update is already being installed')
+            if str(identifier) != self._installing_id:
+                raise ValueError('another update is already being installed')
+            self._discard_requested = True
+            return True
         return self.store.remove(identifier)
+
+    def discard_staged(self):
+        """Run every cleanup even when an earlier handler reports success."""
+        discarded = False
+        for handler in self.discard_handlers:
+            discarded = bool(handler()) or discarded
+        return discarded
 
     def snapshot(self):
         return dict(self._status_getter() or {}) if self._status_getter else {}

@@ -1,5 +1,7 @@
 import asyncio
+import tempfile
 import unittest
+from pathlib import Path
 
 from services.messaging_service import MessagingService
 from services.network_service import NetworkService, connect_with_retries
@@ -194,6 +196,54 @@ class ServiceBoundaryTests(unittest.TestCase):
         self.assertIs(service.receiver('application'), receiver)
         with self.assertRaisesRegex(ValueError, 'invalid'):
             service.receiver('unknown')
+
+    def test_discard_during_install_cleans_every_staged_state(self):
+        async def exercise():
+            with tempfile.TemporaryDirectory() as directory:
+                artifact = Path(directory) / 'update.part'
+                artifact.write_bytes(b'payload')
+                started = asyncio.Event()
+                release = asyncio.Event()
+                removed = []
+                cleaned = []
+
+                class Store:
+                    def complete(self, identifier):
+                        return {
+                            'id': identifier, 'kind': 'application',
+                            'path': str(artifact), 'total_bytes': 7,
+                        }
+                    def handoff(self, _identifier):
+                        return str(artifact)
+                    def remove(self, identifier):
+                        removed.append(identifier)
+                        return True
+
+                async def receiver(reader, length, params):
+                    self.assertEqual(await reader.read(length), b'payload')
+                    started.set()
+                    await release.wait()
+                    await params['_progress']('verification', 1, 2)
+                    return 'verified and staged'
+
+                service = UpdateService(
+                    Store(), {'application': receiver}, discard_handlers=(
+                        lambda: cleaned.append('upload') or True,
+                        lambda: cleaned.append('orchestrator'),
+                        lambda: cleaned.append('components') or True,
+                    ))
+                task = asyncio.create_task(service.complete('cancelled-upload'))
+                await started.wait()
+                self.assertTrue(service.discard('cancelled-upload'))
+                release.set()
+                with self.assertRaisesRegex(ValueError, 'discarded'):
+                    await task
+                self.assertEqual(
+                    cleaned, ['upload', 'orchestrator', 'components']
+                )
+                self.assertEqual(removed, ['cancelled-upload'])
+
+        asyncio.run(exercise())
 
     def test_portal_service_tracks_listener(self):
         async def starter():

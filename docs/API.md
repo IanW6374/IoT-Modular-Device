@@ -38,9 +38,17 @@ Install one or more API client CAs under **Maintenance > Certificates > API
 client trust**, then
 enable the listener under **Device > Device API**. Each client certificate is
 registered by SHA-256 fingerprint with a label and scopes. Read requests require
-`read`, module commands require `write`, fleet reads require `fleet:read`, and
-fleet changes require `fleet:write`. Revocation is checked for every request,
+`read`, module commands require `write`, fleet reads require `fleet:read`, fleet
+changes require `fleet:write`, controlled evidence requires `qualification:write`,
+configuration-profile changes require `configuration:write`, and disruptive
+scenarios require `qualification:execute`. Revocation is checked for every request,
 including requests on reused TLS connections.
+
+An administrator can expand or reduce an existing caller's permissions under
+**Device > Device API** or **Maintenance > Certificates > API client trust**.
+Open **Edit API scopes**, select one or more permissions, and save. The registry
+updates the existing fingerprint in place, so the certificate does not need to
+be uploaded again. At least one supported scope must remain.
 
 The API accepts up to 32 requests on one HTTP/1.1 keep-alive connection and
 holds an idle connection for at most 30 seconds. Reuse the connection: a TLS
@@ -55,6 +63,7 @@ handshake is substantially more expensive than a JSON request on ESP32-S3.
 | GET | `/api/v2/hardware` | `read` | Board, runtime capability, USB/NCM gates, drivers and resource bindings |
 | GET | `/api/v2/services` | `read` | Lifecycle, boot and effective feature-flag state |
 | GET | `/api/v2/configuration` | `read` | Bounded non-secret operating configuration |
+| POST | `/api/v2/configuration/profile` | `configuration:write` | Validate and apply a bounded non-secret settings profile; restart required |
 | GET | `/api/v2/device/inventory` | `read` | Compatibility combined device, module and fleet inventory |
 | GET | `/api/v2/health` | `read` | Bounded health counters and observations |
 | GET | `/api/v2/events?cursor=0&limit=32` | `read` | Cursor-based event page |
@@ -67,6 +76,22 @@ handshake is substantially more expensive than a JSON request on ESP32-S3.
 | GET | `/api/v2/fleet` | `fleet:read` | Fleet enrollment and policy state |
 | POST | `/api/v2/fleet/policy` | `fleet:write` | Apply a monotonic signed policy |
 | POST | `/api/v2/fleet/commands/{id}/result` | `fleet:write` | Complete a fleet command |
+| GET | `/api/v2/qualification` | `read` | Full on-device qualification status and evidence |
+| POST | `/api/v2/qualification/events` | `qualification:write` | Append one observed controlled-test outcome |
+| POST | `/api/v2/qualification/scenarios/{name}` | `qualification:execute` | Start an allowlisted disruptive Alpha-only test |
+
+Configuration profiles may contain standard operational settings such as time,
+logging, Home Assistant discovery, MQTT routing and remote syslog. Passwords,
+certificates, API trust, device identity and network addressing are rejected.
+The profile is validated before its settings are stored, application is audited,
+and the response explicitly reports that a restart is required.
+
+Qualification event submissions require a controlled gate, `success` or
+`failure`, a bounded run ID and explicit confirmation. They append an observation;
+they cannot set a gate status directly. Available disruptive scenarios are
+`watchdog-recovery` and `native-recovery`. Scenario execution never records a
+success automatically: an independent observer must verify recovery and submit
+the resulting evidence.
 
 UUIDs are the configured four-digit hexadecimal module IDs. State keys and
 command bodies are driver-specific and are documented in the

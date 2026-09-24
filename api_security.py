@@ -23,8 +23,56 @@ except ImportError:
 import certificate_manager
 
 
+try:
+    _AuthorizationErrorBase = PermissionError
+except NameError:  # MicroPython omits CPython's PermissionError subclass.
+    _AuthorizationErrorBase = Exception
+
+
+class APIAuthorizationError(_AuthorizationErrorBase):
+    """Portable authorization failure for CPython and MicroPython."""
+
+
 FORMAT_VERSION = 2
-ALLOWED_SCOPES = ('read', 'write', 'fleet:read', 'fleet:write')
+ALLOWED_SCOPES = (
+    'read', 'write', 'fleet:read', 'fleet:write',
+    'configuration:write', 'qualification:write', 'qualification:execute',
+)
+CLIENT_STAGE_SCOPES = (
+    ('.api-client-stage-', ('read', 'write')),
+    ('.fleet-client-stage-', (
+        'fleet:read', 'fleet:write', 'configuration:write'
+    )),
+    ('.qualification-client-stage-', (
+        'read', 'qualification:write', 'qualification:execute'
+    )),
+)
+
+
+def staged_clients(directory, names, decoder):
+    """Load bounded, typed client-certificate stages for atomic enrolment."""
+    result = []
+    directory = str(directory).rstrip('/')
+    for name in names:
+        scopes = next((value for prefix, value in CLIENT_STAGE_SCOPES
+                       if name.startswith(prefix)), None)
+        if scopes is None or not name.endswith('.der.manual'):
+            continue
+        path = directory + '/' + name
+        with open(path, 'rb') as stream:
+            payload = stream.read()
+        decoder(payload)
+        result.append((path, payload, scopes))
+    return result
+
+
+def enrol_staged_clients(registry, stages):
+    for path, payload, scopes in stages:
+        registry.enrol(payload, scopes=scopes)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def certificate_fingerprint(certificate_der):
@@ -177,7 +225,7 @@ class ClientRegistry:
         scopes = sorted(set(str(scope) for scope in scopes))
         if not scopes or any(scope not in ALLOWED_SCOPES for scope in scopes):
             raise ValueError(
-                'API client scopes must contain read, write, fleet:read and/or fleet:write'
+                'API client scopes contain an unsupported value'
             )
         label = str(label or details.get('subject') or fingerprint[:12])[:64]
         value = self._load()
@@ -203,6 +251,26 @@ class ClientRegistry:
         self._save(value)
         return dict(record)
 
+    def update_scopes(self, fingerprint, scopes):
+        """Replace one enrolled fingerprint's scopes without re-enrolment."""
+        fingerprint = str(fingerprint or '').strip().lower()
+        scopes = sorted(set(str(scope) for scope in scopes))
+        if not scopes:
+            raise ValueError('API client must retain at least one scope')
+        if any(scope not in ALLOWED_SCOPES for scope in scopes):
+            raise ValueError('API client scopes contain an unsupported value')
+        value = self._load()
+        client = next(
+            (item for item in value['clients']
+             if str(item.get('fingerprint', '')).lower() == fingerprint),
+            None
+        )
+        if client is None:
+            raise ValueError('API client was not found')
+        client['scopes'] = scopes
+        self._save(value)
+        return dict(client)
+
     def revoke(self, fingerprint):
         fingerprint = str(fingerprint).lower()
         value = self._load()
@@ -224,7 +292,7 @@ class ClientRegistry:
             None
         )
         if client is None:
-            raise PermissionError('client certificate is not enrolled')
+            raise APIAuthorizationError('client certificate is not enrolled')
         return dict(client)
 
     def authenticate(self, certificate_der, required_scope='read'):
@@ -241,7 +309,9 @@ class ClientRegistry:
             None
         )
         if client is None:
-            raise PermissionError('client certificate is not enrolled')
+            raise APIAuthorizationError('client certificate is not enrolled')
         if required_scope not in client.get('scopes', ()):
-            raise PermissionError('client certificate does not have ' + required_scope + ' scope')
+            raise APIAuthorizationError(
+                'client certificate does not have ' + required_scope + ' scope'
+            )
         return dict(client)

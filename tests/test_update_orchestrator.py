@@ -10,6 +10,17 @@ import update_security
 
 
 class UpdateOrchestratorTests(unittest.TestCase):
+    def test_release_sequence_filter_targets_one_managed_release(self):
+        releases = [
+            {'release_sequence': 20}, {'release_sequence': 21},
+        ]
+        self.assertEqual(
+            release_update.for_release_sequence(releases, 20), [releases[0]]
+        )
+        self.assertEqual(
+            release_update.for_release_sequence(releases, 0), releases
+        )
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = str(Path(self.temp.name) / 'paired.json')

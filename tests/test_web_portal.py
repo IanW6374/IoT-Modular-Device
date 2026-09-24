@@ -7,9 +7,11 @@ from pathlib import Path
 from unittest import mock
 
 import web_portal
+import certificate_portal_views
 import portal_http
 import portal_live_views
 import portal_module_transport
+import portal_routes
 from portal_contracts import PortalDependencies
 import credential_security
 import http_support
@@ -84,8 +86,8 @@ class WebPortalTests(unittest.TestCase):
     def test_universal_component_poller_renders_verification_percent(self):
         script = portal_live_views.update_upload_script()
         self.assertIn('waitForComponent(uploadId,kind)', script)
-        self.assertIn('"Verifying signed "+name+" "+(s.percent||0)+"%"', script)
-        self.assertIn('"Checking uploaded "+componentName(kind)+" bytes"', script)
+        self.assertIn('setStage(kind==="firmware"?', script)
+        self.assertIn('"verify_core":"verify_application",(s.percent||0)/100)', script)
 
     def test_release_qualification_is_visible_on_overview_and_detail_page(self):
         overview = web_portal.render_overview_status({
@@ -415,6 +417,34 @@ class WebPortalTests(unittest.TestCase):
         self.assertEqual(second, b'GET /second HTTP/1.1\r\n')
         self.assertEqual(source.reads, 1)
 
+    def test_buffered_reader_uses_exact_small_tls_body_read(self):
+        class SplitTLSReader:
+            def __init__(self):
+                self.chunks = [
+                    b'POST /api HTTP/1.1\r\nContent-Length: 2\r\n\r\n',
+                    b'{}',
+                ]
+                self.requested = []
+
+            async def read(self, size):
+                self.requested.append(size)
+                return self.chunks.pop(0) if self.chunks else b''
+
+        source = SplitTLSReader()
+
+        async def parse():
+            reader = http_support.buffered(source)
+            line, headers = await http_support.read_request(reader)
+            body = await http_support.read_exact_body(reader, 2, 8192)
+            return line, headers, body
+
+        line, headers, body = asyncio.run(parse())
+
+        self.assertEqual(line, b'POST /api HTTP/1.1\r\n')
+        self.assertEqual(headers['content-length'], '2')
+        self.assertEqual(body, b'{}')
+        self.assertEqual(source.requested, [http_support.READ_BUFFER_BYTES, 2])
+
     def test_audit_peer_address_uses_stream_metadata(self):
         class Stream:
             def get_extra_info(self, key):
@@ -724,16 +754,20 @@ class WebPortalTests(unittest.TestCase):
             self.assertNotIn('value="broker-secret"', html)
 
     def test_post_rc1_operations_pages_expose_safe_workflows(self):
+        client = {
+            'label': 'automation', 'scopes': ['read', 'write'],
+            'subject': 'CN=automation', 'fingerprint': 'ab' * 32,
+            'not_after': '2030-01-01 00:00:00 UTC',
+            'expiry_level': 'ok', 'days_remaining': 100,
+        }
         api = web_portal.render_device_api_page('csrf', {
             'api_enabled': True,
             'api_port': 8444,
-            'api_clients': [{
-                'label': 'automation', 'scopes': ['read', 'write'],
-                'subject': 'CN=automation', 'fingerprint': 'ab' * 32,
-                'not_after': '2030-01-01 00:00:00 UTC',
-                'expiry_level': 'ok', 'days_remaining': 100,
-            }],
+            'api_clients': [client],
         })
+        trust = certificate_portal_views.render_api_client_trust_page(
+            'csrf', certificates={'api_clients': [client]}
+        )
         backup = web_portal.render_configuration_backup_page('csrf')
         health = web_portal.render_health_history_page('csrf', {
             'health_history': {
@@ -747,6 +781,19 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Mutual TLS (required)', api)
         self.assertIn('CN=automation', api)
         self.assertIn('/revoke-api-client', api)
+        self.assertIn('action="/update-api-client-scopes"', api)
+        self.assertIn('name="scopes" multiple size="7" required', api)
+        self.assertIn('<option value="read" selected>', api)
+        self.assertIn('<option value="write" selected>', api)
+        self.assertIn('<option value="configuration:write">', api)
+        self.assertIn('<option value="qualification:write">', api)
+        self.assertIn('Save scopes</button>', api)
+        self.assertIn('action="/update-api-client-scopes"', trust)
+        self.assertIn('name="return_to" value="/api-client-trust"', trust)
+        self.assertEqual(
+            portal_routes.required_role('POST', '/update-api-client-scopes'),
+            'administrator'
+        )
         self.assertIn('/configuration-import-preview', backup)
         self.assertIn('/configuration-import-apply', backup)
         self.assertIn('login verifiers', backup)
@@ -1851,6 +1898,20 @@ class WebPortalTests(unittest.TestCase):
         self.assertTrue(logs[0][2]['force'])
         self.assertEqual(logs[0][3], 'INFO')
 
+    def test_scope_editor_form_retains_every_multi_select_value(self):
+        params = portal_http.parse_portal_body(
+            '/update-api-client-scopes',
+            {'content-type': 'application/x-www-form-urlencoded'},
+            b'csrf=token&fingerprint=abcd&scopes=read&scopes=write&'
+            b'scopes=qualification%3Awrite&return_to=%2Fdevice-api'
+        )
+
+        self.assertEqual(params['fingerprint'], 'abcd')
+        self.assertEqual(params['return_to'], '/device-api')
+        self.assertEqual(params['scopes'], [
+            'read', 'write', 'qualification:write'
+        ])
+
     def test_calibration_result_is_rendered_after_snapshot_refresh(self):
         responses = []
 
@@ -2222,6 +2283,26 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<h2>Select upgrade method</h2>', updates)
         self.assertIn('href="/updates?source=automatic"', updates)
         self.assertIn('href="/updates?source=manual"', updates)
+        self.assertIn(
+            '.upgrade-method-choices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))',
+            portal_ui.PORTAL_CSS
+        )
+        self.assertIn(
+            '.upgrade-method-choices{grid-template-columns:repeat(2,minmax(0,1fr))}',
+            portal_ui.PORTAL_CSS
+        )
+        self.assertIn(
+            '.upgrade-method-choice:hover,.upgrade-method-choice:focus,.upgrade-method-choice:focus-visible{',
+            portal_ui.PORTAL_CSS
+        )
+        self.assertIn('outline-offset:2px;text-decoration:none}', portal_ui.PORTAL_CSS)
+        self.assertIn(
+            '@media(max-width:600px)', portal_ui.PORTAL_CSS
+        )
+        self.assertIn(
+            '.upgrade-method-choices{grid-template-columns:1fr}',
+            portal_ui.PORTAL_CSS
+        )
         self.assertNotIn('Automatic upgrade settings', updates)
         self.assertIn('.upgrade-grid{display:grid;grid-template-columns:1fr;', portal_ui.PORTAL_CSS)
         self.assertNotIn('id="update-upload-form"', updates)
@@ -2234,7 +2315,6 @@ class WebPortalTests(unittest.TestCase):
             manual_update,
         )
         self.assertIn('function terminalFailure(text)', manual_update)
-        self.assertIn('fileSelection.hidden=false;cancelButton.disabled=true;', manual_update)
         self.assertIn(
             'id="update-primary" type="submit" disabled>Stage upgrade',
             manual_update,
@@ -2248,40 +2328,67 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('id="update-file-selection"', manual_update)
         self.assertIn('class="manual-upgrade-workspace"', manual_update)
         self.assertIn('id="update-cancel"', manual_update)
-        self.assertIn('<strong>Current task: <span id="update-overall-label">', manual_update)
-        self.assertIn('id="update-overall"', manual_update)
+        self.assertIn('id="update-cancel" class="danger" type="button" hidden>Discard', manual_update)
+        self.assertNotIn('>Cancel</button>', manual_update)
+        self.assertNotIn('Working…</button>', manual_update)
+        self.assertNotIn('Current task', manual_update)
+        self.assertNotIn('id="update-overall"', manual_update)
         self.assertNotIn('id="update-overall-bar"', manual_update)
         self.assertIn('id="update-stage-list"', manual_update)
         self.assertIn('class="upgrade-stage-name"', manual_update)
         self.assertIn('class="upgrade-stage-ring" role="progressbar"', manual_update)
         self.assertIn('class="upgrade-stage-percent">0%</span>', manual_update)
+        self.assertIn(
+            '<button class="secondary" type="button" disabled>Restart and install</button>',
+            manual_update,
+        )
+        self.assertNotIn('upgrade-stage-manual', manual_update)
+        self.assertNotIn('Restart and install progress', manual_update)
         self.assertNotIn('--upgrade-step-count', manual_update)
         self.assertIn('Manual upgrade selected', manual_update)
         self.assertIn('<li class="complete">', manual_update)
-        self.assertIn('Current task', manual_update)
         self.assertNotIn('Step "+(index+1)+" of "+flow.length', manual_update)
-        self.assertIn('overallLabel.textContent=flow[index][1]', manual_update)
+        self.assertNotIn('overallLabel', manual_update)
         self.assertIn('id="update-file-guidance"', manual_update)
         self.assertIn('fileGuidance.hidden=!!selected', manual_update)
+        self.assertIn('control.appendChild(uploadForm)', manual_update)
+        self.assertNotIn('control.appendChild(fileSelection)', manual_update)
+        self.assertIn('.upgrade-file-selection [hidden]{display:none}', portal_ui.PORTAL_CSS)
         self.assertIn('.file-name+.file-guidance{margin-left:1.25rem}', portal_ui.PORTAL_CSS)
         self.assertIn('Prepare and hash file', manual_update)
         self.assertIn('Pair verified components', manual_update)
         self.assertIn('renderWorkflow(workflowKind(selected))', manual_update)
+        self.assertIn('button.textContent="Restart and install"', manual_update)
+        self.assertIn('button.disabled=true', manual_update)
+        self.assertNotIn('removeAttribute(("aria-current")', manual_update)
         self.assertNotIn(
             'class="status-spinner"', manual_update.split('<main', 1)[1]
         )
-        self.assertIn('fileSelection.hidden=true', manual_update)
-        self.assertIn('fileSelection.hidden=false', manual_update)
+        self.assertNotIn('fileSelection.hidden=', manual_update)
+        self.assertIn('fileSelection.classList.add("busy")', manual_update)
+        self.assertIn('primaryButton.hidden=true', manual_update)
+        self.assertIn('Staging does not restart the device.', manual_update)
+        self.assertIn('class="selected-release-label">Selected file', manual_update)
+        self.assertIn('fileSelection.classList.toggle("has-selection",!!selected)', manual_update)
+        self.assertIn('function showStaged()', manual_update)
+        self.assertIn('current.replaceWith(fresh)', manual_update)
+        self.assertIn('history.replaceState(null,"","/updates?source=staged")', manual_update)
+        self.assertNotIn('setTimeout(function(){location.replace("/updates?source=staged")', manual_update)
+        select_step = manual_update.split('Select signed file', 1)[1].split('</li>', 1)[0]
+        self.assertIn('id="update-file-selection"', select_step)
+        self.assertNotIn('id="update-cancel"', select_step)
+        discard_area = manual_update.split('<div class="upgrade-operation">', 1)[1]
+        self.assertIn('id="update-cancel"', discard_area)
         self.assertNotIn('<progress', manual_update)
         self.assertIn('/resumable-upload-chunk', manual_update)
+        self.assertIn('/resumable-upload-discard', manual_update)
+        self.assertIn('function discardSessions()', manual_update)
         self.assertIn('/universal-upload-prepare', manual_update)
         self.assertIn('/universal-upload-finalize', manual_update)
         self.assertNotIn('sendUniversal()', manual_update)
         self.assertIn('kind=universal?"universal"', manual_update)
         self.assertIn('received_bytes', manual_update)
-        self.assertIn('Writing firmware ', manual_update)
         self.assertNotIn('Completed: upload · firmware write', manual_update)
-        self.assertIn('Verification complete', manual_update)
         self.assertIn('setTimeout(poll,1000)', manual_update)
         self.assertIn('f.slice(offset,end)', manual_update)
         self.assertIn('request.upload.onprogress=function(event)', manual_update)
@@ -2291,18 +2398,17 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('return sendChunk(received)', manual_update)
         self.assertIn('out.textContent=text', manual_update)
         self.assertNotIn('out.appendChild(line)', manual_update)
-        self.assertIn('Checking uploaded ', manual_update)
         self.assertNotIn('previous(', manual_update)
         self.assertNotIn('Writing firmware on device', manual_update)
-        self.assertIn('Verifying signed ', manual_update)
-        self.assertIn('"Uploading "+componentName(kind)+" "+percent+"%"', manual_update)
         self.assertNotIn('"Uploading "+kind+" "+percent+"%"', manual_update)
         self.assertIn('.iotuni', manual_update)
         self.assertIn('firmware_verification', manual_update)
         self.assertIn('application_verification', manual_update)
         self.assertIn('startPolling()', manual_update)
         self.assertNotIn('Upload complete; verifying', manual_update)
-        self.assertIn('.upgrade-overall{', portal_ui.PORTAL_CSS)
+        self.assertNotIn('.upgrade-overall{', portal_ui.PORTAL_CSS)
+        self.assertNotIn('.upgrade-steps-panel{border-bottom', portal_ui.PORTAL_CSS)
+        self.assertIn('.upgrade-stage-step-control{', portal_ui.PORTAL_CSS)
         self.assertIn('.upgrade-stage-list li.active', portal_ui.PORTAL_CSS)
 
         settings = render_settings_page('abc', {})
@@ -2448,7 +2554,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Restart and install', staged_html)
         self.assertNotIn('Base firmware update', staged_html)
         self.assertNotIn('id="firmware-upload-form"', staged_html)
-        self.assertIn('Restart and install core firmware', staged_html)
+        self.assertEqual(staged_html.count('>Restart and install</button>'), 2)
+        self.assertNotIn('Restart and install core firmware', staged_html)
         self.assertIn(
             'Application — 1.1 / Core firmware — mp-1.28.0', staged_html
         )
@@ -2619,13 +2726,22 @@ class WebPortalTests(unittest.TestCase):
         }, source='automatic')
         self.assertIn('<h2>Automatic upgrade</h2>', automatic)
         self.assertIn('action="/download-release"', automatic)
-        self.assertIn('name="release_version" required', automatic)
+        self.assertIn('name="release_version" aria-label="Version" required', automatic)
         self.assertIn('value="3.0.0-alpha.29"', automatic)
         self.assertIn('value="3.0.0-alpha.28"', automatic)
         self.assertIn('3.0.0-alpha.28 — Universal', automatic)
         self.assertIn('data-kind="universal"', automatic)
         self.assertIn('id="automatic-stage-list"', automatic)
+        self.assertIn('id="automatic-release-control"', automatic)
+        self.assertIn('Stages only; restart when ready.', automatic)
+        self.assertIn('.upgrade-version-selection select{border:2px solid var(--accent)', portal_ui.PORTAL_CSS)
+        version_step = automatic.split('Select version', 1)[1].split('</li>', 1)[0]
+        self.assertIn('id="automatic-release-control"', version_step)
+        self.assertIn('action="/download-release"', version_step)
+        self.assertIn('action="/check-release"', version_step)
         self.assertIn('automaticSelect.onchange=renderAutomaticFlow', automatic)
+        self.assertIn('button.textContent="Restart and install"', automatic)
+        self.assertIn('button.disabled=true', automatic)
         self.assertIn('>Stage upgrade</button>', automatic)
         self.assertIn('action="/check-release"', automatic)
         self.assertIn('Automatic upgrade selected', automatic)
@@ -2640,13 +2756,19 @@ class WebPortalTests(unittest.TestCase):
         )
         self.assertIn('<h1>Upgrade</h1>', task)
         self.assertIn('id="upgrade-task-steps"', task)
-        self.assertIn('id="upgrade-task-progress"', task)
+        self.assertNotIn('id="upgrade-task-progress"', task)
+        self.assertIn('id="upgrade-task-status"', task)
+        task_selection = task.split('Select version', 1)[1].split('</li>', 1)[0]
+        self.assertIn('class="selected-release-summary"', task_selection)
+        self.assertIn('3.0.0-alpha.29', task_selection)
         self.assertIn('class="upgrade-stage-ring" role="progressbar"', task)
         self.assertIn('Automatic upgrade selected', task)
         self.assertIn('Select version', task)
         self.assertIn('function setStep(x,state,percent)', task)
         self.assertIn('fetch("/task-status?id="', task)
-        self.assertIn("location.replace('/updates?source=staged')", task)
+        self.assertIn('function showReady()', task)
+        self.assertIn("history.replaceState(null,\"\",'/updates?source=staged')", task)
+        self.assertNotIn("location.replace('/updates?source=staged')", task)
         settings_idle = web_portal.render_update_settings_page('csrf', {})
         self.assertIn('name="release_check_schedule"', settings_idle)
         self.assertIn('<option value="disabled" selected>Disabled</option>', settings_idle)
@@ -2698,7 +2820,10 @@ class WebPortalTests(unittest.TestCase):
         })
         self.assertNotIn('id="update-upload-form"', ready)
         self.assertIn('<h2>Staged upgrade</h2>', ready)
-        self.assertIn('<h3>Ready to activate</h3>', ready)
+        self.assertIn('class="selected-release-summary"', ready)
+        self.assertIn('<strong>Application — 2.0.0</strong>', ready)
+        self.assertIn('<button class="danger" type="submit">Discard</button>', ready)
+        self.assertNotIn('class="staged-upgrade-copy"', ready)
 
         ready_with_offer = web_portal.render_updates_page('csrf', {
             'release_checks_enabled': True,
@@ -2721,7 +2846,8 @@ class WebPortalTests(unittest.TestCase):
             'universal_update_version': '2.0.0',
         })
         self.assertIn('action="/activate-universal"', universal)
-        self.assertIn('Restart and install universal upgrade 2.0.0', universal)
+        self.assertIn('>Restart and install</button>', universal)
+        self.assertNotIn('Restart and install universal upgrade', universal)
         self.assertIn('Inspect paired manifest', universal)
         self.assertIn('Transfer core firmware', universal)
         self.assertIn('Write core firmware', universal)
@@ -2730,6 +2856,12 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Verify and stage application', universal)
         self.assertIn('Pair verified components', universal)
         self.assertEqual(universal.count('<li class="complete">'), 9)
+        self.assertNotIn('<span class="badge good">Verified</span>', universal)
+        final_step = universal.rsplit('<li ', 1)[1].split('</li>', 1)[0]
+        self.assertIn('class="active upgrade-stage-action"', final_step)
+        self.assertIn('action="/activate-universal"', final_step)
+        self.assertNotIn('role="progressbar"', final_step)
+        self.assertNotIn('upgrade-stage-percent', final_step)
         self.assertNotIn('action="/activate-update"', universal)
         self.assertNotIn('action="/activate-firmware"', universal)
         self.assertNotIn('Upload and verify', ready)
@@ -2738,7 +2870,23 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('class="task-progress complete"', ready)
         self.assertIn('class="actions manual-upgrade-buttons"', ready)
         self.assertIn('action="/discard-update"', ready)
+        release_step = ready.split('Release selected', 1)[1].split('</li>', 1)[0]
+        self.assertNotIn('action="/discard-update"', release_step)
         self.assertIn('Restart and install', ready)
+
+        rollback = web_portal.render_update_install_page('csrf', {
+            'previous_slot': 'a',
+            'previous_slot_version': '3.0.0-alpha.36',
+        }, source='rollback')
+        self.assertIn('>Restart and rollback</button>', rollback)
+        self.assertNotIn('Rollback application to ', rollback)
+        rollback_step = rollback.rsplit('<li ', 1)[1].split('</li>', 1)[0]
+        self.assertIn('action="/rollback-application"', rollback_step)
+        self.assertNotIn('role="progressbar"', rollback_step)
+        retained_step = rollback.split('Previous application retained', 1)[1].split('</li>', 1)[0]
+        self.assertIn('class="selected-release-summary"', retained_step)
+        self.assertIn('Application — 3.0.0-alpha.36', retained_step)
+        self.assertNotIn('class="upgrade-operation"', rollback)
 
     def test_upgrade_history_is_visible_and_escapes_version_checks(self):
         page = web_portal.render_updates_page('csrf', {
@@ -2770,6 +2918,34 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('name="generation" value="3"', page)
         self.assertIn('name="confirm" value="yes" required', page)
         self.assertIn('disabled', portal_ui.restrict_actions(page, 'operator'))
+
+        self.assertIn('action="/record-qualification-event"', page)
+        self.assertIn('action="/run-qualification-scenario"', page)
+        self.assertIn('simulation alone is not qualification evidence', page)
+        self.assertEqual(
+            portal_routes.required_role('POST', '/record-qualification-event'),
+            'administrator'
+        )
+
+    def test_qualification_event_and_scenario_portal_handlers(self):
+        events = []
+        event_message, event_error = portal_http.record_qualification_event({
+            'gate': 'watchdog-recovery', 'outcome': 'success',
+        }, 'admin', lambda value, actor:
+            events.append((value, actor)) or {
+                'gate': value['gate'], 'outcome': value['outcome'],
+            })
+        self.assertFalse(event_error)
+        self.assertIn('watchdog recovery', event_message)
+        self.assertEqual(events[0][1], 'admin')
+
+        scenario_message, scenario_error = portal_http.run_qualification_scenario({
+            'scenario': 'watchdog-recovery',
+        }, 'admin', lambda value, actor: {
+            'scenario': value['scenario'], 'actor': actor,
+        })
+        self.assertFalse(scenario_error)
+        self.assertIn('disruptive watchdog recovery', scenario_message)
 
         downloading = web_portal.render_update_summary_html({
             'update_status': 'verification', 'firmware_update_status': 'idle',

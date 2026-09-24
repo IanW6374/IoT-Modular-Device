@@ -234,7 +234,7 @@ For the v3 campaign, initialise or inspect a persistent host record with:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha32.state.json \
   --evidence .qualification/alpha32.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.36 --sequence 2741 status
+  --device-id iot-md-001 --version 3.0.0-alpha.61 --sequence 2766 status
 ```
 
 Monitor health over the mTLS Device API using the applicable JSON field paths:
@@ -243,7 +243,7 @@ Monitor health over the mTLS Device API using the applicable JSON field paths:
 python3 v3/host/qualification_runner.py \
   --state .qualification/alpha32.state.json \
   --evidence .qualification/alpha32.evidence.json \
-  --device-id iot-md-001 --version 3.0.0-alpha.36 --sequence 2741 monitor \
+  --device-id iot-md-001 --version 3.0.0-alpha.61 --sequence 2766 monitor \
   --url https://iot-md-001.local:8444/api/v2/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \
@@ -255,6 +255,23 @@ Controlled events are explicit subcommands: `renewal`, `update`, `power`, or
 `validation --gate <name>`, each with a required success/failure outcome. The
 tool exits 2 while any gate remains open or failed and 0 only when promotion is
 ready. A connection failure is recorded as network-down evidence only.
+
+Alpha 37 additionally accepts controlled observations through the administrator
+portal and `POST /api/v2/qualification/events`. Enrol a dedicated qualification
+automation certificate rather than granting this authority to an ordinary API
+writer. Run the real watchdog HIL scenario and independently observe the reset:
+
+```sh
+python3 v3/host/qualification_hil.py \
+  --url https://iot-md-001.local:8444 \
+  --ca-file home-iot-ca.pem --cert-file qualification-client.pem \
+  --key-file qualification-client-key.pem watchdog
+```
+
+Run the broad host fault simulation separately with
+`python3 tools/simulate_qualification.py --output simulated.json`. Its report is
+marked `qualifying: false`; it is regression evidence and never advances a
+hardware qualification counter.
 
 The installed device keeps the current release's automatic soak, health,
 storage, network, update and confirmation evidence across restart and power

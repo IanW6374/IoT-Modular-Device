@@ -16,8 +16,9 @@ except ImportError:
     import ssl
 
 import http_support
+from api_security import APIAuthorizationError
 from api_contracts import APIRequest, APIResponse
-from portal_http import compatible_http_reader, is_http_timeout_error
+from portal_http import is_http_timeout_error
 
 
 API_VERSION = 2
@@ -50,7 +51,9 @@ def make_mtls_context(cert_path, key_path, client_ca_path):
 class DeviceAPI:
     def __init__(self, broker, health, registry, device_getter, log_output=None,
                  fleet=None, support_getter=None, feature_flags=None,
-                 configuration_getter=None):
+                 configuration_getter=None, qualification_getter=None,
+                 configuration_profile_applier=None, qualification_event=None,
+                 qualification_scenario=None):
         self.broker = broker
         self.health = health
         self.registry = registry
@@ -60,6 +63,10 @@ class DeviceAPI:
         self.support_getter = support_getter
         self.feature_flags = feature_flags
         self.configuration_getter = configuration_getter
+        self.configuration_profile_applier = configuration_profile_applier
+        self.qualification_getter = qualification_getter
+        self.qualification_event = qualification_event
+        self.qualification_scenario = qualification_scenario
 
     def connection_opened(self, identity, peer='unknown'):
         client = self.registry.identify(identity)
@@ -91,9 +98,19 @@ class DeviceAPI:
     def _dispatch(self, method, path, body, identity, authenticated_client=None):
         route = str(path).split('?', 1)[0]
         is_fleet = route.startswith('/api/v2/fleet')
-        scope = (
-            'fleet:write' if method == 'POST' else 'fleet:read'
-        ) if is_fleet else ('write' if method == 'POST' else 'read')
+        is_qualification = route.startswith('/api/v2/qualification')
+        if route == '/api/v2/configuration/profile' and method == 'POST':
+            scope = 'configuration:write'
+        elif is_qualification and method == 'POST':
+            scope = (
+                'qualification:execute'
+                if route.startswith('/api/v2/qualification/scenarios/')
+                else 'qualification:write'
+            )
+        elif is_fleet:
+            scope = 'fleet:write' if method == 'POST' else 'fleet:read'
+        else:
+            scope = 'write' if method == 'POST' else 'read'
         if authenticated_client is None:
             client = self.registry.authenticate(identity, scope)
         else:
@@ -128,6 +145,44 @@ class DeviceAPI:
         if method == 'GET' and route == '/api/v2/configuration':
             value = self.configuration_getter() if self.configuration_getter else {}
             return 200, {'api_version': API_VERSION, 'configuration': value}
+        if method == 'POST' and route == '/api/v2/configuration/profile':
+            if not self.configuration_profile_applier:
+                raise RuntimeError('configuration profile management is unavailable')
+            value = json.loads(body.decode() if isinstance(body, bytes) else body)
+            if not isinstance(value, dict):
+                raise ValueError('configuration profile must be an object')
+            result = self.configuration_profile_applier(
+                value, str(client.get('label', 'API client'))
+            )
+            return 202, {'accepted': True, 'profile': result}
+        if method == 'GET' and route == '/api/v2/qualification':
+            if not self.qualification_getter:
+                raise RuntimeError('qualification recorder is unavailable')
+            return 200, {
+                'api_version': API_VERSION,
+                'qualification': self.qualification_getter(),
+            }
+        if method == 'POST' and route == '/api/v2/qualification/events':
+            if not self.qualification_event:
+                raise RuntimeError('qualification evidence recording is unavailable')
+            value = json.loads(body.decode() if isinstance(body, bytes) else body)
+            result = self.qualification_event(
+                value, str(client.get('label', 'API client'))
+            )
+            return 202, {'accepted': True, 'event': result}
+        scenario_prefix = '/api/v2/qualification/scenarios/'
+        if method == 'POST' and route.startswith(scenario_prefix):
+            if not self.qualification_scenario:
+                raise RuntimeError('qualification scenario execution is unavailable')
+            value = json.loads(body.decode() if isinstance(body, bytes) else body)
+            if not isinstance(value, dict):
+                raise ValueError('qualification scenario must be an object')
+            value = dict(value)
+            value['scenario'] = route[len(scenario_prefix):]
+            result = self.qualification_scenario(
+                value, str(client.get('label', 'API client'))
+            )
+            return 202, {'accepted': True, 'scenario': result}
 
         if method == 'GET' and route == '/api/v2/device/inventory':
             return 200, {
@@ -329,10 +384,10 @@ async def _write_response(writer, status, payload, keep_alive=False):
 def _peer_certificate(reader):
     stream = getattr(reader, 's', None)
     if stream is None or not hasattr(stream, 'getpeercert'):
-        raise PermissionError('TLS peer certificate is unavailable')
+        raise APIAuthorizationError('TLS peer certificate is unavailable')
     value = stream.getpeercert(True)
     if not value:
-        raise PermissionError('client certificate is required')
+        raise APIAuthorizationError('client certificate is required')
     return value
 
 
@@ -363,7 +418,6 @@ async def _start_http_device_api(settings, api):
 
     async def handle(reader, writer):
         peer = _peer_address(reader, writer)
-        reader = compatible_http_reader(reader)
         try:
             # MicroPython's TLS server defers the handshake until the first
             # stream read. Inspecting the certificate before that read resets
@@ -376,9 +430,6 @@ async def _start_http_device_api(settings, api):
                 )
                 if not line:
                     return
-                if identity is None:
-                    identity = _peer_certificate(reader)
-                    authenticated_client = api.connection_opened(identity, peer)
                 parts = line.decode().strip().split()
                 if len(parts) != 3:
                     raise ValueError('invalid HTTP request line')
@@ -388,6 +439,14 @@ async def _start_http_device_api(settings, api):
                     return
                 length = int(headers.get('content-length', '0') or 0)
                 body = await http_support.read_exact_body(reader, length, maximum) if length else b''
+                if identity is None:
+                    # On the MicroPython TLS stream, inspecting the peer
+                    # certificate between header and body reads can disturb
+                    # subsequent application-data reads. The SSL context has
+                    # already required and verified a client certificate, so
+                    # receive the bounded body before extracting its identity.
+                    identity = _peer_certificate(reader)
+                    authenticated_client = api.connection_opened(identity, peer)
                 response = api.handle(APIRequest(
                     method, path, body, identity, authenticated_client,
                     transport='https', peer=peer
@@ -402,7 +461,7 @@ async def _start_http_device_api(settings, api):
                 await _write_response(writer, status, payload, keep_alive)
                 if not keep_alive:
                     return
-        except PermissionError as exc:
+        except APIAuthorizationError as exc:
             if api.health:
                 api.health.increment('api_failures')
             if api.log_output:

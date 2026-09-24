@@ -9,7 +9,8 @@ import web_portal_ui as portal_ui
 import timezone_rules
 from portal_http import html_escape, js_escape, configuration_backup_filename
 from portal_presenters import (
-    render_badge, render_certificate_badge, render_label,
+    render_api_scope_editor, render_badge, render_certificate_badge,
+    render_label,
 )
 
 def _notice(message='', error=False):
@@ -434,7 +435,8 @@ def render_device_api_page(csrf, settings, message='', error=False):
             '<div class="property-row"><span>Fingerprint</span><strong>' +
             html_escape(fingerprint) + '</strong></div>'
             '<div class="property-row"><span>Expires</span><strong>' +
-            html_escape(client.get('not_after', 'unknown')) + '</strong></div></div>'
+            html_escape(client.get('not_after', 'unknown')) + '</strong></div></div>' +
+            render_api_scope_editor(csrf, client, '/device-api') +
             '<form method="post" action="/revoke-api-client"><input type="hidden" '
             'name="csrf" value="' + html_escape(csrf) + '"><input type="hidden" '
             'name="fingerprint" value="' + html_escape(fingerprint) + '">'
@@ -780,7 +782,8 @@ def render_certificate_page(csrf, message='', certificates=None):
         '<option value="management-suite-key">Management Suite verification key</option>'
         '<option value="syslog-ca">Syslog trusted CA</option><option value="api-client-ca">API client CA trust</option>'
         '<option value="api-client-cert">Module API client certificate</option>'
-        '<option value="fleet-client-cert">Fleet manager client certificate</option></select></label>'
+        '<option value="fleet-client-cert">Fleet manager client certificate</option>'
+        '<option value="qualification-client-cert">Qualification automation certificate</option></select></label>'
         '<div class="grid"><label id="certificate-primary-label" class="field">Portal certificate'
         '<input id="certificate-primary" type="file" accept=".der,.pem,application/pkix-cert,application/x-pem-file" required></label>'
         '<label id="certificate-secondary-label" class="field">Portal private key'
@@ -804,10 +807,11 @@ def render_certificate_page(csrf, message='', certificates=None):
         '"Authenticates an encrypted syslog server."],"api-client-ca":["API client CA files","",'
         '"Install one or more issuing CAs; the device restarts once."],"api-client-cert":['
         '"API client certificates","","Enrol module API identities with read/write scopes without a restart."],'
-        '"fleet-client-cert":["Fleet client certificates","","Enrol Home Assistant fleet identities with fleet read/write scopes."]};'
+        '"fleet-client-cert":["Fleet client certificates","","Enrol Home Assistant fleet identities with fleet read/write scopes."],'
+        '"qualification-client-cert":["Qualification automation certificates","","Enrol HIL automation with qualification evidence and scenario scopes."]};'
         'function configureCertificateImport(){var d=descriptions[type.value];primaryLabel.firstChild.nodeValue=d[0];'
         'secondaryLabel.firstChild.nodeValue=d[1];secondaryLabel.hidden=!d[1];primary.multiple='
-        'type.value==="api-client-ca"||type.value==="api-client-cert"||type.value==="fleet-client-cert";'
+        'type.value==="api-client-ca"||type.value==="api-client-cert"||type.value==="fleet-client-cert"||type.value==="qualification-client-cert";'
         'secondary.disabled=!d[1];secondary.required=!!d[1];if(!d[1])secondary.value="";help.textContent=d[2];}'
         'type.onchange=configureCertificateImport;configureCertificateImport();'
         'document.getElementById("acme-enabled").onchange=function(){document.getElementById('

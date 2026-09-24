@@ -80,7 +80,14 @@ def parse_portal_body(route, headers, body):
         encoded = body.decode()
     except Exception:
         encoded = ''
-    return parse_query('?' + encoded) if encoded else {}
+    params = parse_query('?' + encoded) if encoded else {}
+    if route == '/update-api-client-scopes' and encoded:
+        params['scopes'] = [
+            url_decode(pair.split('=', 1)[1] if '=' in pair else '')
+            for pair in encoded.split('&')
+            if url_decode(pair.split('=', 1)[0]) == 'scopes'
+        ]
+    return params
 
 def url_decode(value):
     value = str(value).replace('+', ' ')
@@ -282,6 +289,41 @@ def restart_qualification_gate(params, actor, handler):
         return 'Failed test restarted. New evidence is required; other gates are unchanged.', False
     except Exception as exc:
         return 'Test could not be restarted: ' + (str(exc) or exc.__class__.__name__), True
+
+
+def record_qualification_event(params, actor, handler):
+    try:
+        if handler is None:
+            raise ValueError('qualification evidence recording is unavailable')
+        event = handler(params, actor)
+        return ('Recorded ' + event['outcome'] + ' for ' +
+                event['gate'].replace('-', ' ') + '.', False)
+    except Exception as exc:
+        return 'Evidence was not recorded: ' + (str(exc) or exc.__class__.__name__), True
+
+
+def run_qualification_scenario(params, actor, handler):
+    try:
+        if handler is None:
+            raise ValueError('qualification scenario execution is unavailable')
+        result = handler(params, actor)
+        return ('Started disruptive ' + result['scenario'].replace('-', ' ') +
+                ' scenario. Keep the HIL observer running.', False)
+    except Exception as exc:
+        return 'Scenario was not started: ' + (str(exc) or exc.__class__.__name__), True
+
+
+def apply_qualification_action(route, params, actor, event_handler,
+                               scenario_handler):
+    if route == '/record-qualification-event':
+        message, error = record_qualification_event(
+            params, actor, event_handler
+        )
+        return message, error, '200 OK'
+    message, error = run_qualification_scenario(
+        params, actor, scenario_handler
+    )
+    return message, error, '202 Accepted'
 
 
 def apply_portal_action(action, path, action_handler, log_output, params=None):

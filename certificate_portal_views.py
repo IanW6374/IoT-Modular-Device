@@ -2,7 +2,9 @@
 
 import web_portal_ui as portal_ui
 from portal_http import html_escape
-from portal_presenters import render_badge, render_certificate_badge
+from portal_presenters import (
+    render_api_scope_editor, render_badge, render_certificate_badge,
+)
 
 
 METHODS = {
@@ -86,7 +88,7 @@ def _upload_widget(csrf, choices, return_label):
     script = ('var csrf=' + repr(str(csrf)) + ',type=document.getElementById("certificate-type"),'
               'file=document.getElementById("certificate-primary"),help=document.getElementById("certificate-help"),'
               'descriptions={' + descriptions + '};function configure(){help.textContent=descriptions[type.value][1];'
-              'file.multiple=type.value==="api-client-ca"||type.value==="api-client-cert"||type.value==="fleet-client-cert";'
+              'file.multiple=type.value==="api-client-ca"||type.value==="api-client-cert"||type.value==="fleet-client-cert"||type.value==="qualification-client-cert";'
               'file.accept=type.value==="management-suite-key"?".bin,.hex,application/octet-stream":'
               '(type.value==="portal-cert"?".der,.pem,application/pkix-cert,application/x-pem-file":'
               '".der,application/pkix-cert,application/octet-stream");}type.onchange=configure;configure();'
@@ -241,7 +243,8 @@ def render_api_client_trust_page(csrf, message='', certificates=None):
                               _remove_form(csrf, 'api-client-ca', details.get('fingerprint', ''), '/api-client-trust')))
     clients = []
     for details in certificates.get('api_clients', ()) or ():
-        action = ('<form method="post" action="/revoke-api-client"><input type="hidden" name="csrf" value="' + html_escape(csrf) +
+        action = (render_api_scope_editor(csrf, details, '/api-client-trust') +
+                  '<form method="post" action="/revoke-api-client"><input type="hidden" name="csrf" value="' + html_escape(csrf) +
                   '"><input type="hidden" name="fingerprint" value="' + html_escape(details.get('fingerprint', '')) +
                   '"><input type="hidden" name="return_to" value="/api-client-trust"' +
                   '"><div class="actions"><span></span><button class="danger compact">Revoke client</button></div></form>')
@@ -250,6 +253,7 @@ def render_api_client_trust_page(csrf, message='', certificates=None):
         ('api-client-ca', 'Device API client issuer CA', 'Trusts certificates presented by approved Device API callers.'),
         ('api-client-cert', 'Device API caller certificate', 'Enrolls a client identity with Device API read/write scopes.'),
         ('fleet-client-cert', 'Management Suite Device API caller certificate', 'Enrolls the Management Suite identity with fleet scopes.'),
+        ('qualification-client-cert', 'Qualification automation certificate', 'Enrolls a client with qualification evidence and scenario scopes.'),
     ), '/api-client-trust')
     body = (portal_ui.page_heading('Maintenance', 'API client trust',
             'Manage who may authenticate to the mutual-TLS Device API.') + _notice(message) +

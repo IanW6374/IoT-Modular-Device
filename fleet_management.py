@@ -16,6 +16,7 @@ except ImportError:
     time = None
 
 import update_security
+import timezone_rules
 
 
 FORMAT_VERSION = 1
@@ -184,7 +185,7 @@ class FleetService:
             str(policy.get('target_cohort', '')) not in ('', self.cohort)
         ):
             raise ValueError('fleet policy target does not match this device')
-        now = int(self._now())
+        now = timezone_rules.runtime_to_unix(self._now())
         if now < int(policy['not_before']) or now >= int(policy['expires_at']):
             raise ValueError('fleet policy is not currently valid')
         sequence = int(policy['policy_sequence'])
@@ -226,6 +227,13 @@ class FleetService:
             if command.get('id') not in completed
         ]
 
+    def command_release(self, command, default_channel):
+        updates = (self.state.get('policy') or {}).get('updates') or {}
+        return (
+            updates.get('channel') or default_channel,
+            int(command.get('release_sequence', 0) or 0),
+        )
+
     def complete_command(self, identifier, result='complete', detail=''):
         identifier = str(identifier)
         if identifier not in [item.get('id') for item in self.pending_commands()]:
@@ -246,7 +254,8 @@ class FleetService:
         ))
         self.state['rollout_paused'] = self.state['consecutive_failures'] >= maximum
         self.state['last_result'] = {
-            'time': int(self._now()), 'result': str(result),
+            'time': timezone_rules.runtime_to_unix(self._now()),
+            'result': str(result),
             'detail': str(detail)[:160],
         }
         self._save()

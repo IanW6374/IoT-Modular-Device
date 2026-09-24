@@ -55,6 +55,20 @@ class TimezoneRuleTests(unittest.TestCase):
                 timezone_rules.localtime(name='Europe/London')[6], 5
             )
 
+    def test_runtime_timestamp_can_be_normalised_for_unix_contracts(self):
+        unix_epoch = timezone_rules._epoch(2026, 9, 24, 9, 30)
+        esp32_epoch = unix_epoch - timezone_rules._epoch(2000, 1, 1)
+
+        class Esp32Time:
+            @staticmethod
+            def gmtime(value):
+                return (2000, 1, 1, 0, 0, 0, 5, 1) if value == 0 else ()
+
+        with patch.object(timezone_rules, 'time', Esp32Time):
+            self.assertEqual(
+                timezone_rules.runtime_to_unix(esp32_epoch), unix_epoch
+            )
+
     def test_configured_zone_is_used_when_name_is_omitted(self):
         timezone_rules.configure('Asia/Kolkata')
         epoch = timezone_rules._epoch(2026, 6, 1, 0)

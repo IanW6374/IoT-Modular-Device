@@ -8,7 +8,9 @@ from unittest import mock
 import api_security
 import certificate_manager
 import certificate_codec
+import configuration_profiles
 import device_api
+import http_support
 from api_contracts import APIRequest, APIResponse
 from device_api import DeviceAPI
 from device_api_inventory import DeviceInventory
@@ -139,6 +141,99 @@ class DeviceAPITests(unittest.TestCase):
         self.assertEqual(self.broker.commands[0][1]['operation'], 'write')
         self.assertEqual(self.broker.commands[0][2], 'api')
 
+    def test_configuration_profiles_use_dedicated_scope_and_are_validated(self):
+        applied = []
+        api = DeviceAPI(
+            self.broker, self.health, self.registry,
+            lambda: {'device_name': 'test'},
+            configuration_profile_applier=lambda value, actor:
+                applied.append((configuration_profiles.normalize_profile(value), actor)) or {
+                    'name': value['name'], 'restart_required': True,
+                },
+        )
+        self.registry.enrol(self.cert, 'fleet manager', ('configuration:write',))
+        profile = {
+            'format_version': 1, 'name': 'Standard',
+            'settings': {
+                'timezone_name': 'Europe/London',
+                'ntp_servers': ['pool.ntp.org'],
+                'ha_discovery': True,
+                'mqtt_qos': 1,
+            },
+        }
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/profile',
+            json.dumps(profile).encode(), self.cert,
+        )
+        self.assertEqual(status, 202)
+        self.assertTrue(payload['profile']['restart_required'])
+        self.assertEqual(applied[0][0]['name'], 'Standard')
+        self.assertEqual(applied[0][1], 'fleet manager')
+
+    def test_generic_write_scope_cannot_apply_configuration_profile(self):
+        api = DeviceAPI(
+            self.broker, self.health, self.registry,
+            lambda: {'device_name': 'test'},
+            configuration_profile_applier=lambda value, actor: value,
+        )
+        self.registry.enrol(self.cert, 'controller', ('write',))
+        with self.assertRaisesRegex(PermissionError, 'configuration:write'):
+            api.dispatch(
+                'POST', '/api/v2/configuration/profile',
+                b'{"name":"Standard","settings":{"ha_discovery":true}}',
+                self.cert,
+            )
+
+    def test_configuration_profile_rejects_secrets_and_unknown_settings(self):
+        with self.assertRaisesRegex(ValueError, 'unsupported.*wifi_password'):
+            configuration_profiles.normalize_profile({
+                'name': 'Unsafe', 'settings': {'wifi_password': 'secret'},
+            })
+        with self.assertRaisesRegex(ValueError, '1 to 4'):
+            configuration_profiles.normalize_profile({
+                'name': 'Invalid', 'settings': {'ntp_servers': []},
+            })
+
+    def test_qualification_endpoints_use_dedicated_scopes(self):
+        events = []
+        scenarios = []
+        api = DeviceAPI(
+            self.broker, self.health, self.registry,
+            lambda: {'device_name': 'test'},
+            qualification_getter=lambda: {'summary': 'In progress'},
+            qualification_event=lambda value, actor:
+                events.append((value, actor)) or value,
+            qualification_scenario=lambda value, actor:
+                scenarios.append((value, actor)) or value,
+        )
+        self.registry.enrol(self.cert, 'HIL rig', (
+            'read', 'qualification:write', 'qualification:execute'
+        ))
+        status, payload = api.dispatch(
+            'GET', '/api/v2/qualification', b'', self.cert
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload['qualification']['summary'], 'In progress')
+        status, payload = api.dispatch(
+            'POST', '/api/v2/qualification/events',
+            b'{"gate":"watchdog-recovery"}', self.cert
+        )
+        self.assertEqual(status, 202)
+        self.assertEqual(events[0][1], 'HIL rig')
+        status, payload = api.dispatch(
+            'POST', '/api/v2/qualification/scenarios/watchdog-recovery',
+            b'{"run_id":"hil-1"}', self.cert
+        )
+        self.assertEqual(status, 202)
+        self.assertEqual(scenarios[0][0]['scenario'], 'watchdog-recovery')
+
+    def test_generic_write_scope_cannot_record_qualification(self):
+        self.registry.enrol(self.cert, 'controller', ('read', 'write'))
+        with self.assertRaisesRegex(PermissionError, 'qualification:write'):
+            self.api.dispatch(
+                'POST', '/api/v2/qualification/events', b'{}', self.cert
+            )
+
     def test_connection_and_commands_are_audit_but_requests_are_debug(self):
         logs = []
         api = DeviceAPI(
@@ -198,6 +293,34 @@ class DeviceAPITests(unittest.TestCase):
         registry.enrol(self.cert, 'reader', ('read',))
 
         self.assertTrue(path.is_file())
+
+    def test_registry_updates_existing_client_scopes_without_duplicate(self):
+        record = self.registry.enrol(
+            self.cert, 'combined automation', ('read', 'write')
+        )
+
+        updated = self.registry.update_scopes(record['fingerprint'], (
+            'read', 'write', 'qualification:write', 'qualification:execute'
+        ))
+
+        self.assertEqual(len(self.registry.list_clients()), 1)
+        self.assertEqual(updated['label'], 'combined automation')
+        self.assertEqual(updated['subject'], record['subject'])
+        self.assertEqual(updated['scopes'], [
+            'qualification:execute', 'qualification:write', 'read', 'write'
+        ])
+
+    def test_registry_rejects_empty_unknown_and_missing_scope_updates(self):
+        record = self.registry.enrol(self.cert, 'reader', ('read',))
+
+        with self.assertRaisesRegex(ValueError, 'at least one scope'):
+            self.registry.update_scopes(record['fingerprint'], ())
+        with self.assertRaisesRegex(ValueError, 'unsupported'):
+            self.registry.update_scopes(record['fingerprint'], ('admin',))
+        with self.assertRaisesRegex(ValueError, 'not found'):
+            self.registry.update_scopes('00' * 32, ('read',))
+
+        self.assertEqual(self.registry.list_clients()[0]['scopes'], ['read'])
 
     def test_v1_registry_is_rejected_by_clean_seed_runtime(self):
         path = Path(self.temp.name) / 'legacy-clients.json'
@@ -305,6 +428,101 @@ class DeviceAPITests(unittest.TestCase):
             await captured['handler'](reader, writer)
             self.assertTrue(reader.s.handshake_complete)
             self.assertIn(b'HTTP/1.1 200 OK', writer.payload)
+
+        asyncio.run(exercise())
+
+    def test_server_reads_split_tls_post_without_header_read_ahead(self):
+        events = []
+
+        def reject_event(value, actor):
+            events.append((value, actor))
+            raise ValueError('controlled validation failure')
+
+        api = DeviceAPI(
+            self.broker, self.health, self.registry,
+            lambda: {'device_name': 'test'},
+            qualification_event=reject_event,
+        )
+        self.registry.enrol(
+            self.cert, 'HIL rig', ('qualification:write',)
+        )
+
+        class TLSStream:
+            def __init__(stream_self):
+                stream_self.certificate_inspected = False
+
+            def getpeercert(stream_self, binary_form=False):
+                stream_self.certificate_inspected = True
+                return self.cert
+
+        class Reader:
+            def __init__(stream_self):
+                stream_self.s = TLSStream()
+                stream_self.records = [
+                    bytearray(
+                        b'POST /api/v2/qualification/events HTTP/1.1\r\n'
+                        b'Content-Type: application/json\r\n'
+                        b'Content-Length: 2\r\n'
+                        b'Connection: close\r\n\r\n'
+                    ),
+                    bytearray(b'{}'),
+                ]
+                stream_self.read_sizes = []
+
+            async def read(stream_self, size):
+                stream_self.read_sizes.append(size)
+                while stream_self.records and not stream_self.records[0]:
+                    stream_self.records.pop(0)
+                if not stream_self.records:
+                    return b''
+                if stream_self.s.certificate_inspected:
+                    raise OSError('TLS reads fail after certificate inspection')
+                # Model the affected TLS stream: a read larger than the
+                # current record does not return that record as a short read.
+                if size > len(stream_self.records[0]):
+                    return b''
+                value = bytes(stream_self.records[0][:size])
+                del stream_self.records[0][:size]
+                return value
+
+        class Writer:
+            def __init__(stream_self):
+                stream_self.payload = bytearray()
+
+            def write(stream_self, payload):
+                stream_self.payload.extend(payload)
+
+            async def drain(stream_self):
+                pass
+
+            def close(stream_self):
+                pass
+
+            async def wait_closed(stream_self):
+                pass
+
+        async def exercise():
+            captured = {}
+
+            async def capture_server(handler, *_args, **_kwargs):
+                captured['handler'] = handler
+                return object()
+
+            with mock.patch.object(device_api, 'make_mtls_context', return_value=object()), \
+                    mock.patch.object(device_api.asyncio, 'start_server', side_effect=capture_server):
+                await device_api.start_device_api({
+                    'enabled': True, 'cert_path': 'server.der',
+                    'key_path': 'server-key.der', 'client_ca_path': 'ca.der',
+                }, api)
+            reader = Reader()
+            writer = Writer()
+            await captured['handler'](reader, writer)
+            self.assertIn(b'HTTP/1.1 400 Bad Request', writer.payload)
+            self.assertIn(b'controlled validation failure', writer.payload)
+            self.assertEqual(events[0][0], {})
+            self.assertEqual(events[0][1], 'HIL rig')
+            self.assertEqual(reader.read_sizes[-1], 2)
+            self.assertNotIn(http_support.READ_BUFFER_BYTES, reader.read_sizes)
 
         asyncio.run(exercise())
 

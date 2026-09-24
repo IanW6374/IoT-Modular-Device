@@ -41,6 +41,18 @@ paths:
       responses:
         '200': {description: Safe configuration projection, content: {application/json: {schema: {$ref: '#/components/schemas/ConfigurationProjection'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v2/configuration/profile:
+    post:
+      summary: Validate and apply a non-secret configuration profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConfigurationProfile'}
+      responses:
+        '202': {description: Profile accepted; device restart required}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v2/device/inventory:
     get:
       summary: Device and module inventory
@@ -135,6 +147,35 @@ paths:
                 detail: {type: string}
       responses:
         '200': {description: Updated command, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+  /api/v2/qualification:
+    get:
+      summary: Read complete qualification status
+      responses:
+        '200': {description: Qualification status, content: {application/json: {schema: {type: object, required: [api_version, qualification], properties: {api_version: {const: 2}, qualification: {type: object, additionalProperties: true}}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v2/qualification/events:
+    post:
+      summary: Append an observed controlled qualification result
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/QualificationEvent'}}}
+      responses:
+        '202': {description: Evidence accepted, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v2/qualification/scenarios/{name}:
+    parameters:
+      - {name: name, in: path, required: true, schema: {enum: [watchdog-recovery, native-recovery]}}
+    post:
+      summary: Start an allowlisted disruptive Alpha qualification scenario
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/QualificationScenario'}}}
+      responses:
+        '202': {description: Scenario accepted, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
 components:
   securitySchemes:
     mutualTLS: {type: mutualTLS, description: Enrolled client certificate and scope registry}
@@ -171,6 +212,15 @@ components:
       properties:
         api_version: {const: 2}
         configuration: {type: object, additionalProperties: true}
+    ConfigurationProfile:
+      type: object
+      additionalProperties: false
+      required: [format_version, name, settings]
+      properties:
+        format_version: {const: 1}
+        name: {type: string, minLength: 1, maxLength: 64}
+        description: {type: string, maxLength: 256}
+        settings: {type: object, minProperties: 1, additionalProperties: true}
     Inventory:
       type: object
       required: [api_version, device, modules]
@@ -203,6 +253,24 @@ components:
         status: {enum: [pending, running, complete, failed]}
         result: {}
         error: {type: string}
+    QualificationEvent:
+      type: object
+      additionalProperties: false
+      required: [gate, outcome, run_id, confirm]
+      properties:
+        gate: {enum: [native-recovery, watchdog-recovery, identity-interoperability, fleet-interoperability, migration-rollback, driver-hardware]}
+        outcome: {enum: [success, failure]}
+        run_id: {type: string, minLength: 1, maxLength: 64}
+        notes: {type: string, maxLength: 160}
+        evidence_digest: {type: string, maxLength: 96}
+        confirm: {const: true}
+    QualificationScenario:
+      type: object
+      additionalProperties: false
+      required: [run_id, confirmation]
+      properties:
+        run_id: {type: string, minLength: 1, maxLength: 64}
+        confirmation: {type: string, minLength: 1, maxLength: 80}
     EventPage:
       type: object
       additionalProperties: true

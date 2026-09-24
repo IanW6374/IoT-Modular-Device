@@ -308,6 +308,14 @@ def _query_value(value):
     return value
 
 
+def for_release_sequence(releases, sequence):
+    sequence = int(sequence or 0)
+    return list(releases) if not sequence else [
+        item for item in releases
+        if int(item.get('release_sequence', 0) or 0) == sequence
+    ]
+
+
 def release_manifest_request_url(manifest_url, channel):
     """Return the exact channel URL used for a release check."""
     channel = _query_value(channel)

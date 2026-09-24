@@ -3,6 +3,17 @@
 from portal_http import html_escape
 
 
+API_SCOPE_CHOICES = (
+    ('read', 'Read device state'),
+    ('write', 'Run device commands'),
+    ('fleet:read', 'Read fleet state'),
+    ('fleet:write', 'Apply fleet commands'),
+    ('configuration:write', 'Apply configuration profiles'),
+    ('qualification:write', 'Record qualification evidence'),
+    ('qualification:execute', 'Run qualification scenarios'),
+)
+
+
 FRIENDLY_LABELS = {
     'device_name': 'Device name', 'wifi_ip': 'Wi-Fi address',
     'mqtt': 'MQTT status', 'config': 'Configuration',
@@ -78,6 +89,34 @@ def render_badge(label, tone='neutral'):
     return (
         '<span class="badge ' + html_escape(tone) + '">' +
         html_escape(label) + '</span>'
+    )
+
+
+def render_api_scope_editor(csrf, client, return_to='/device-api'):
+    """Render an in-place scope editor for one enrolled certificate."""
+    current = set(str(scope) for scope in client.get('scopes', ()))
+    options = []
+    for scope, label in API_SCOPE_CHOICES:
+        options.append(
+            '<option value="' + html_escape(scope) + '"' +
+            (' selected' if scope in current else '') + '>' +
+            html_escape(label + ' — ' + scope) + '</option>'
+        )
+    return (
+        '<details class="api-scope-editor"><summary>Edit API scopes</summary>'
+        '<form method="post" action="/update-api-client-scopes">'
+        '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
+        '<input type="hidden" name="fingerprint" value="' +
+        html_escape(client.get('fingerprint', '')) + '">'
+        '<input type="hidden" name="return_to" value="' +
+        html_escape(return_to) + '"><fieldset><legend>Allowed operations</legend>'
+        '<label class="field">API scopes<select class="api-scope-select" '
+        'name="scopes" multiple size="7" required>' + ''.join(options) +
+        '</select><span class="field-hint">Use Command or Control to select multiple scopes.</span>'
+        '</label></fieldset>'
+        '<p class="field-hint">Changes apply immediately to new and existing API connections.</p>'
+        '<div class="actions"><span></span><button class="secondary compact" '
+        'type="submit">Save scopes</button></div></form></details>'
     )
 
 

@@ -74,7 +74,10 @@ trust anchor is not mistaken for a device or client identity:
   TLS client from reconnecting until replacement trust is installed.
 - **API client trust** contains **Device API client issuer CA** anchors and
   enrolled **Device API caller certificates**. Removing an issuer CA reloads
-  Device API trust; revoking a caller removes only that enrolled caller.
+  Device API trust; revoking a caller removes only that enrolled caller. Use
+  **Edit API scopes** on an enrolled caller to change its permissions in place
+  without installing a duplicate certificate. Management Suite profile pushes
+  require the dedicated `configuration:write` scope.
 - **Device certificates** inventories identities currently
   presented by the device: **Portal HTTPS identity** and **Device API and fleet
   server identity**. It also exposes **Renew now** for the current managed

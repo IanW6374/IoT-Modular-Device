@@ -2,6 +2,204 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.61 - 2026-09-24
+
+- Add a dedicated `configuration:write` Device API scope and validated profile
+  endpoint for applying reusable, non-secret operational settings from the
+  Management Suite. Reject passwords, trust material, identity and network
+  addressing; audit successful application and require a restart. Retain
+  native ABI 6; sequence 2766.
+
+## 3.0.0-alpha.60 - 2026-09-24
+
+- Normalize the ESP32 MicroPython 2000-based runtime clock to Unix time before
+  evaluating signed fleet policy validity and recording fleet result times.
+  This aligns Device API policy enforcement with Management Suite timestamps.
+- Execute managed deployment checks against the policy's selected channel and
+  exact release sequence, and leave activation pending until the signed local
+  maintenance window opens. Retain native ABI 6; sequence 2765.
+
+## 3.0.0-alpha.59 - 2026-09-24
+
+- Replace the unavailable MicroPython `PermissionError` built-in with a
+  portable API authorization exception. Previously, evaluating the first
+  `except PermissionError` clause raised `NameError` while handling any policy
+  validation failure, masking the real error and closing TLS without an HTTP
+  response. Retain native ABI 6; sequence 2764.
+
+## 3.0.0-alpha.58 - 2026-09-23
+
+- Receive the complete bounded Device API request body before inspecting the
+  authenticated peer certificate. MicroPython's TLS stream can stop yielding
+  application data when `getpeercert()` is called between header and body
+  reads, producing an EOF before request dispatch. Retain native ABI 6;
+  sequence 2763.
+
+## 3.0.0-alpha.57 - 2026-09-23
+
+- Restore direct, bounded Device API reads from the TLS stream instead of
+  applying the portal's read-ahead buffer. Some MicroPython TLS streams wait
+  for the requested buffer size, so a 512-byte header read could stall before
+  any POST body handling or request logging occurred. Retain native ABI 6;
+  sequence 2762.
+
+## 3.0.0-alpha.56 - 2026-09-23
+
+- Read Device API request bodies using their exact remaining Content-Length
+  instead of inflating small TLS reads to the header buffer size. Device
+  testing subsequently showed that the header read-ahead itself could still
+  stall before dispatch; Alpha 57 completes the correction. Retain native ABI
+  6; sequence 2761.
+
+## 3.0.0-alpha.55 - 2026-09-23
+
+- Add a signed application-only dummy release for exercising the Alpha 54
+  discard-during-verification and subsequent retry workflow. No intentional
+  functional changes; sequence 2760.
+
+## 3.0.0-alpha.54 - 2026-09-23
+
+- Make **Discard** clear resumable-upload, sequential-universal, staged
+  component and automatic-release orchestration state as one operation.
+- Honour a discard requested during background verification at its next
+  progress checkpoint, preventing the abandoned task from interfering with a
+  subsequent upgrade. Retain native ABI 6; sequence 2759.
+
+## 3.0.0-alpha.53 - 2026-09-23
+
+- Allow an administrator to edit an enrolled mTLS API client's scopes in place
+  from Device API or API Client Trust, without re-enrolling its certificate.
+- Present the supported permissions in a compact multi-select scope editor,
+  validate that at least one known scope remains, and audit successful changes.
+  Retain native ABI 6; sequence 2758.
+
+## 3.0.0-alpha.52 - 2026-09-23
+
+- Add a signed dummy release for exercising the Alpha 51 disabled-to-active
+  **Restart and install** transition. No intentional functional changes.
+- Provide matching production-secure application, core and universal artifacts
+  for the final Alpha 52 hardware-qualification candidate. Retain native ABI 6;
+  sequence 2757.
+
+## 3.0.0-alpha.51 - 2026-09-23
+
+- Replace the inactive circular **Manual** marker at the final Upgrade step
+  with the same disabled **Restart and install** control that becomes active
+  after staging completes.
+- Apply the final-action presentation consistently to static, manual,
+  automatic, application, core and universal workflows. Retain native ABI 6;
+  sequence 2756.
+
+## 3.0.0-alpha.50 - 2026-09-23
+
+- Add a signed application-only dummy release for exercising the Alpha 49
+  Upgrade action placement. No intentional functional changes; sequence 2755.
+
+## 3.0.0-alpha.49 - 2026-09-23
+
+- Move **Discard** out of release selection and into the bottom-right
+  workflow-action area for in-progress manual and staged upgrades.
+- Remove the redundant **Verified** badge from staged application, core and
+  universal workflows; completed progress steps remain the verification
+  indicator. Retain native ABI 6; sequence 2754.
+
+## 3.0.0-alpha.48 - 2026-09-22
+
+- Add a signed application-only dummy release for exercising the Alpha 47
+  cross-method Upgrade format. No intentional functional changes; sequence
+  2753.
+
+## 3.0.0-alpha.47 - 2026-09-22
+
+- Apply the chart-attached Upgrade format consistently across Automatic,
+  Manual, Staged and Rollback methods.
+- Keep automatic release selection, channel checking and the selected release
+  within **Select version**, and remove duplicate normal-operation task text.
+- Present the retained rollback application beneath **Previous application
+  retained**, reserving below-chart status space for failures only. Retain
+  native ABI 6; sequence 2752.
+
+## 3.0.0-alpha.46 - 2026-09-22
+
+- Add a signed application-only dummy release for exercising the repaired
+  Alpha 45 manual staging workflow. No intentional functional changes;
+  sequence 2751.
+
+## 3.0.0-alpha.45 - 2026-09-22
+
+- Keep the complete manual-upload form attached when file selection rebuilds
+  the progress workflow, restoring the **Stage upgrade** submit action.
+- Enforce hidden state for selected-file guidance and controls so recovery-file
+  guidance disappears after selection and completed actions stay hidden.
+  Retain native ABI 6; sequence 2750.
+
+## 3.0.0-alpha.44 - 2026-09-22
+
+- Add a signed application-only dummy release for exercising the Alpha 43 to
+  Alpha 44 continuous staged workflow. No intentional functional changes;
+  sequence 2749.
+
+## 3.0.0-alpha.43 - 2026-09-22
+
+- Make selected manual files and automatic versions visually prominent beneath
+  their workflow steps, and use the destructive colour for **Discard**.
+- Replace the post-verification page navigation with an in-place staged-state
+  update for manual and automatic upgrades.
+- Keep reopened staged upgrades in the same chart-based layout, with the
+  selected release, Discard, Verified and restart actions attached to their
+  respective steps. Retain native ABI 6; sequence 2748.
+
+## 3.0.0-alpha.42 - 2026-09-22
+
+- Add a signed application-only dummy release for exercising the Alpha 41 to
+  Alpha 42 staged upgrade, restart, confirmation and rollback path. No
+  intentional functional changes; sequence 2747.
+
+## 3.0.0-alpha.41 - 2026-09-22
+
+- Consolidate Upgrade progress and actions into one workflow: remove the
+  duplicate current-task row and divider, center file/version selection under
+  its step, and place the Verified badge beneath **Verify and stage**.
+- Replace the disabled **Working…** action with the live progress step and rename
+  **Cancel** to **Discard**. Discard now aborts and removes resumable upload
+  state without refreshing the page.
+- Keep staging explicitly separate from activation so an operator can leave the
+  page and restart later. Retain native ABI 6; sequence 2746.
+
+## 3.0.0-alpha.40 - 2026-09-22
+
+- Add a signed application-only test release for exercising the Alpha 39 to
+  Alpha 40 upgrade workflow. No functional behavior changes; sequence 2745.
+
+## 3.0.0-alpha.39 - 2026-09-22
+
+- Size Upgrade method choices against the four-method desktop layout even when
+  only Automatic and Manual are currently available, with two- and one-column
+  responsive layouts.
+- Replace the final restart percentage with a manual action and integrate the
+  signed install or rollback button directly into the final progress step.
+- Standardise final actions as **Restart and install** or **Restart and
+  rollback**, without type or version suffixes. Retain ABI 6; sequence 2744.
+
+## 3.0.0-alpha.38 - 2026-09-22
+
+- Create qualification controls only after the runtime logger is defined,
+  preventing the Alpha 37 application-startup rollback.
+- Keep Upgrade method choices a consistent desktop width and suppress link
+  underlining for their hover and keyboard-focus states.
+- Use the concise **Restart and install** action for staged application, core
+  and universal upgrades. Retain native ABI 6 and use release sequence 2743.
+
+## 3.0.0-alpha.37 - 2026-09-21
+
+- Add administrator portal and dedicated-scope mTLS API workflows for recording
+  observed controlled-campaign evidence without directly editing gate status.
+- Add guarded Alpha-only watchdog and native-recovery scenario initiation,
+  an automated watchdog HIL observer, and a broad host fault-simulation campaign
+  whose output is explicitly marked non-qualifying.
+- Retain native ABI 6 and the existing cross-release qualification campaign;
+  use release sequence 2742.
+
 ## 3.0.0-alpha.36 - 2026-09-21
 
 - Retry qualification history writes under encrypted-storage pressure by trimming

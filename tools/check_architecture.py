@@ -28,7 +28,7 @@ LINE_LIMITS = {
     'iotmd.py': 20,
     # Alpha 6 adds only compatibility-runtime wiring for the extracted
     # qualification service. The gate remains below the pre-v3 monolith size.
-    'iotmd_runtime.py': 3390,
+    'iotmd_runtime.py': 3400,
     # Source route handling remains readable here; the production builder
     # promotes the two largest dispatchers to independently loaded modules.
     # One read-only qualification route delegates all rendering and policy.
@@ -61,6 +61,7 @@ RETIRED_SOURCE_MARKERS = {
 REQUIRED_APPLICATION_MODULES = (
     'iotmd_runtime.py', 'portal_server.py', 'portal_task_registry.py',
     'alpha_qualification.py',
+    'qualification_control.py',
     'certificate_status.py', 'portal_http.py', 'portal_live_views.py', 'portal_presenters.py',
     'portal_settings_views.py', 'services/home_assistant_service.py',
     'services/certificate_renewal_service.py', 'services/mqtt_startup_service.py',

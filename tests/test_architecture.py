@@ -20,6 +20,11 @@ from tools.check_architecture import (
 
 
 class ArchitectureBoundaryTests(unittest.TestCase):
+    def test_device_api_does_not_depend_on_cpython_permission_error(self):
+        source = Path('device_api.py').read_text()
+        self.assertNotIn('except PermissionError', source)
+        self.assertNotIn('raise PermissionError', source)
+
     def test_repository_architecture_gates_pass(self):
         self.assertEqual(architecture_errors(), [])
 
@@ -51,6 +56,13 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "getattr(device_config, 'MINIMUM_ACTIVATION_HEAP_BYTES'", source
         )
 
+    def test_qualification_controls_are_created_after_log_output(self):
+        source = Path('iotmd_runtime.py').read_text()
+        self.assertLess(
+            source.index('def logOutput('),
+            source.index('qualification_controls = QualificationControlService(')
+        )
+
     def test_certificate_administration_is_lazy_during_normal_boot(self):
         expectations = {
             'certificate_portal_actions.py': {
@@ -69,6 +81,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             '/settings', '/wifi-settings', '/messaging', '/device-api',
             '/certificates', '/configuration-backup', '/updates', '/logs',
             '/api/restart-required', '/restart-device', '/shutdown-device',
+            '/resumable-upload-discard',
         ):
             self.assertIn(route, ROUTES)
 

@@ -1,8 +1,10 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import fleet_management
+import timezone_rules
 import update_security
 
 
@@ -63,9 +65,32 @@ class FleetManagementTests(unittest.TestCase):
         self.assertEqual(snapshot['policy_sequence'], 1)
         self.assertTrue(snapshot['within_maintenance_window'])
         self.assertEqual(snapshot['pending_commands'][0]['id'], 'command-1')
+        self.assertEqual(
+            service.command_release(snapshot['pending_commands'][0], 'stable'),
+            ('alpha', 0),
+        )
 
         service.complete_command('command-1', 'complete')
         self.assertEqual(service.pending_commands(), [])
+
+    def test_microcontroller_epoch_is_normalised_for_policy_validity(self):
+        unix_now = self.now
+        runtime_now = unix_now - timezone_rules._epoch(2000, 1, 1)
+
+        class Esp32Time:
+            @staticmethod
+            def gmtime(value):
+                return (2000, 1, 1, 0, 0, 0, 5, 1) if value == 0 else ()
+
+        service = fleet_management.FleetService(
+            'device-1', 'test', self.state_path, str(self.key_path),
+            now=lambda: runtime_now,
+            localtime=lambda _epoch: (2033, 5, 18, 10, 30, 0, 2, 138),
+        )
+        with mock.patch.object(fleet_management.timezone_rules, 'time', Esp32Time):
+            snapshot = service.apply_policy(self.policy())
+
+        self.assertEqual(snapshot['policy_sequence'], 1)
 
     def test_rejects_stale_tampered_and_wrong_target_policies(self):
         service = self.service()
