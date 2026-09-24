@@ -175,7 +175,7 @@ def render_settings_page(csrf, settings, message='', error=False):
         portal_ui.page_heading(
             'Device', 'Network', 'Configure the device identity and wireless network.'
         ) + _notice(message, error) +
-        '<form action="/settings" method="post" autocomplete="off">'
+        '<form data-portal-async data-portal-dirty action="/settings" method="post" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">' +
         render_operational_hidden_fields(settings, (
             'device_name', 'wifi_dhcp', 'wifi_ip_address',
@@ -217,9 +217,8 @@ def render_settings_page(csrf, settings, message='', error=False):
         html_escape(settings.get('wifi_gateway', '')) + '"></label>'
         '<label class="field">DNS server<input name="wifi_dns_server" inputmode="decimal" '
         'maxlength="15" placeholder="192.168.1.1" value="' +
-        html_escape(settings.get('wifi_dns_server', '')) + '"></label></div></section>'
-        '<div class="actions"><span></span><button type="submit">Save changes</button>'
-        '</div></form>'
+        html_escape(settings.get('wifi_dns_server', '')) + '"></label></div></section>' +
+        portal_ui.save_actions('Save changes') + '</form>'
     )
     script = (
         'var wifiInput=document.getElementById("wifi-ssid-input"),wifiSelect=document.getElementById('
@@ -254,7 +253,8 @@ def render_settings_page(csrf, settings, message='', error=False):
         'document.getElementById("wifi-static-settings");function syncNetworkMode(){'
         'var manual=!dhcp.checked;staticBox.hidden=!manual;var fields=staticBox.querySelectorAll("input");'
         'for(var i=0;i<fields.length;i++)fields[i].required=manual;}dhcp.onchange=syncNetworkMode;'
-        'syncNetworkMode();'
+        'syncNetworkMode();document.addEventListener("portal:form-reset",function(event){if(event.detail&&'
+        'event.detail.form&&event.detail.form.action.indexOf("/settings")>=0)syncNetworkMode();});'
     )
     return portal_ui.shell('IoT-MD network', 'settings', body, csrf, script)
 
@@ -269,7 +269,7 @@ def render_portal_settings_page(csrf, settings, message='', error=False):
         portal_ui.page_heading(
             'Device', 'Portal', 'Configure portal transport and listening port.'
         ) + _notice(message, error) +
-        '<form action="/portal-settings" method="post" autocomplete="off">'
+        '<form data-portal-async data-portal-dirty action="/portal-settings" method="post" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">' +
         render_operational_hidden_fields(settings, (
             'portal_transport', 'portal_port', 'portal_session_timeout_s'
@@ -289,8 +289,7 @@ def render_portal_settings_page(csrf, settings, message='', error=False):
         html_escape(session_timeout_minutes) + '"></label></div>'
         '<p class="muted">HTTPS defaults to port 8443 and explicit HTTP defaults to 8080. Port 80 is reserved for '
         'certificate enrollment and recovery. Per-user timeouts are managed under Maintenance / Users.</p>'
-        '<div class="actions"><span></span>'
-        '<button type="submit">Save changes</button></div></section></form>'
+        '</section>' + portal_ui.save_actions('Save changes') + '</form>'
     )
     return portal_ui.shell('IoT-MD portal settings', 'portal_settings', body, csrf)
 
@@ -317,7 +316,7 @@ def render_ntp_settings_page(csrf, settings, message='', error=False):
             'Device', 'Time / Date',
             'Configure UTC time synchronisation and automatic local daylight-saving rules.'
         ) + _notice(message, error) +
-        '<form action="/ntp-settings" method="post" autocomplete="off">'
+        '<form data-portal-async data-portal-dirty action="/ntp-settings" method="post" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">' +
         render_operational_hidden_fields(settings, (
             'ntp_servers', 'timezone_offset_minutes', 'timezone_name'
@@ -330,8 +329,7 @@ def render_ntp_settings_page(csrf, settings, message='', error=False):
         '<p class="muted">Current UTC offset for this zone: UTC' + offset_text +
         '. Daylight-saving changes are applied automatically using the selected city’s current regional rules. '
         'The RTC and NTP protocol remain in UTC.</p>'
-        '<div class="actions"><span></span><button type="submit">Save changes</button>'
-        '</div></section></form>'
+        '</section>' + portal_ui.save_actions('Save changes') + '</form>'
     )
     return portal_ui.shell('IoT-MD time and date settings', 'ntp_settings', body, csrf)
 
@@ -352,7 +350,7 @@ def render_messaging_page(csrf, settings, message='', error=False):
             'Device', 'MQTT',
             'Configure platform-neutral MQTT messaging and the optional Home Assistant integration.'
         ) + _notice(message, error) +
-        '<form action="/messaging" method="post" autocomplete="off">'
+        '<form data-portal-async data-portal-dirty action="/messaging" method="post" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">' +
         render_operational_hidden_fields(
             settings, (
@@ -403,9 +401,9 @@ def render_messaging_page(csrf, settings, message='', error=False):
         '<p class="muted">Home Assistant discovery points to the operational MQTT topics above. Disabling it does not disable MQTT.</p>'
         '<div class="section-title"><h3>Discovery publishing</h3></div>'
         '<div class="actions"><p class="muted">Republish discovery configuration for all loaded entities.</p>'
-        '<button type="submit" form="discovery-publish-form">Publish discovery</button></div></section>'
-        '<div class="actions"><span></span><button type="submit">Save changes</button></div></form>'
-        '<form id="discovery-publish-form" action="/discover" method="post">'
+        '<button type="submit" form="discovery-publish-form">Publish discovery</button></div></section>' +
+        portal_ui.save_actions('Save changes') + '</form>'
+        '<form id="discovery-publish-form" data-portal-async action="/discover" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '"></form>'
     )
     return portal_ui.shell('IoT-MD MQTT', 'messaging', body, csrf)
@@ -437,10 +435,13 @@ def render_device_api_page(csrf, settings, message='', error=False):
             '<div class="property-row"><span>Expires</span><strong>' +
             html_escape(client.get('not_after', 'unknown')) + '</strong></div></div>' +
             render_api_scope_editor(csrf, client, '/device-api') +
-            '<form method="post" action="/revoke-api-client"><input type="hidden" '
+            '<form data-portal-async data-portal-refresh-target="#device-api-clients" '
+            'data-portal-refresh-url="/device-api" method="post" action="/revoke-api-client">'
+            '<input type="hidden" '
             'name="csrf" value="' + html_escape(csrf) + '"><input type="hidden" '
             'name="fingerprint" value="' + html_escape(fingerprint) + '">'
-            '<div class="actions"><span></span><button class="danger compact" type="submit">'
+            '<div class="actions"><span data-portal-form-status class="portal-status action-form-status"></span>'
+            '<button class="danger compact" type="submit" data-busy-label="Revoking…">'
             'Revoke client</button></div></form></article>'
         )
     if not rows:
@@ -451,7 +452,7 @@ def render_device_api_page(csrf, settings, message='', error=False):
             'Expose module state and commands over a versioned HTTPS API secured with mutual TLS.'
         ) + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>API listener</h2></div>'
-        '<form action="/device-api" method="post"><input type="hidden" name="csrf" value="' +
+        '<form data-portal-async data-portal-dirty action="/device-api" method="post"><input type="hidden" name="csrf" value="' +
         html_escape(csrf) + '">' + render_operational_hidden_fields(settings) +
         '<label class="check"><input name="api_enabled" type="checkbox" '
         'value="true"' + enabled + '>Enable the mTLS device API</label><div class="grid">'
@@ -459,9 +460,9 @@ def render_device_api_page(csrf, settings, message='', error=False):
         'required value="' + html_escape(settings.get('api_port', 8444)) + '"></label>'
         '<div class="property-row"><span>Authentication</span><strong>Mutual TLS (required)</strong></div>'
         '</div><p class="muted">A dedicated API client CA and at least one enrolled client '
-        'certificate are required. Configure these under Maintenance / Certificates.</p>'
-        '<div class="actions"><span></span><button type="submit">Save changes</button>'
-        '</div></form></section><section class="card"><div class="section-title">'
+        'certificate are required. Configure these under Maintenance / Certificates.</p>' +
+        portal_ui.save_actions('Save API settings') +
+        '</form></section><section id="device-api-clients" class="card"><div class="section-title">'
         '<h2>Enrolled clients</h2></div><div class="module-grid">' + ''.join(rows) +
         '</div></section>'
     )
@@ -512,7 +513,7 @@ def render_user_settings_page(
             '<article class="module-card portal-user-card"><div class="module-card-title"><strong>' +
             html_escape(name) + '</strong>' +
             ('<span class="badge error">Locked</span>' if locked else '') +
-            '</div><form action="/user/update" method="post">'
+            '</div><form data-portal-async data-portal-dirty data-portal-refresh-target="#portal-user-workspace" data-portal-refresh-url="/user" action="/user/update" method="post">'
             '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
             '<input type="hidden" name="username" value="' + html_escape(name) + '">'
             '<label class="field">Username<input name="new_username" required maxlength="32" value="' +
@@ -547,20 +548,20 @@ def render_user_settings_page(
             '<label class="check"><input type="checkbox" name="password_change_required" value="true"' +
             (' checked' if change_required else '') + '>Require password change at next sign-in</label>'
             '<div class="actions"><span></span>'
-            '<button class="secondary" type="submit">Update user</button>' +
-            ('<button type="submit" name="reset_lockout" value="true">Unlock account</button>'
+            '<button class="secondary" type="submit" data-busy-label="Updating…">Update user</button>' +
+            ('<button type="submit" name="reset_lockout" value="true" data-busy-label="Unlocking…">Unlock account</button>'
              if locked else '') + '</div></form>' +
             ('' if name == current_user else (
-                '<form action="/user/remove" method="post"><input type="hidden" name="csrf" value="' +
+                '<form data-portal-async data-portal-refresh-target="#portal-user-workspace" data-portal-refresh-url="/user" data-portal-status="Removing user…" action="/user/remove" method="post"><input type="hidden" name="csrf" value="' +
                 html_escape(csrf) + '"><input type="hidden" name="username" value="' +
                 html_escape(name) + '"><div class="actions"><span></span>'
-                '<button class="danger" type="submit">Remove user</button></div></form>'
+                '<button class="danger" type="submit" data-busy-label="Removing…">Remove user</button></div></form>'
             )) + '</article>'
         )
     new_user = (
         '<article class="module-card portal-user-card"><div class="module-card-title">'
         '<strong>New user</strong></div>'
-        '<form action="/user/add" method="post" autocomplete="off">'
+        '<form data-portal-async data-portal-dirty data-portal-refresh-target="#portal-user-workspace" data-portal-refresh-url="/user" data-portal-status="Adding user…" action="/user/add" method="post" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
         '<label class="field">Username<input name="username" required maxlength="32"></label>'
         '<label class="field">Role<select name="role"><option value="viewer">Viewer</option>'
@@ -577,17 +578,17 @@ def render_user_settings_page(
         'value="true" checked>Enabled</label>'
         '<label class="check"><input type="checkbox" name="password_change_required" '
         'value="true" checked>Require password change at first sign-in</label>'
-        '<div class="actions"><span></span><button type="submit">Add new user</button></div>'
+        '<div class="actions"><span></span><button type="submit" data-busy-label="Adding…">Add new user</button></div>'
         '</form></article>'
     )
     body = (
         portal_ui.page_heading(
             'Maintenance', 'Users',
             'Manage usernames, roles and portal access. Change your own password from the avatar menu.'
-        ) + _notice(message, error) + _notice(password_message, password_error) +
+        ) + '<div id="portal-user-workspace">' + _notice(message, error) + _notice(password_message, password_error) +
         '<section class="card"><div class="section-title"><h2>Users</h2>'
         '<span class="badge">Maximum 8</span></div><div class="module-grid portal-user-grid">' +
-        ''.join(user_rows) + new_user + '</div></section>'
+        ''.join(user_rows) + new_user + '</div></section></div>'
     )
     return portal_ui.shell('IoT-MD users', 'user_settings', body, csrf)
 
@@ -597,7 +598,7 @@ def render_module_settings_page(csrf, module_json='{"devices":[]}', message='', 
             'Module', 'Module configuration',
             'Edit the complete module configuration as structured JSON.'
         ) + _notice(message, error) +
-        '<section class="card"><form action="/module-settings" method="post">'
+        '<section class="card"><form data-portal-async data-portal-dirty action="/module-settings" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
         '<div class="section-title"><div><h2>Module configuration</h2>'
         '<p class="muted">The editor formats and validates JSON before it is applied.</p></div>'
@@ -605,251 +606,32 @@ def render_module_settings_page(csrf, module_json='{"devices":[]}', message='', 
         '<textarea class="code-editor" id="module-settings-json" name="module_settings_json" '
         'spellcheck="false" required>' + html_escape(module_json or '{"devices":[]}') +
         '</textarea>'
-        '<div class="actions"><span><input class="file-input-hidden" '
+        '<div class="actions settings-save-bar"><span data-portal-form-status class="portal-status action-form-status"></span>'
+        '<span><input class="file-input-hidden" '
         'id="module-settings-file" type="file" accept=".json,application/json">'
         '<label class="button secondary file-button" for="module-settings-file">Load JSON file</label> '
         '<span id="module-file-name" class="file-name">No file selected</span></span>'
-        '<button id="module-submit" type="submit">Verify and apply configuration</button></div>' +
-        portal_ui.progress('module-progress', 'Validating…', True) +
+        '<button class="secondary" type="reset">Discard changes</button>'
+        '<button id="module-submit" type="submit" data-busy-label="Verifying…">Verify and apply configuration</button></div>'
         '</form></section>'
     )
     script = (
-        'var raw=document.getElementById("module-settings-json");'
-        'function formatJson(report){try{raw.value=JSON.stringify(JSON.parse(raw.value),null,2);return true;}'
-        'catch(error){if(report)alert("Invalid JSON: "+error.message);return false;}}'
+        'var raw=document.getElementById("module-settings-json"),moduleStatus='
+        'document.querySelector("form[action=\"/module-settings\"] [data-portal-form-status]");'
+        'function formatJson(report){try{raw.value=JSON.stringify(JSON.parse(raw.value),null,2);'
+        'if(report)portalStatus(moduleStatus,"","");return true;}catch(error){if(report)portalStatus('
+        'moduleStatus,"error","Invalid JSON: "+error.message);return false;}}'
         'document.getElementById("module-format").onclick=function(){formatJson(true);};'
         'document.getElementById("module-settings-file").onchange=function(){var f=this.files&&this.files[0];'
         'if(!f)return;document.getElementById("module-file-name").textContent=f.name;var r=new FileReader();'
         'r.onload=function(){raw.value=r.result;try{raw.value=JSON.stringify(JSON.parse(raw.value),null,2);'
-        '}catch(error){alert("Invalid JSON: "+error.message);}};r.readAsText(f);};'
+        'portalStatus(moduleStatus,"","");}catch(error){portalStatus(moduleStatus,"error","Invalid JSON: "+'
+        'error.message);}};r.readAsText(f);};'
         'document.querySelector("form[action=\\"/module-settings\\"]").onsubmit=function(e){'
-        'if(!formatJson(true)){e.preventDefault();return;}'
-        'document.getElementById("module-progress").hidden=false;document.getElementById("module-submit").disabled=true;};'
+        'if(!formatJson(true))e.preventDefault();};'
         'formatJson(false);'
     )
     return portal_ui.shell('IoT-MD modules', 'modules', body, csrf, script)
-
-def render_certificate_details(certificates):
-    certificates = certificates or {}
-    mqtt_key = 'mqtt_ca' if 'mqtt_ca' in certificates else 'trusted_ca'
-    def certificate_card(key, label, missing_message='No certificate file is installed.'):
-        details = certificates.get(key, {}) or {}
-        installed = bool(details.get('installed'))
-        badge = render_certificate_badge(details)
-        rows = []
-        if details.get('error'):
-            rows.append(
-                '<p class="error-text">Unable to decode: ' +
-                html_escape(details.get('error')) + '</p>'
-            )
-        elif installed:
-            if details.get('migration_pending'):
-                rows.append(
-                    '<p class="warning-text">Upgrade identity only: replace this with a '
-                    'private-CA Device API and fleet server certificate.</p>'
-                )
-            for field, field_label in (
-                ('subject', 'Subject'), ('issuer', 'Issuer'),
-                ('not_before', 'Valid from'), ('not_after', 'Valid until'),
-                ('serial_number', 'Serial number'), ('size', 'File size (bytes)')
-            ):
-                rows.append(
-                    '<div class="property-row"><span>' + field_label +
-                    '</span><strong>' + html_escape(details.get(field, 'Unknown')) +
-                    '</strong></div>'
-                )
-        else:
-            rows.append('<p class="muted">' + html_escape(missing_message) + '</p>')
-        return (
-            '<article class="module-card"><div class="module-head"><h3>' + label +
-            '</h3>' + badge + '</div><div class="property-grid">' +
-            ''.join(rows) + '</div></article>'
-        )
-
-    api_ca_cards = ''
-    for index, details in enumerate(certificates.get('api_client_cas', ()) or ()):
-        key = '_api_client_ca_' + str(index)
-        certificates[key] = details
-        api_ca_cards += certificate_card(
-            key, 'API client CA ' + str(index + 1)
-        )
-    if not api_ca_cards:
-        api_ca_cards = certificate_card('api_client_ca', 'API client CA')
-
-    groups = (
-        (
-            'CA Trust',
-            'Certificate authorities trusted by this device for secured services.',
-            certificate_card(
-                mqtt_key, 'MQTT trusted CA',
-                'No separate CA trust anchor is installed. The generated self-signed portal '
-                'certificate is listed under Device Certificates.'
-            ) +
-            certificate_card('release_ca', 'Release-server trusted CA') +
-            certificate_card('syslog_ca', 'Syslog trusted CA') +
-            api_ca_cards
-        ),
-        (
-            'Device Certificates',
-            'Certificates that identify the portal or other device services.',
-            certificate_card('portal', 'Portal HTTPS certificate') +
-            certificate_card(
-                'api_server', 'Device API and fleet server certificate',
-                'No independent Device API/fleet server identity is installed.'
-            )
-        ),
-    )
-    return ''.join(
-        '<div class="certificate-group"><div class="certificate-group-head">'
-        '<h3>' + title + '</h3><p class="muted">' + description + '</p></div>'
-        '<div class="module-grid">' + cards + '</div></div>'
-        for title, description, cards in groups
-    )
-
-def render_certificate_page(csrf, message='', certificates=None):
-    certificates = certificates or {}
-    acme = certificates.get('acme_settings', {}) or {}
-    certificate_mode = str(acme.get('mode', 'manual'))
-    certificate_method = str(acme.get(
-        'method', 'iot_ca_auto' if certificate_mode == 'iot_ca' else certificate_mode
-    ))
-    acme_enabled = certificate_mode == 'acme'
-    renewal = {
-        'iot_ca_auto': (
-            'success', 'Automatic IoT CA enrollment',
-            'The public portal, private Device API/fleet and renewal identities are '
-            'automatically rotated together after two-thirds of the public portal '
-            'or Device API certificate lifetime.'
-        ),
-        'iot_ca_file': (
-            'success', 'IoT CA enrollment authorization (.iotenroll)',
-            'The public portal, private Device API/fleet and renewal identities are '
-            'automatically rotated together after two-thirds of the public portal '
-            'or Device API certificate lifetime.'
-        ),
-        'acme': (
-            'success', 'Private CA ACME enrollment',
-            'The local portal certificate is automatically renewed after two-thirds '
-            'of its lifetime. This method does not manage a separate Device API/fleet identity.'
-        ),
-        'self_signed': (
-            'info', 'Self-signed device certificate',
-            'The device automatically regenerates its local self-signed certificate '
-            'after two-thirds of its lifetime.'
-        ),
-        'manual': (
-            'warning', 'Manual certificate package',
-            'Automatic renewal is unavailable. Replace the public portal and private '
-            'Device API/fleet certificates before either identity expires.'
-        ),
-    }.get(certificate_method, (
-        'warning', 'Unknown certificate method',
-        'Certificate renewal status is unavailable for this configuration.'
-    ))
-    renewal_notice = (
-        '<section class="portal-status ' + renewal[0] + '" role="status">'
-        '<strong>Certificate method: ' + html_escape(renewal[1]) + '</strong><br>' +
-        html_escape(renewal[2]) + '</section>'
-    )
-    body = (
-        portal_ui.page_heading(
-            'Maintenance', 'Certificates',
-            'Review installed certificate identities and use manual DER upload when renewal is unavailable.'
-        ) + _notice(message) + renewal_notice +
-        '<section class="card"><div class="section-title"><h2>Installed certificates</h2></div>' +
-        render_certificate_details(certificates) + '</section>'
-        '<section class="card"><div class="section-title"><h2>Private CA ACME enrollment</h2></div>'
-        '<form action="/acme-settings" method="post"><input type="hidden" name="csrf" value="' +
-        html_escape(csrf) + '"><input type="hidden" name="acme_enabled" value="false">'
-        '<label class="check"><input id="acme-enabled" name="acme_enabled" type="checkbox" value="true"' +
-        (' checked' if acme_enabled else '') + '>Enable automatic Private CA ACME renewal for the portal certificate</label>'
-        '<fieldset id="acme-fields" class="conditional-fields"' +
-        ('' if acme_enabled else ' disabled') + '><div class="grid"><label class="field">ACME directory URL'
-        '<input name="directory_url" type="url" maxlength="512" required value="' +
-        html_escape(acme.get('directory_url', '')) + '"></label>'
-        '<label class="field">Certificate hostname<input name="hostname" maxlength="253" '
-        'required value="' + html_escape(acme.get('hostname', '')) + '"></label></div></fieldset>'
-        '<p class="muted">This changes the certificate method to Private CA ACME enrollment. '
-        'When disabled, the installed portal certificate remains in use but this ACME renewal '
-        'service stops.</p><div class="actions"><span></span>'
-        '<button type="submit">Save Private CA ACME settings</button></div></form></section>'
-        '<section class="card"><div class="section-title"><h2>Import certificate</h2></div>'
-        '<p class="muted">Choose the certificate purpose, select the DER file or files, then '
-        'validate and install them as one operation.</p><label class="field">Certificate type'
-        '<select id="certificate-type"><option value="portal">Portal certificate and private key</option>'
-        '<option value="api-server">Device API and fleet server certificate and private key</option>'
-        '<option value="mqtt-ca">MQTT trusted CA</option><option value="release-ca">Release-server trusted CA</option>'
-        '<option value="management-suite-key">Management Suite verification key</option>'
-        '<option value="syslog-ca">Syslog trusted CA</option><option value="api-client-ca">API client CA trust</option>'
-        '<option value="api-client-cert">Module API client certificate</option>'
-        '<option value="fleet-client-cert">Fleet manager client certificate</option>'
-        '<option value="qualification-client-cert">Qualification automation certificate</option></select></label>'
-        '<div class="grid"><label id="certificate-primary-label" class="field">Portal certificate'
-        '<input id="certificate-primary" type="file" accept=".der,.pem,application/pkix-cert,application/x-pem-file" required></label>'
-        '<label id="certificate-secondary-label" class="field">Portal private key'
-        '<input id="certificate-secondary" type="file" accept=".der,application/octet-stream" required></label></div>'
-        '<p id="certificate-help" class="muted"></p><div class="actions">'
-        '<span id="certificate-result" class="portal-status" role="status" aria-live="polite"></span>'
-        '<button id="certificate-upload" type="button">Upload and validate</button></div>' +
-        portal_ui.progress('certificate-progress', 'Waiting…', True) + '</section>'
-    )
-    script = (
-        'var csrf=' + repr(str(csrf)) + ',type=document.getElementById("certificate-type"),'
-        'primary=document.getElementById("certificate-primary"),secondary=document.getElementById('
-        '"certificate-secondary"),secondaryLabel=document.getElementById("certificate-secondary-label"),'
-        'primaryLabel=document.getElementById("certificate-primary-label"),help=document.getElementById('
-        '"certificate-help");var descriptions={portal:["Portal certificate","Portal private key",'
-        '"Both files are validated together; installation restarts the portal."],"api-server":["Device API and fleet server certificate",'
-        '"Device API and fleet server private key","Both private-CA files are validated together; the mTLS API reloads without a device restart."],"mqtt-ca":["MQTT trusted CA","",'
-        '"Authenticates the MQTT broker."],"release-ca":["Release-server trusted CA","",'
-        '"Authenticates the signed release server."],"management-suite-key":["Management Suite verification key","",'
-        '"Verifies fleet policy and format-3 release catalogs; bundle signatures remain independently verified."],"syslog-ca":["Syslog trusted CA","",'
-        '"Authenticates an encrypted syslog server."],"api-client-ca":["API client CA files","",'
-        '"Install one or more issuing CAs; the device restarts once."],"api-client-cert":['
-        '"API client certificates","","Enrol module API identities with read/write scopes without a restart."],'
-        '"fleet-client-cert":["Fleet client certificates","","Enrol Home Assistant fleet identities with fleet read/write scopes."],'
-        '"qualification-client-cert":["Qualification automation certificates","","Enrol HIL automation with qualification evidence and scenario scopes."]};'
-        'function configureCertificateImport(){var d=descriptions[type.value];primaryLabel.firstChild.nodeValue=d[0];'
-        'secondaryLabel.firstChild.nodeValue=d[1];secondaryLabel.hidden=!d[1];primary.multiple='
-        'type.value==="api-client-ca"||type.value==="api-client-cert"||type.value==="fleet-client-cert"||type.value==="qualification-client-cert";'
-        'secondary.disabled=!d[1];secondary.required=!!d[1];if(!d[1])secondary.value="";help.textContent=d[2];}'
-        'type.onchange=configureCertificateImport;configureCertificateImport();'
-        'document.getElementById("acme-enabled").onchange=function(){document.getElementById('
-        '"acme-fields").disabled=!this.checked;};'
-        'function uploadCertificate(file,kind,index,total,label){return new Promise(function(resolve,reject){'
-        'var x=new XMLHttpRequest();x.open("POST","/certificate-upload",true);x.setRequestHeader('
-        '"Content-Type","application/octet-stream");x.setRequestHeader("X-CSRF-Token",csrf);'
-        'x.setRequestHeader("X-Certificate-Kind",kind);x.upload.onprogress=function(p){if(p.lengthComputable){'
-        'label.textContent="Uploading "+index+" of "+total+" · "+Math.round(p.loaded*100/p.total)+"%";}};'
-        'x.onload=function(){if(x.status===401){location.replace("/login?reason=expired");reject(new Error('
-        '"Session expired"));return;}if(x.status>=200&&x.status<300)resolve(x.responseText);else reject(new Error('
-        'x.responseText||"Certificate upload failed"));};x.onerror=function(){reject(new Error('
-        '"Connection lost during certificate upload"));};x.send(file);});}'
-        'document.getElementById("certificate-upload").onclick=async function(){var out=document.getElementById('
-        '"certificate-result"),box=document.getElementById("certificate-progress"),label=box.querySelector('
-        '".status-text"),files=[],kind=type.value;if(!portalRequire(primary,'
-        '"Select at least one certificate file")){portalStatus(out,"error",'
-        '"Select at least one certificate file");return;}'
-        'for(var i=0;i<primary.files.length;i++)files.push('
-        '[kind==="portal"?"portal-cert":kind==="api-server"?"api-server-cert":kind,primary.files[i]]);'
-        'if(kind==="portal"||kind==="api-server"){if(!secondary.files[0]){var keyLabel=kind==="portal"?'
-        '"portal private key":"Device API server private key";portalStatus(out,"error","Select the "+keyLabel);'
-        'portalRequire(secondary,"Select the "+keyLabel);return;}files.push(['
-        'kind==="portal"?"portal-key":"api-server-key",secondary.files[0]]);}'
-        'this.disabled=true;portalStatus(out,"","");box.hidden=false;box.classList.remove("complete","failed");'
-        'try{for(var j=0;j<files.length;j++){'
-        'await uploadCertificate(files[j][1],files[j][0],j+1,files.length,label);}'
-        'label.textContent="Validating certificate set…";var done=await fetch('
-        '"/validate-certificates",{method:"POST",credentials:"same-origin",headers:{'
-        '"Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+encodeURIComponent(csrf)});'
-        'if(done.status===401){location.replace("/login?reason=expired");return;}'
-        'if(!done.ok)throw new Error(await done.text());box.classList.add("complete");label.textContent='
-        '"Certificate installation complete";document.open();document.write(await done.text());document.close();}'
-        'catch(e){portalStatus(out,"error",e.message);box.classList.add("failed");'
-        'label.textContent="Installation failed";'
-        'this.disabled=false;}};'
-    )
-    return portal_ui.shell('IoT-MD certificates', 'certificates', body, csrf, script)
 
 def render_device_control_page(csrf, error=''):
     body = (
@@ -1027,15 +809,19 @@ def render_configuration_backup_page(csrf, message=''):
         'label.textContent="Validation failed";'
         'this.disabled=false;this.textContent="Upload and preview";}};'
         'async function applyImport(){var box='
-        'document.getElementById("configuration-progress"),label=box.querySelector(".status-text");'
-        'this.disabled=true;box.classList.remove("complete","failed");box.hidden=false;label.textContent='
-        '"Applying configuration…";try{var endpoint=importEncrypted?'
-        '"/secure-configuration-import-apply":"/configuration-import-apply",r=await fetch(endpoint,{method:"POST",'
-        'credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":csrf},'
-        'body:JSON.stringify({token:importToken})});if(r.status===401){location.replace('
-        '"/login?reason=expired");return;}if(!r.ok)throw new Error(await r.text());document.open();'
-        'document.write(await r.text());document.close();}catch(e){portalStatus(document.getElementById('
-        '"configuration-import-result"),"error",e.message);box.classList.add("failed");'
+        'document.getElementById("configuration-progress"),label=box.querySelector(".status-text"),out='
+        'document.getElementById("configuration-import-result");this.disabled=true;box.classList.remove('
+        '"complete","failed");box.hidden=false;label.textContent="Applying configuration…";try{var endpoint='
+        'importEncrypted?"/secure-configuration-import-apply":"/configuration-import-apply",r=await fetch(endpoint,'
+        '{method:"POST",credentials:"same-origin",headers:{"Accept":"application/json","Content-Type":'
+        '"application/json","X-CSRF-Token":csrf},body:JSON.stringify({token:importToken})});if(r.status===401){'
+        'location.replace("/login?reason=expired");return;}var response=await r.text(),payload={};try{payload='
+        'response?JSON.parse(response):{};}catch(ignore){payload={message:response};}if(!r.ok)throw new Error('
+        'payload.error||payload.message||"Configuration import failed");portalStatus(out,"success",payload.message||'
+        '"Configuration applied");box.classList.add("complete");label.textContent="Configuration applied";'
+        'document.getElementById("configuration-preview-panel").hidden=true;importToken="";this.textContent='
+        '"Upload and preview";this.disabled=false;if(payload.restart)portalRefreshRestart(payload.restart);else '
+        'portalRefreshRestart();}catch(e){portalStatus(out,"error",e.message);box.classList.add("failed");'
         'label.textContent="Import failed";this.disabled=false;}}'
         'actionButton.onclick=function(){return importToken?applyImport.call(actionButton):'
         'previewImport.call(actionButton);};'

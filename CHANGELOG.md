@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.63 - 2026-09-24
+
+- Apply the Upgrade page's concise workflow and in-place interaction model
+  across Network, Portal, Time/Date, MQTT, Device API, Users, Module,
+  Logging, Upgrade settings, Certificates, configuration restore and release
+  qualification.
+- Add consistent sticky save/discard controls, outline secondary actions,
+  inline success/error feedback, targeted workspace refreshes and dirty-form
+  protection without routine full-page redirects.
+- Present controlled qualification as an explicit five-step workflow and keep
+  device restart/reconnect pages only for actions that actually interrupt the
+  session. Retain native ABI 6; sequence 2768.
+
 ## 3.0.0-alpha.62 - 2026-09-24
 
 - Add a signed dummy release for exercising the Alpha 61 upgrade and

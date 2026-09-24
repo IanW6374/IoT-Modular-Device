@@ -31,8 +31,9 @@ LINE_LIMITS = {
     'iotmd_runtime.py': 3400,
     # Source route handling remains readable here; the production builder
     # promotes the two largest dispatchers to independently loaded modules.
-    # One read-only qualification route delegates all rendering and policy.
-    'web_portal.py': 1350,
+    # Alpha 63 adds JSON action responses while the compact route modules
+    # retain independent byte ceilings for constrained-device loading.
+    'web_portal.py': 1420,
     'setup_wizard.py': 450,
     'certificate_manager.py': 700,
     'credential_store.py': 800,
@@ -40,11 +41,11 @@ LINE_LIMITS = {
     'device_modules/modbus_transport.py': 850,
 }
 FUNCTION_LIMITS = {
-    ('web_portal.py', 'start_web_portal'): 1280,
+    ('web_portal.py', 'start_web_portal'): 1325,
     ('web_portal.py', 'handle_access_routes'): 300,
-    ('web_portal.py', 'handle_settings_routes'): 300,
+    ('web_portal.py', 'handle_settings_routes'): 325,
     ('web_portal.py', 'handle_upload_routes'): 100,
-    ('web_portal.py', 'handle_live_routes'): 275,
+    ('web_portal.py', 'handle_live_routes'): 280,
     ('setup_wizard.py', 'serve'): 350,
     ('iotmd_runtime.py', 'main'): 260,
 }
@@ -62,7 +63,8 @@ REQUIRED_APPLICATION_MODULES = (
     'iotmd_runtime.py', 'portal_server.py', 'portal_task_registry.py',
     'alpha_qualification.py',
     'qualification_control.py',
-    'certificate_status.py', 'portal_http.py', 'portal_live_views.py', 'portal_presenters.py',
+    'certificate_status.py', 'portal_http.py', 'portal_action_response.py',
+    'portal_live_views.py', 'portal_presenters.py',
     'portal_settings_views.py', 'services/home_assistant_service.py',
     'services/certificate_renewal_service.py', 'services/mqtt_startup_service.py',
 )

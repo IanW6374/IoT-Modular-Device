@@ -17,26 +17,48 @@ async def handle(method, route, path, writer, reader, headers, form, csrf,
         '/certificates', '/certificate-authorities',
         '/api-client-trust', '/device-certificates'
     )
+    wants_json = 'application/json' in str(headers.get('accept', '')).lower()
+
+    async def send_action(status, message, target, result=None):
+        import json
+        payload = {
+            'ok': not str(status).startswith('4') and not str(status).startswith('5'),
+            'message': str(message or 'Certificate settings updated'),
+            'refresh_target': '#certificate-workspace',
+            'refresh_url': target,
+        }
+        if isinstance(result, dict) and result.get('task_id'):
+            payload['task_id'] = result['task_id']
+        await send_response(writer, status, json.dumps(payload), 'application/json')
     if method == 'GET' and route in certificate_routes:
         await send_response(writer, '200 OK', _render_certificate_route(
             route, csrf, certificates=inventory() if inventory else {}
         ))
         return True
     if method == 'POST' and route == '/remove-certificate-trust':
-        apply_portal_action(
+        result = apply_portal_action(
             'remove-certificate-trust', path, actions, log_output, form
         )
         target = form.get('return_to', '/certificate-authorities')
-        await send_redirect(writer, target if target in certificate_routes else '/certificate-authorities')
+        if target not in certificate_routes:
+            target = '/certificate-authorities'
+        message = result.get('message', '') if isinstance(result, dict) else str(result or '')
+        if wants_json:
+            await send_action('200 OK', message or 'Certificate trust removed', target, result)
+        else:
+            await send_redirect(writer, target)
         return True
     if method == 'POST' and route == '/certificate-method':
         result = apply_portal_action(
             'certificate-method', path, actions, log_output, form
         )
         message = result.get('message', '') if isinstance(result, dict) else result
-        await send_response(writer, '202 Accepted', _render_certificate_route(
-            '/certificates', csrf, message, inventory() if inventory else {}
-        ))
+        if wants_json:
+            await send_action('202 Accepted', message, '/certificates', result)
+        else:
+            await send_response(writer, '202 Accepted', _render_certificate_route(
+                '/certificates', csrf, message, inventory() if inventory else {}
+            ))
         return True
     if method == 'POST' and route == '/renew-certificate':
         result = apply_portal_action(
@@ -46,7 +68,9 @@ async def handle(method, route, path, writer, reader, headers, form, csrf,
         target = form.get('return_to', '/certificates')
         if target not in certificate_routes:
             target = '/certificates'
-        if isinstance(result, dict) and result.get('task_id'):
+        if wants_json:
+            await send_action('202 Accepted', message, target, result)
+        elif isinstance(result, dict) and result.get('task_id'):
             await send_redirect(
                 writer, '/task?id=' + str(result['task_id']) + '&return=' +
                 target.lstrip('/')
@@ -72,12 +96,20 @@ async def handle(method, route, path, writer, reader, headers, form, csrf,
                 raise RuntimeError('certificate validation is unavailable')
             result = validate()
         except Exception as exc:
-            await send_response(writer, '400 Bad Request', str(exc), 'text/plain')
+            if wants_json:
+                await send_action('400 Bad Request', str(exc), form.get('return_to', '/device-certificates'))
+            else:
+                await send_response(writer, '400 Bad Request', str(exc), 'text/plain')
         else:
             message = result.get('message', '') if isinstance(result, dict) else str(result)
             target = form.get('return_to', '/device-certificates')
-            await send_response(writer, '200 OK', _render_certificate_route(
-                target, csrf, message, inventory() if inventory else {}
-            ))
+            if target not in certificate_routes:
+                target = '/device-certificates'
+            if wants_json:
+                await send_action('200 OK', message, target, result)
+            else:
+                await send_response(writer, '200 OK', _render_certificate_route(
+                    target, csrf, message, inventory() if inventory else {}
+                ))
         return True
     return False

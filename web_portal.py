@@ -32,6 +32,7 @@ import http_support
 import timezone_rules
 import portal_auth
 import portal_module_transport
+from portal_action_response import ActionResponder
 from portal_view_models import overview_metrics, update_check_summary
 from portal_sessions import PortalSessions
 from device_modules.base import module_diagnostics_need_attention
@@ -530,16 +531,24 @@ async def start_web_portal(portal):
                             raise RuntimeError('portal user management is unavailable')
                         portal_user_remove(form_params.get('username', ''))
                 except Exception as exc:
-                    await send_response(
-                        writer, '400 Bad Request', render_user_settings_page(
-                            csrf_token, settings_getter() if settings_getter else {},
-                            str(exc), True,
-                            users=portal_user_getter() if portal_user_getter else (),
-                            current_user=session_username
-                        )
+                    html = render_user_settings_page(
+                        csrf_token, settings_getter() if settings_getter else {},
+                        str(exc), True,
+                        users=portal_user_getter() if portal_user_getter else (),
+                        current_user=session_username
+                    )
+                    await action_response.send(
+                        '400 Bad Request', str(exc), True, html=html
                     )
                 else:
-                    await send_redirect(writer, '/user')
+                    message = {
+                        '/user/add': 'User added', '/user/update': 'User updated',
+                        '/user/remove': 'User removed'
+                    }.get(route, 'User settings saved')
+                    await action_response.send(
+                        '200 OK', message, redirect='/user',
+                        reset_form=route == '/user/add'
+                    )
             elif method == 'POST' and is_operational_settings:
                 try:
                     if settings_setter is None:
@@ -548,13 +557,13 @@ async def start_web_portal(portal):
                     current_settings = settings_getter() if settings_getter else {}
                 except Exception as exc:
                     current_settings = settings_getter() if settings_getter else {}
-                    await send_response(
-                        writer, '400 Bad Request',
-                        render_operational(
-                            route, csrf_token, current_settings, str(exc), True,
-                            session_username, portal_user_getter,
-                            render_logging_settings_page
-                        )
+                    html = render_operational(
+                        route, csrf_token, current_settings, str(exc), True,
+                        session_username, portal_user_getter,
+                        render_logging_settings_page
+                    )
+                    await action_response.send(
+                        '400 Bad Request', str(exc), True, html=html
                     )
                 else:
                     cached_page['body'] = None
@@ -566,14 +575,12 @@ async def start_web_portal(portal):
                     text = message
                     if isinstance(message, dict):
                         text = message.get('message', '')
-                    await send_response(
-                        writer, '200 OK',
-                        render_operational(
-                            route, csrf_token, current_settings, text, False,
-                            session_username, portal_user_getter,
-                            render_logging_settings_page
-                        )
+                    html = render_operational(
+                        route, csrf_token, current_settings, text, False,
+                        session_username, portal_user_getter,
+                        render_logging_settings_page
                     )
+                    await action_response.send('200 OK', text, html=html)
             elif method == 'GET' and is_module_settings:
                 if module_settings_getter is None:
                     await send_response(writer, '404 Not Found', 'Module settings are unavailable', 'text/plain')
@@ -589,23 +596,23 @@ async def start_web_portal(portal):
                         raise RuntimeError('module settings storage is unavailable')
                     message = module_settings_setter(submitted)
                 except Exception as exc:
-                    await send_response(
-                        writer, '400 Bad Request',
-                        render_module_settings_page(csrf_token, submitted, str(exc), True)
+                    html = render_module_settings_page(
+                        csrf_token, submitted, str(exc), True
+                    )
+                    await action_response.send(
+                        '400 Bad Request', str(exc), True, html=html
                     )
                 else:
                     log_output(
                         'Local', 'Web portal',
                         {'log': 'Module settings changed', 'force': True}, 'INFO'
                     )
-                    await send_response(
-                        writer, '200 OK',
-                        render_module_settings_page(
-                            csrf_token,
-                            module_settings_getter() if module_settings_getter else submitted,
-                            message
-                        )
+                    html = render_module_settings_page(
+                        csrf_token,
+                        module_settings_getter() if module_settings_getter else submitted,
+                        message
                     )
+                    await action_response.send('200 OK', message, html=html)
             elif is_certificate_request and await _handle_certificate_request(
                 method, route, action_path, writer, reader, headers, form_params,
                 csrf_token, action_handler, log_output, certificate_upload_handler,
@@ -657,20 +664,21 @@ async def start_web_portal(portal):
                         raise RuntimeError('settings storage is unavailable')
                     message = settings_setter(form_params)
                 except Exception as exc:
-                    await send_response(
-                        writer, '400 Bad Request', render_logging_page(
-                            csrf_token, loglevel_getter(), levels, log_getter(),
-                            log_refresh_ms, settings_getter() if settings_getter else {}
-                        ) + '<p>' + html_escape(exc) + '</p>'
+                    html = render_logging_page(
+                        csrf_token, loglevel_getter(), levels, log_getter(),
+                        log_refresh_ms, settings_getter() if settings_getter else {}
+                    ) + '<p>' + html_escape(exc) + '</p>'
+                    await action_response.send(
+                        '400 Bad Request', str(exc), True, html=html
                     )
                 else:
-                    await send_response(
-                        writer, '200 OK', render_logging_page(
-                            csrf_token, loglevel_getter(), levels, log_getter(),
-                            log_refresh_ms, settings_getter() if settings_getter else {},
-                            message.get('message', '') if isinstance(message, dict) else message
-                        )
+                    text = message.get('message', '') if isinstance(message, dict) else message
+                    html = render_logging_page(
+                        csrf_token, loglevel_getter(), levels, log_getter(),
+                        log_refresh_ms, settings_getter() if settings_getter else {},
+                        text
                     )
+                    await action_response.send('200 OK', text, html=html)
             elif method == 'GET' and is_configuration_backup:
                 await send_response(
                     writer, '200 OK', render_configuration_backup_page(csrf_token)
@@ -690,17 +698,29 @@ async def start_web_portal(portal):
                 )
             elif method == 'POST' and route == '/restart-qualification-gate':
                 message, error = restart_qualification_gate(form_params, session_username, qualification_restart)
-                await send_response(writer, '400 Bad Request' if error else '200 OK',
-                    render_release_qualification_page(csrf_token,
-                        qualification_getter() if qualification_getter else {}, message, error))
+                status_code = '400 Bad Request' if error else '200 OK'
+                html = render_release_qualification_page(
+                    csrf_token,
+                    qualification_getter() if qualification_getter else {},
+                    message, error
+                )
+                await action_response.send(
+                    status_code, message, error, html=html
+                )
             elif method == 'POST' and route in ('/record-qualification-event',
                                                 '/run-qualification-scenario'):
                 message, error, success_status = apply_qualification_action(
                     route, form_params, session_username,
                     qualification_event, qualification_scenario)
-                await send_response(writer, '400 Bad Request' if error else success_status,
-                    render_release_qualification_page(csrf_token,
-                        qualification_getter() if qualification_getter else {}, message, error))
+                status_code = '400 Bad Request' if error else success_status
+                html = render_release_qualification_page(
+                    csrf_token,
+                    qualification_getter() if qualification_getter else {},
+                    message, error
+                )
+                await action_response.send(
+                    status_code, message, error, html=html
+                )
             elif method == 'POST' and route == '/reset-health-history':
                 apply_portal_action(
                     'reset-health-history', action_path, action_handler, log_output,
@@ -744,9 +764,9 @@ async def start_web_portal(portal):
                 else:
                     request = json.loads(body.decode())
                     message = secure_config_import_apply_handler(request.get('token', ''))
-                    await send_response(
-                        writer, '200 OK',
-                        render_configuration_backup_page(csrf_token, message)
+                    await action_response.send(
+                        '200 OK', message,
+                        html=render_configuration_backup_page(csrf_token, message)
                     )
             elif method == 'POST' and route == '/configuration-import-apply':
                 if config_import_apply_handler is None:
@@ -754,9 +774,9 @@ async def start_web_portal(portal):
                 else:
                     request = json.loads(body.decode())
                     message = config_import_apply_handler(request.get('token', ''))
-                    await send_response(
-                        writer, '200 OK',
-                        render_configuration_backup_page(csrf_token, message)
+                    await action_response.send(
+                        '200 OK', message,
+                        html=render_configuration_backup_page(csrf_token, message)
                     )
             elif method == 'POST' and route == '/update-preferences':
                 try:
@@ -764,31 +784,40 @@ async def start_web_portal(portal):
                         raise RuntimeError('update preference storage is unavailable')
                     update_preferences_setter(form_params)
                 except Exception as exc:
-                    await send_response(
-                        writer, '400 Bad Request',
-                        render_update_settings_page(
-                            csrf_token, settings_getter() if settings_getter else {}, str(exc), True
-                        )
+                    html = render_update_settings_page(
+                        csrf_token, settings_getter() if settings_getter else {},
+                        str(exc), True
+                    )
+                    await action_response.send(
+                        '400 Bad Request', str(exc), True, html=html
                     )
                 else:
-                    await send_redirect(writer, '/update-settings')
+                    await action_response.send(
+                        '200 OK', 'Upgrade preferences saved',
+                        redirect='/update-settings'
+                    )
             elif method == 'POST' and route in ('/revoke-api-client', '/update-api-client-scopes'):
-                apply_portal_action(
+                result = apply_portal_action(
                     route[1:], action_path, action_handler, log_output, form_params
                 )
-                await send_redirect(writer, form_params.get('return_to', '/device-api'))
+                message = result.get('message', '') if isinstance(result, dict) else str(result or '')
+                if not message:
+                    message = 'API client revoked' if route == '/revoke-api-client' else 'API scopes saved'
+                await action_response.send(
+                    '200 OK', message,
+                    redirect=form_params.get('return_to', '/device-api')
+                )
             elif method == 'POST' and route == '/acme-settings':
                 result = apply_portal_action(
                     'update-acme-settings', action_path, action_handler, log_output,
                     form_params
                 )
-                await send_response(
-                    writer, '200 OK', render_certificate_page(
-                        csrf_token,
-                        result.get('message', '') if isinstance(result, dict) else result,
-                        certificate_info_getter() if certificate_info_getter else {}
-                    )
+                message = result.get('message', '') if isinstance(result, dict) else result
+                html = render_certificate_page(
+                    csrf_token, message,
+                    certificate_info_getter() if certificate_info_getter else {}
                 )
+                await action_response.send('200 OK', message, html=html)
             else:
                 return False
             return True
@@ -900,7 +929,9 @@ async def start_web_portal(portal):
                         writer, '400 Bad Request', str(exc), 'text/plain'
                     )
                 else:
-                    await send_redirect(writer, '/logging')
+                    await action_response.send(
+                        '200 OK', 'Log settings applied', redirect='/logging'
+                    )
             elif path.startswith('/update-progress'):
                 requested_id = parse_query(path).get('id', '')
                 current_progress = upload_progress_by_id.get(
@@ -1026,8 +1057,12 @@ async def start_web_portal(portal):
                 body = json.dumps(payload)
                 await send_response(writer, '200 OK', body, 'application/json')
             elif method == 'POST' and path.startswith('/discover'):
-                apply_portal_action('discover', action_path, action_handler, log_output, form_params)
-                await send_redirect(writer, '/')
+                result = apply_portal_action('discover', action_path, action_handler, log_output, form_params)
+                message = result.get('message', '') if isinstance(result, dict) else str(result or '')
+                await action_response.send(
+                    '200 OK', message or 'Discovery configuration published',
+                    redirect='/'
+                )
             elif method == 'POST' and path.startswith('/calibrate'):
                 await portal_module_transport.handle_calibration(
                     action_path, form_params, action_handler, log_output, module_snapshot, csrf_token,
@@ -1081,11 +1116,15 @@ async def start_web_portal(portal):
                     )
                 )
             elif method == 'POST' and path.startswith('/discard-update'):
-                apply_portal_action(
+                result = apply_portal_action(
                     'discard-update', action_path, action_handler, log_output,
                     form_params
                 )
-                await send_redirect(writer, '/updates')
+                message = result.get('message', '') if isinstance(result, dict) else str(result or '')
+                await action_response.send(
+                    '200 OK', message or 'Staged upgrade discarded',
+                    redirect='/updates'
+                )
             elif method == 'POST' and path.startswith('/rollback-application'):
                 result = apply_portal_action(
                     'rollback-application', action_path, action_handler, log_output, form_params
@@ -1155,6 +1194,10 @@ async def start_web_portal(portal):
             if not line:
                 await close_writer()
                 return
+            action_response = ActionResponder(
+                headers, writer, send_response, send_redirect,
+                restart_status_getter
+            )
 
             try:
                 request_line = line.decode().strip()

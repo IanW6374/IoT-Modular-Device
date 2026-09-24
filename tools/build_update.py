@@ -38,6 +38,7 @@ CORE_FILES = (
     'web_portal_ui.py',
     'web_portal.py',
     'portal_http.py',
+    'portal_action_response.py',
     'portal_live_views.py',
     'portal_module_transport.py',
     'portal_presenters.py',
@@ -178,7 +179,7 @@ PORTAL_ROUTE_SPLITS = (
     (
         'handle_settings_routes', 'portal_route_settings',
         (
-            'action_handler', 'action_path', 'audit_log_getter', 'body',
+            'action_handler', 'action_path', 'action_response', 'audit_log_getter', 'body',
             'cached_page', 'certificate_info_getter',
             'certificate_upload_handler', 'certificate_validate_handler',
             'config_import_apply_handler', 'config_import_preview_handler',
@@ -218,7 +219,7 @@ PORTAL_ROUTE_SPLITS = (
     (
         'handle_live_routes', 'portal_route_live',
         (
-            'action_handler', 'action_path', 'audit_log_getter',
+            'action_handler', 'action_path', 'action_response', 'audit_log_getter',
             'config_backup_getter', 'csrf_token', 'form_params', 'headers',
             'is_json_validation', 'levels', 'log_buffer_lines_setter',
             'log_getter', 'log_output', 'login_url', 'loglevel_setter',

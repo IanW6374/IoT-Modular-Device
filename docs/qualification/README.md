@@ -58,3 +58,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.59 portable API error-response test](v3.0.0-alpha.59.md)
 - [v3.0.0-alpha.60 fleet policy epoch test](v3.0.0-alpha.60.md)
 - [v3.0.0-alpha.62 upgrade and profile-flow test](v3.0.0-alpha.62.md)
+- [v3.0.0-alpha.63 portal workflow qualification](v3.0.0-alpha.63.md)

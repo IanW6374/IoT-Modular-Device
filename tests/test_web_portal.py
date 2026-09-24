@@ -1151,7 +1151,7 @@ class WebPortalTests(unittest.TestCase):
             self.assertIn('>' + expected + '</span>', overview)
             self.assertIn('>' + expected + '</span>', diagnostics)
 
-    def test_single_section_actions_stay_inside_their_cards(self):
+    def test_single_section_actions_use_consistent_sticky_save_bar(self):
         settings = {
             'portal_transport': 'auto', 'portal_port': 8443,
             'ntp_servers': ('pool.ntp.org',), 'mqtt_port': 8883,
@@ -1159,15 +1159,18 @@ class WebPortalTests(unittest.TestCase):
         }
         pages = (
             (web_portal.render_portal_settings_page('csrf', settings),
-             'Portal access', 'Save changes'),
+             'Portal access'),
             (web_portal.render_ntp_settings_page('csrf', settings),
-             'Time synchronisation', 'Save changes'),
+             'Time synchronisation'),
         )
-        for html, heading, action in pages:
-            card = html.split('<h2>' + heading + '</h2>', 1)[1].split(
-                '</section>', 1
-            )[0]
-            self.assertIn(action, card)
+        for html, heading in pages:
+            card_end = html.index('</section>', html.index('<h2>' + heading + '</h2>'))
+            save_bar = html.index('class="actions settings-save-bar"', card_end)
+            form_end = html.index('</form>', save_bar)
+            self.assertGreater(save_bar, card_end)
+            self.assertGreater(form_end, save_bar)
+            self.assertIn('>Save changes</button>', html[save_bar:form_end])
+            self.assertIn('>Discard changes</button>', html[save_bar:form_end])
 
     def test_login_session_and_logout_flow(self):
         class Reader:
@@ -2822,7 +2825,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<h2>Staged upgrade</h2>', ready)
         self.assertIn('class="selected-release-summary"', ready)
         self.assertIn('<strong>Application — 2.0.0</strong>', ready)
-        self.assertIn('<button class="danger" type="submit">Discard</button>', ready)
+        self.assertIn('>Discard</button>', ready)
+        self.assertIn('data-portal-refresh-target="#upgrade-page-content"', ready)
         self.assertNotIn('class="staged-upgrade-copy"', ready)
 
         ready_with_offer = web_portal.render_updates_page('csrf', {

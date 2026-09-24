@@ -533,7 +533,8 @@ class AppUpdateTests(unittest.TestCase):
             'certificate_enrollment_service.py', 'certificate_portal_actions.py',
             'certificate_portal_transport.py', 'certificate_portal_views.py',
             'certificate_trust.py', 'qualification_control.py',
-            'portal_http.py', 'portal_live_views.py',
+            'portal_http.py', 'portal_action_response.py',
+            'portal_live_views.py',
             'portal_module_transport.py',
             'portal_presenters.py', 'portal_settings_views.py',
             'api_security.py', 'configuration_profiles.py',
@@ -581,6 +582,7 @@ class AppUpdateTests(unittest.TestCase):
         self.assertIn('portal_server.py', default_names)
         self.assertIn('web_portal_ui.py', default_names)
         self.assertIn('portal_module_transport.py', default_names)
+        self.assertIn('portal_action_response.py', default_names)
         for certificate_module in (
             'certificate_enrollment_service.py', 'certificate_portal_actions.py',
             'certificate_portal_transport.py', 'certificate_portal_views.py',

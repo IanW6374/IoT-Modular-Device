@@ -73,7 +73,7 @@ class SetupWizardTests(unittest.TestCase):
             '.portal-status,.task-progress,.status-history{',
             '.status-spinner{width:1rem',
             '.page-load-action{display:flex',
-            '.button.secondary{border-color:var(--accent);background:var(--accent);color:#fff}',
+            '.button.secondary{border-color:var(--accent);background:transparent;color:var(--accent)}',
             'button:disabled{cursor:not-allowed;border-color:#d3dde1;',
             '.metric{border:1px solid var(--line);border-radius:14px;padding:18px;'
             'background:var(--surface);min-width:0;text-align:center}',

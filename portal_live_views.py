@@ -559,14 +559,14 @@ def _qualification_retry_form(token, gate, generation):
         return ''
     return (
         '<details class="qualification-retry"><summary>Restart failed test</summary>'
-        '<form action="/restart-qualification-gate" method="post">'
+        '<form data-portal-async data-portal-refresh-target="#qualification-workspace" data-portal-refresh-url="/release-qualification" data-portal-status="Restarting test…" action="/restart-qualification-gate" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<input type="hidden" name="gate" value="' + html_escape(gate['name']) + '">'
         '<input type="hidden" name="generation" value="' + html_escape(generation) + '">'
         '<label class="field">Reason for retry<input name="reason" required maxlength="160"></label>'
         '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
         'Restart this test from zero; retain the failed result.</label>'
-        '<div class="actions"><span></span><button type="submit">Restart test</button></div></form></details>'
+        '<div class="actions"><span></span><button type="submit" data-busy-label="Restarting…">Restart test</button></div></form></details>'
     )
 
 
@@ -583,40 +583,45 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
             )
         )
     qualification_controls = (
-            '<h3>Record controlled evidence</h3>'
-            '<p class="muted">Record only an observed HIL or interoperability result. '
-            'The device derives gate status from the evidence counters; this does not '
-            'directly set a gate to passed.</p>'
-            '<form action="/record-qualification-event" method="post">'
-            '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
-            '<div class="grid"><label class="field">Gate<select name="gate">' +
-            controlled_options + '</select></label>'
-            '<label class="field">Outcome<select name="outcome">'
-            '<option value="success">Success</option><option value="failure">Failure</option>'
-            '</select></label><label class="field">Run ID'
-            '<input name="run_id" required maxlength="64" placeholder="hil-20260921-001"></label>'
-            '<label class="field">Evidence digest (optional)'
-            '<input name="evidence_digest" maxlength="96" placeholder="sha256:..."></label></div>'
-            '<label class="field">Notes (optional)<input name="notes" maxlength="160"></label>'
-            '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
-            'I confirm this result was observed; simulation alone is not qualification evidence.</label>'
-            '<div class="actions"><span></span><button type="submit">Record evidence</button></div>'
-            '</form><h3>Automated disruptive scenarios</h3>'
-            '<p class="muted">Alpha builds only. These scenarios restart or divert the device. '
-            'They initiate a real fault but do not record success; an independent observer must '
-            'verify recovery and submit the evidence above.</p>'
-            '<form action="/run-qualification-scenario" method="post">'
-            '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
-            '<div class="grid"><label class="field">Scenario<select name="scenario">'
-            '<option value="watchdog-recovery">watchdog recovery</option>'
-            '<option value="native-recovery">native recovery</option></select></label>'
-            '<label class="field">Run ID<input name="run_id" required maxlength="64"></label>'
-            '<label class="field">Typed confirmation'
-            '<input name="confirmation" required maxlength="80" '
-            'placeholder="execute watchdog-recovery"></label></div>'
-            '<div class="actions"><span></span><button class="danger" type="submit">'
-            'Start scenario</button></div></form>'
-        )
+        '<h3>Controlled qualification workflow</h3>'
+        '<p class="muted">Run a real disruptive scenario, verify recovery independently, then record the observed result.</p>'
+        '<ol class="workflow-steps" aria-label="Controlled qualification workflow">'
+        '<li><span class="workflow-step-number">1</span><span>Review gates</span></li>'
+        '<li><span class="workflow-step-number">2</span><span>Select scenario</span></li>'
+        '<li><span class="workflow-step-number">3</span><span>Execute and recover</span></li>'
+        '<li><span class="workflow-step-number">4</span><span>Verify observation</span></li>'
+        '<li><span class="workflow-step-number">5</span><span>Record evidence</span></li></ol>'
+        '<div class="qualification-action-grid"><section class="qualification-action">'
+        '<h3>Run disruptive scenario</h3>'
+        '<p class="muted">Alpha builds only. The device initiates a real fault, but an independent observer must verify recovery.</p>'
+        '<form data-portal-async data-portal-refresh-target="#qualification-workspace" '
+        'data-portal-refresh-url="/release-qualification" data-portal-status="Starting scenario…" action="/run-qualification-scenario" method="post">'
+        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+        '<div class="grid"><label class="field">Scenario<select name="scenario">'
+        '<option value="watchdog-recovery">Watchdog recovery</option>'
+        '<option value="native-recovery">Native recovery</option></select></label>'
+        '<label class="field">Run ID<input name="run_id" required maxlength="64" placeholder="hil-20260921-001"></label>'
+        '<label class="field">Typed confirmation<input name="confirmation" required maxlength="80" '
+        'placeholder="execute watchdog-recovery"></label></div>'
+        '<div class="actions"><span></span><button class="danger" type="submit" '
+        'data-busy-label="Starting…">Start scenario</button></div></form></section>'
+        '<section class="qualification-action"><h3>Record observed evidence</h3>'
+        '<p class="muted">Record only an observed HIL or interoperability result. Evidence counters determine gate status.</p>'
+        '<form data-portal-async data-portal-dirty data-portal-refresh-target="#qualification-workspace" '
+        'data-portal-refresh-url="/release-qualification" data-portal-status="Recording evidence…" action="/record-qualification-event" method="post">'
+        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+        '<div class="grid"><label class="field">Gate<select name="gate">' + controlled_options + '</select></label>'
+        '<label class="field">Outcome<select name="outcome"><option value="success">Success</option>'
+        '<option value="failure">Failure</option></select></label>'
+        '<label class="field">Run ID<input name="run_id" required maxlength="64" placeholder="hil-20260921-001"></label>'
+        '<label class="field">Evidence digest (optional)<input name="evidence_digest" maxlength="96" '
+        'placeholder="sha256:..."></label></div>'
+        '<label class="field">Notes (optional)<input name="notes" maxlength="160"></label>'
+        '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
+        'I confirm this result was observed; simulation alone is not qualification evidence.</label>'
+        '<div class="actions"><span></span><button type="submit" data-busy-label="Recording…">'
+        'Record evidence</button></div></form></section></div>'
+    )
     if not status.get('available') or not isinstance(evidence, dict):
         detail = status.get('error', '')
         content = (
@@ -774,8 +779,9 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
         portal_ui.page_heading(
             'Maintenance', 'Release qualification',
             'Review soak, recovery, renewal, upgrade and canary evidence for this release.'
-        ) + _notice(message, error) + '<section class="card"><div class="section-title">'
-        '<h2>Promotion gates</h2></div>' + content + '</section>'
+        ) + '<div id="qualification-workspace">' + _notice(message, error) +
+        '<section class="card"><div class="section-title"><h2>Promotion gates</h2></div>' +
+        content + '</section></div>'
     )
     return portal_ui.shell(
         'IoT-MD release qualification', 'release_qualification', body, token
@@ -856,12 +862,12 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'Download logs</a>' + render_refresh_controls_html(
             'log-refresh-toggle', 'log'
         ) + '</div></div>'
-        '<form action="/set-loglevel" method="post" class="log-toolbar">'
+        '<form data-portal-async action="/set-loglevel" method="post" class="log-toolbar">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<label>Log level <select name="level">' + options + '</select></label>'
         '<label>Stored lines <input name="log_buffer_lines" type="number" min="0" max="500" '
         'required value="' + html_escape(settings.get('log_buffer_lines', 200)) + '"></label>'
-        '<button class="secondary" type="submit">Apply</button></form>'
+        '<span data-portal-form-status class="portal-status action-form-status"></span><button class="secondary" type="submit" data-busy-label="Applying…">Apply</button></form>'
         '<label class="log-filter">Filter displayed logs '
         '<input id="log-filter" type="search" value="' + html_escape(filter_text) + '" '
         'placeholder="Error, MQTT, module…"></label>'
@@ -954,7 +960,7 @@ def render_logging_settings_page(token, settings, message='', error=False):
             'Configure Device log and Audit log retention and remote syslog forwarding.'
         ) + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>Retention and forwarding</h2></div>'
-        '<form action="/logging-settings" method="post"><input type="hidden" name="csrf" value="' +
+        '<form data-portal-async data-portal-dirty action="/logging-settings" method="post"><input type="hidden" name="csrf" value="' +
         html_escape(token) + '">' + render_operational_hidden_fields(
             settings, ('log_buffer_lines', 'syslog_enabled',
                        'syslog_audit_enabled', 'syslog_host', 'syslog_port',
@@ -982,8 +988,8 @@ def render_logging_settings_page(token, settings, message='', error=False):
         '<label class="field">Port<input id="syslog-port" name="syslog_port" type="number" min="1" max="65535" '
         'required value="' + html_escape(syslog_port) + '"></label></div>'
         '<p class="muted">TLS uses the dedicated Syslog CA installed under Certificates. '
-        'Changes take effect after the pending device restart.</p><div class="actions"><span></span>'
-        '<button type="submit">Save logging settings</button></div></form></section>'
+        'Changes take effect after the pending device restart.</p>' +
+        portal_ui.save_actions('Save logging settings') + '</form></section>'
     )
     script = (
         'var syslogTransport=document.getElementById("syslog-transport"),'
@@ -1039,7 +1045,7 @@ def render_update_preferences(csrf, settings):
     schedule_disabled = schedule == 'disabled'
     weekly = schedule == 'weekly'
     return (
-        '<form action="/update-preferences" method="post"><input type="hidden" name="csrf" value="' +
+        '<form data-portal-async data-portal-dirty action="/update-preferences" method="post"><input type="hidden" name="csrf" value="' +
         html_escape(csrf) + '"><div class="grid"><label class="field">Release channel<select '
         'name="release_channel"><option value="stable"' +
         (' selected' if channel == 'stable' else '') + '>Stable</option><option value="beta"' +
@@ -1070,9 +1076,8 @@ def render_update_preferences(csrf, settings):
         '<label class="check"><input type="checkbox" name="release_auto_download"' + download +
         '>Automatically download applicable signed releases</label>'
         '<label class="check"><input type="checkbox" name="release_auto_activate"' + activate +
-        '>Automatically activate verified releases</label>'
-        '<div class="actions"><span></span><button class="secondary" type="submit">'
-        'Save upgrade preferences</button></div></form>'
+        '>Automatically activate verified releases</label>' +
+        portal_ui.save_actions('Save upgrade preferences') + '</form>'
     )
 
 def update_preferences_script():
@@ -1085,8 +1090,9 @@ def update_preferences_script():
         'releaseSchedule.value==="disabled",weekly=releaseSchedule.value==="weekly";'
         'releaseFields.hidden=disabled;releaseFields.disabled=disabled;releaseTime.disabled=disabled;'
         'releaseTime.required=!disabled;releaseWeekdayField.hidden=!weekly;releaseWeekday.disabled=!weekly;}'
-        'if(releaseSchedule){releaseSchedule.onchange='
-        'syncReleaseSchedule;syncReleaseSchedule();}'
+        'if(releaseSchedule){releaseSchedule.onchange=syncReleaseSchedule;syncReleaseSchedule();'
+        'document.addEventListener("portal:form-reset",function(event){if(event.detail&&event.detail.form&&'
+        'event.detail.form.action.indexOf("/update-preferences")>=0)syncReleaseSchedule();});}'
     )
 
 def update_upload_script():
@@ -1557,7 +1563,7 @@ def _automatic_upgrade_workspace(token, status):
 
 def automatic_upgrade_selection_script():
     return (
-        'var automaticSelect=document.getElementById("automatic-release-version-select"),automaticSteps='
+        'function bindAutomaticSelection(){var automaticSelect=document.getElementById("automatic-release-version-select"),automaticSteps='
         'document.getElementById("automatic-stage-list"),automaticControl=document.getElementById('
         '"automatic-release-control");'
         'var automaticFlows={application:["Automatic upgrade selected","Select version","Inspect signed release",'
@@ -1586,20 +1592,23 @@ def automatic_upgrade_selection_script():
         'ring.appendChild(value);li.appendChild(name);li.appendChild(ring);if(index===1&&automaticControl){var control='
         'document.createElement("div");control.className="upgrade-stage-step-control";control.appendChild('
         'automaticControl);li.appendChild(control);}automaticSteps.appendChild(li);});}'
-        'if(automaticSelect){automaticSelect.onchange=renderAutomaticFlow;renderAutomaticFlow();}'
+        'if(automaticSelect){automaticSelect.onchange=renderAutomaticFlow;renderAutomaticFlow();}}'
+        'bindAutomaticSelection();document.addEventListener("portal:content-updated",function(event){if(event.detail&&'
+        'event.detail.selector==="#upgrade-page-content")bindAutomaticSelection();});'
     )
 
 
 def upgrade_check_script():
     return (
-        'var checkForm=document.getElementById("upgrade-check-form");if(checkForm){'
+        'function bindUpgradeCheck(){var checkForm=document.getElementById("upgrade-check-form");if(checkForm){'
         'checkForm.onsubmit=function(e){e.preventDefault();var button=checkForm.querySelector("button"),'
         'result=document.getElementById("upgrade-check-result");button.disabled=true;'
         'result.className="badge";result.textContent="Checking…";function failed(message){result.className="badge warn";'
         'result.textContent="Check failed";result.title=message;'
         'button.disabled=false;}function checked(s){result.textContent=s.message||"Check complete";'
         'if(s.phase==="failed"){failed(s.message||"Upgrade check failed");return;}'
-        'if(s.phase==="complete"){location.replace("/updates?source=automatic");return;}'
+        'if(s.phase==="complete"){portalRefreshTarget("#upgrade-page-content","/updates?source=automatic",'
+        's.message||"Upgrade check complete");return;}'
         'setTimeout(function(){poll(s.id);},800);}function poll(id){fetch("/task-status?id="+'
         'encodeURIComponent(id),{cache:"no-store",credentials:"same-origin"}).then(read).then(function(s){'
         's.id=id;checked(s);}).catch(function(){failed("Could not check upgrades. Please retry.");});}'
@@ -1608,7 +1617,8 @@ def upgrade_check_script():
         'fetch("/check-release",{method:"POST",credentials:"same-origin",headers:{'
         '"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},'
         'body:new URLSearchParams(new FormData(checkForm)).toString()}).then(read).then(function(s){'
-        'if(s.task_id)poll(s.task_id);else location.replace("/updates?source=automatic");'
+        'if(s.task_id)poll(s.task_id);else portalRefreshTarget("#upgrade-page-content",'
+        '"/updates?source=automatic",s.message||"Upgrade check complete");'
         '}).catch(function(){failed("Could not check upgrades. Please retry.");});};}'
     )
 
@@ -1648,9 +1658,11 @@ def _staged_update_workspace(token, status):
             completed=len(ready_steps) - 1, manual_action=activation,
             step_controls={1: selected_release}
         ) + '</aside><div class="upgrade-operation">'
-        '<div class="actions manual-upgrade-buttons"><form action="/discard-update" method="post">'
+        '<div class="actions manual-upgrade-buttons"><form data-portal-async '
+        'data-portal-refresh-target="#upgrade-page-content" data-portal-refresh-url="/updates" '
+        'data-portal-status="Discarding staged upgrade…" action="/discard-update" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
-        '<button class="danger" type="submit">Discard</button></form></div>'
+        '<button class="danger" type="submit" data-busy-label="Discarding…">Discard</button></form></div>'
         '</div></div></section>'
     )
 
@@ -1704,8 +1716,8 @@ def render_update_install_page(token, status=None, message='', error=False, sour
         portal_ui.page_heading(
             'Maintenance', 'Upgrade',
             'Select a method, stage a release, then restart when ready.'
-        ) + _notice(message, error) + workspace +
-        render_upgrade_history(status)
+        ) + '<div id="upgrade-page-content">' + _notice(message, error) + workspace +
+        render_upgrade_history(status) + '</div>'
     )
     return portal_ui.shell(
         'IoT-MD upgrade', 'updates', body, token, script

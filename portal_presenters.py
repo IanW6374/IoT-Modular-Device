@@ -95,6 +95,10 @@ def render_badge(label, tone='neutral'):
 def render_api_scope_editor(csrf, client, return_to='/device-api'):
     """Render an in-place scope editor for one enrolled certificate."""
     current = set(str(scope) for scope in client.get('scopes', ()))
+    refresh_target = (
+        '#api-client-workspace'
+        if return_to == '/api-client-trust' else '#device-api-clients'
+    )
     options = []
     for scope, label in API_SCOPE_CHOICES:
         options.append(
@@ -104,7 +108,9 @@ def render_api_scope_editor(csrf, client, return_to='/device-api'):
         )
     return (
         '<details class="api-scope-editor"><summary>Edit API scopes</summary>'
-        '<form method="post" action="/update-api-client-scopes">'
+        '<form data-portal-async data-portal-dirty data-portal-refresh-target="' +
+        html_escape(refresh_target) + '" data-portal-refresh-url="' +
+        html_escape(return_to) + '" method="post" action="/update-api-client-scopes">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
         '<input type="hidden" name="fingerprint" value="' +
         html_escape(client.get('fingerprint', '')) + '">'
@@ -115,8 +121,9 @@ def render_api_scope_editor(csrf, client, return_to='/device-api'):
         '</select><span class="field-hint">Use Command or Control to select multiple scopes.</span>'
         '</label></fieldset>'
         '<p class="field-hint">Changes apply immediately to new and existing API connections.</p>'
-        '<div class="actions"><span></span><button class="secondary compact" '
-        'type="submit">Save scopes</button></div></form></details>'
+        '<div class="actions"><span data-portal-form-status class="portal-status action-form-status"></span>'
+        '<button class="secondary compact" type="submit" data-busy-label="Saving…">'
+        'Save scopes</button></div></form></details>'
     )
 
 

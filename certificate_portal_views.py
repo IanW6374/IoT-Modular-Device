@@ -66,7 +66,9 @@ def _card(details, label, actions=''):
 
 
 def _remove_form(csrf, kind, fingerprint='', return_to='/certificate-authorities'):
-    return ('<form method="post" action="/remove-certificate-trust">'
+    return ('<form data-portal-async data-portal-refresh-target="#certificate-workspace" '
+            'data-portal-refresh-url="' + html_escape(return_to) + '" method="post" '
+            'action="/remove-certificate-trust">'
             '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
             '<input type="hidden" name="kind" value="' + html_escape(kind) + '">'
             '<input type="hidden" name="fingerprint" value="' + html_escape(fingerprint) + '">'
@@ -85,25 +87,36 @@ def _upload_widget(csrf, choices, return_label):
             '<span id="certificate-result" class="portal-status"></span>'
             '<button id="certificate-upload" type="button">Upload and validate</button></div>' +
             portal_ui.progress('certificate-progress', 'Waiting…', True))
-    script = ('var csrf=' + repr(str(csrf)) + ',type=document.getElementById("certificate-type"),'
-              'file=document.getElementById("certificate-primary"),help=document.getElementById("certificate-help"),'
-              'descriptions={' + descriptions + '};function configure(){help.textContent=descriptions[type.value][1];'
-              'file.multiple=type.value==="api-client-ca"||type.value==="api-client-cert"||type.value==="fleet-client-cert"||type.value==="qualification-client-cert";'
-              'file.accept=type.value==="management-suite-key"?".bin,.hex,application/octet-stream":'
-              '(type.value==="portal-cert"?".der,.pem,application/pkix-cert,application/x-pem-file":'
-              '".der,application/pkix-cert,application/octet-stream");}type.onchange=configure;configure();'
-              'function upload(f,k){return fetch("/certificate-upload",{method:"POST",credentials:"same-origin",headers:{'
-              '"Content-Type":"application/octet-stream","X-CSRF-Token":csrf,"X-Certificate-Kind":k},body:f});}'
-              'document.getElementById("certificate-upload").onclick=async function(){var out=document.getElementById('
-              '"certificate-result"),box=document.getElementById("certificate-progress"),label=box.querySelector(".status-text");'
-              'if(!portalRequire(file,"Select at least one file"))return;this.disabled=true;box.hidden=false;'
-              'try{for(var i=0;i<file.files.length;i++){label.textContent="Uploading "+(i+1)+" of "+file.files.length;'
-              'var response=await upload(file.files[i],type.value);if(!response.ok)throw new Error(await response.text());}'
-              'label.textContent="Validating…";var done=await fetch("/validate-certificates",{method:"POST",credentials:'
-              '"same-origin",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+encodeURIComponent(csrf)+'
-              '"&return_to="+encodeURIComponent(' + repr(return_label) + ')});if(!done.ok)throw new Error(await done.text());'
-              'document.open();document.write(await done.text());document.close();}catch(error){portalStatus(out,"error",error.message);'
-              'box.classList.add("failed");label.textContent="Installation failed";this.disabled=false;}};')
+    script = (
+        'function bindCertificateUpload(){var csrf=' + repr(str(csrf)) +
+        ',type=document.getElementById("certificate-type"),file=document.getElementById('
+        '"certificate-primary"),help=document.getElementById("certificate-help"),descriptions={' +
+        descriptions + '};if(!type||!file||!help)return;function configure(){help.textContent='
+        'descriptions[type.value][1];file.multiple=type.value==="api-client-ca"||type.value==="api-client-cert"||'
+        'type.value==="fleet-client-cert"||type.value==="qualification-client-cert";file.accept=type.value==='
+        '"management-suite-key"?".bin,.hex,application/octet-stream":(type.value==="portal-cert"?'
+        '".der,.pem,application/pkix-cert,application/x-pem-file":".der,application/pkix-cert,application/octet-stream");}'
+        'type.onchange=configure;configure();function upload(f,k){return fetch("/certificate-upload",{method:"POST",'
+        'credentials:"same-origin",headers:{"Content-Type":"application/octet-stream","X-CSRF-Token":csrf,'
+        '"X-Certificate-Kind":k},body:f});}var button=document.getElementById("certificate-upload");if(!button)return;'
+        'button.onclick=async function(){var out=document.getElementById("certificate-result"),box='
+        'document.getElementById("certificate-progress"),label=box.querySelector(".status-text");if(!portalRequire(file,'
+        '"Select at least one file"))return;this.disabled=true;box.hidden=false;box.classList.remove("complete","failed");'
+        'try{for(var i=0;i<file.files.length;i++){label.textContent="Uploading "+(i+1)+" of "+file.files.length;'
+        'var response=await upload(file.files[i],type.value);if(response.status===401){location.replace('
+        '"/login?reason=expired");return;}if(!response.ok)throw new Error(await response.text());}label.textContent='
+        '"Validating…";var done=await fetch("/validate-certificates",{method:"POST",credentials:"same-origin",headers:'
+        '{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+'
+        'encodeURIComponent(csrf)+"&return_to="+encodeURIComponent(' + repr(return_label) + ')}),responseText='
+        'await done.text(),payload={};try{payload=responseText?JSON.parse(responseText):{};}catch(ignore){payload='
+        '{message:responseText};}if(!done.ok)throw new Error(payload.error||payload.message||"Certificate validation failed");'
+        'box.classList.add("complete");label.textContent="Installation complete";await portalRefreshTarget('
+        '"#certificate-workspace",' + repr(return_label) + ',payload.message||"Certificate installation complete");'
+        'if(payload.restart)portalRefreshRestart(payload.restart);else portalRefreshRestart();}catch(error){portalStatus(out,'
+        '"error",error.message);box.classList.add("failed");label.textContent="Installation failed";this.disabled=false;}};}'
+        'bindCertificateUpload();document.addEventListener("portal:content-updated",function(event){if(event.detail&&'
+        'event.detail.selector==="#certificate-workspace")bindCertificateUpload();});'
+    )
     return body, script
 
 
@@ -118,23 +131,34 @@ def _identity_upload_widget(csrf, return_to='/certificates'):
             '<div class="actions"><span id="identity-result" class="portal-status"></span>'
             '<button id="identity-upload" type="button">Upload and validate</button></div>' +
             portal_ui.progress('identity-progress', 'Waiting…', True))
-    script = ('var identityType=document.getElementById("identity-type"),identityCert=document.getElementById('
-              '"identity-cert"),identityKey=document.getElementById("identity-key"),identityCsrf=' + repr(str(csrf)) + ';'
-              'identityType.onchange=function(){document.getElementById("identity-cert-label").firstChild.nodeValue='
-              'this.value==="portal"?"Portal certificate chain":"Device API and fleet server certificate";};'
-              'function uploadIdentity(file,kind){return fetch("/certificate-upload",{method:"POST",credentials:"same-origin",headers:{'
-              '"Content-Type":"application/octet-stream","X-CSRF-Token":identityCsrf,"X-Certificate-Kind":kind},body:file});}'
-              'document.getElementById("identity-upload").onclick=async function(){var out=document.getElementById("identity-result"),'
-              'box=document.getElementById("identity-progress"),label=box.querySelector(".status-text"),kind=identityType.value;'
-              'if(!portalRequire(identityCert,"Select the certificate")||!portalRequire(identityKey,"Select the matching private key"))return;'
-              'this.disabled=true;box.hidden=false;try{label.textContent="Uploading certificate…";var first=await uploadIdentity('
-              'identityCert.files[0],kind+"-cert");if(!first.ok)throw new Error(await first.text());label.textContent="Uploading private key…";'
-              'var second=await uploadIdentity(identityKey.files[0],kind+"-key");if(!second.ok)throw new Error(await second.text());'
-              'label.textContent="Validating identity…";var done=await fetch("/validate-certificates",{method:"POST",credentials:"same-origin",'
-              'headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+encodeURIComponent(identityCsrf)+'
-              '"&return_to="+encodeURIComponent(' + repr(str(return_to)) + ')});if(!done.ok)throw new Error(await done.text());document.open();document.write('
-              'await done.text());document.close();}catch(error){portalStatus(out,"error",error.message);box.classList.add("failed");'
-              'label.textContent="Installation failed";this.disabled=false;}};')
+    script = (
+        'function bindIdentityUpload(){var identityType=document.getElementById("identity-type"),identityCert='
+        'document.getElementById("identity-cert"),identityKey=document.getElementById("identity-key"),identityCsrf=' +
+        repr(str(csrf)) + ';if(!identityType||!identityCert||!identityKey)return;identityType.onchange=function(){'
+        'document.getElementById("identity-cert-label").firstChild.nodeValue=this.value==="portal"?'
+        '"Portal certificate chain":"Device API and fleet server certificate";};function uploadIdentity(file,kind){'
+        'return fetch("/certificate-upload",{method:"POST",credentials:"same-origin",headers:{"Content-Type":'
+        '"application/octet-stream","X-CSRF-Token":identityCsrf,"X-Certificate-Kind":kind},body:file});}'
+        'var button=document.getElementById("identity-upload");if(!button)return;button.onclick=async function(){var out='
+        'document.getElementById("identity-result"),box=document.getElementById("identity-progress"),label='
+        'box.querySelector(".status-text"),kind=identityType.value;if(!portalRequire(identityCert,"Select the certificate")||'
+        '!portalRequire(identityKey,"Select the matching private key"))return;this.disabled=true;box.hidden=false;'
+        'box.classList.remove("complete","failed");try{label.textContent="Uploading certificate…";var first='
+        'await uploadIdentity(identityCert.files[0],kind+"-cert");if(!first.ok)throw new Error(await first.text());'
+        'label.textContent="Uploading private key…";var second=await uploadIdentity(identityKey.files[0],kind+"-key");'
+        'if(!second.ok)throw new Error(await second.text());label.textContent="Validating identity…";var done='
+        'await fetch("/validate-certificates",{method:"POST",credentials:"same-origin",headers:{"Accept":'
+        '"application/json","Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+encodeURIComponent('
+        'identityCsrf)+"&return_to="+encodeURIComponent(' + repr(str(return_to)) + ')}),responseText=await done.text(),'
+        'payload={};try{payload=responseText?JSON.parse(responseText):{};}catch(ignore){payload={message:responseText};}'
+        'if(!done.ok)throw new Error(payload.error||payload.message||"Identity validation failed");box.classList.add('
+        '"complete");label.textContent="Installation complete";await portalRefreshTarget("#certificate-workspace",' +
+        repr(str(return_to)) + ',payload.message||"Identity installed");if(payload.restart)portalRefreshRestart(payload.restart);'
+        'else portalRefreshRestart();}catch(error){portalStatus(out,"error",error.message);box.classList.add("failed");'
+        'label.textContent="Installation failed";this.disabled=false;}};}bindIdentityUpload();document.addEventListener('
+        '"portal:content-updated",function(event){if(event.detail&&event.detail.selector==="#certificate-workspace")'
+        'bindIdentityUpload();});'
+    )
     return body, script
 
 
@@ -144,7 +168,9 @@ def _renew_action(csrf, certificates, return_to='/certificates'):
     if method not in ('self_signed', 'iot_ca_auto', 'iot_ca_file', 'acme'):
         return '<p class="muted">Install a replacement package to renew a manual identity.</p>'
     return (
-        '<form class="certificate-renew-form" method="post" action="/renew-certificate">'
+        '<form class="certificate-renew-form" data-portal-async '
+        'data-portal-refresh-target="#certificate-workspace" data-portal-refresh-url="' +
+        html_escape(return_to) + '" method="post" action="/renew-certificate">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
         '<input type="hidden" name="return_to" value="' + html_escape(return_to) + '">'
         '<div class="actions"><span></span><button type="submit"' +
@@ -169,17 +195,17 @@ def render_certificate_page(csrf, message='', certificates=None):
     manual_upload, manual_script = _identity_upload_widget(csrf, '/certificates')
     body = (portal_ui.page_heading('Maintenance', 'Certificate enrollment',
             'Review the active enrollment method and change how device identities are issued and renewed.') +
-            _notice(message) + operation_notice +
+            '<div id="certificate-workspace">' + _notice(message) + operation_notice +
             '<section class="card"><div class="section-title"><h2>Current enrollment</h2>' +
             render_badge(label, 'good' if method != 'manual' else 'warn') +
             '</div><p>' + html_escape(description) + '</p>' + _renew_action(csrf, certificates) + '</section>'
             '<section class="card"><div class="section-title"><h2>Change enrollment method</h2></div>'
             '<label class="field">Enrollment method<select id="enrollment-method">' + options + '</select></label>'
             '<div class="certificate-option-panel" data-method="self_signed"><p>' + html_escape(METHODS['self_signed'][1]) + '</p>'
-            '<form action="/certificate-method" method="post"><input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
+            '<form data-portal-async data-portal-refresh-target="#certificate-workspace" data-portal-refresh-url="/certificates" action="/certificate-method" method="post"><input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
             '<input type="hidden" name="method" value="self_signed"><button type="submit">Install self-signed identity</button></form></div>'
             '<div class="certificate-option-panel" data-method="iot_ca_auto"><p>' + html_escape(METHODS['iot_ca_auto'][1]) + '</p>'
-            '<form action="/certificate-method" method="post"><input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
+            '<form data-portal-async data-portal-refresh-target="#certificate-workspace" data-portal-refresh-url="/certificates" action="/certificate-method" method="post"><input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
             '<input type="hidden" name="method" value="iot_ca_auto"><div class="grid">'
             '<label class="field">IoT CA server<input name="ca_server" placeholder="iot-ca.home.arpa"></label>'
             '<label class="field">Provisioning port<input name="ca_port" type="number" min="1" max="65535" placeholder="9010"></label></div>'
@@ -188,23 +214,34 @@ def render_certificate_page(csrf, message='', certificates=None):
             '<label class="field">IoT CA enrollment authorization<input id="iotenroll-file" type="file" accept=".iotenroll,application/json"></label>'
             '<button id="iotenroll-start" type="button">Upload and enroll</button></div>'
             '<div class="certificate-option-panel" data-method="acme"><p>' + html_escape(METHODS['acme'][1]) + '</p>'
-            '<form action="/acme-settings" method="post"><input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
+            '<form data-portal-async data-portal-dirty data-portal-refresh-target="#certificate-workspace" data-portal-refresh-url="/certificates" action="/acme-settings" method="post"><input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
             '<input type="hidden" name="acme_enabled" value="true"><div class="grid">'
             '<label class="field">ACME directory URL<input name="directory_url" type="url" required value="' + html_escape(settings.get('directory_url', '')) + '"></label>'
             '<label class="field">Certificate hostname<input name="hostname" required value="' + html_escape(settings.get('hostname', '')) + '"></label></div>'
             '<button type="submit">Enable Private CA ACME enrollment</button></form></div>'
             '<div class="certificate-option-panel" data-method="manual"><p>' + html_escape(METHODS['manual'][1]) + '</p>'
             '<p class="warning-text">Manual identities are not automatically renewed. The portal and Device log warn before expiry.</p>' +
-            manual_upload + '</div></section>')
-    script = ('var chooser=document.getElementById("enrollment-method"),csrf=' + repr(str(csrf)) + ';function showMethod(){'
-              'document.querySelectorAll("[data-method]").forEach(function(p){p.hidden=p.dataset.method!==chooser.value;});}'
-              'chooser.onchange=showMethod;showMethod();document.getElementById("iotenroll-start").onclick=async function(){'
-              'var input=document.getElementById("iotenroll-file");if(!portalRequire(input,"Select an .iotenroll file"))return;'
-              'this.disabled=true;try{var uploaded=await fetch("/certificate-upload",{method:"POST",credentials:"same-origin",headers:{'
-              '"Content-Type":"application/octet-stream","X-CSRF-Token":csrf,"X-Certificate-Kind":"iot-ca-enrollment"},body:input.files[0]});'
-              'if(!uploaded.ok)throw new Error(await uploaded.text());var done=await fetch("/certificate-method",{method:"POST",credentials:'
-              '"same-origin",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+encodeURIComponent(csrf)+'
-              '"&method=iot_ca_file"});document.open();document.write(await done.text());document.close();}catch(error){alert(error.message);this.disabled=false;}};')
+            manual_upload + '</div></section></div>')
+    script = (
+        'function bindEnrollmentMethod(){var chooser=document.getElementById("enrollment-method"),csrf=' +
+        repr(str(csrf)) + ';if(!chooser)return;function showMethod(){document.querySelectorAll("[data-method]").forEach('
+        'function(panel){panel.hidden=panel.dataset.method!==chooser.value;});}chooser.onchange=showMethod;showMethod();'
+        'var start=document.getElementById("iotenroll-start");if(!start)return;start.onclick=async function(){var input='
+        'document.getElementById("iotenroll-file");if(!portalRequire(input,"Select an .iotenroll file"))return;this.disabled='
+        'true;try{var uploaded=await fetch("/certificate-upload",{method:"POST",credentials:"same-origin",headers:{'
+        '"Content-Type":"application/octet-stream","X-CSRF-Token":csrf,"X-Certificate-Kind":"iot-ca-enrollment"},'
+        'body:input.files[0]});if(!uploaded.ok)throw new Error(await uploaded.text());var done=await fetch('
+        '"/certificate-method",{method:"POST",credentials:"same-origin",headers:{"Accept":"application/json",'
+        '"Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+encodeURIComponent(csrf)+'
+        '"&method=iot_ca_file"}),responseText=await done.text(),payload={};try{payload=responseText?JSON.parse('
+        'responseText):{};}catch(ignore){payload={message:responseText};}if(!done.ok)throw new Error(payload.error||'
+        'payload.message||"Enrollment failed");await portalRefreshTarget("#certificate-workspace","/certificates",'
+        'payload.message||"Enrollment started");if(payload.restart)portalRefreshRestart(payload.restart);else '
+        'portalRefreshRestart();}catch(error){var out=document.createElement("p");input.parentNode.insertAdjacentElement('
+        '("afterend",out);portalStatus(out,"error",error.message);this.disabled=false;}};}bindEnrollmentMethod();'
+        'document.addEventListener("portal:content-updated",function(event){if(event.detail&&event.detail.selector==='
+        '"#certificate-workspace")bindEnrollmentMethod();});'
+    )
     return portal_ui.shell(
         'IoT-MD certificate enrollment', 'certificates', body, csrf,
         script + manual_script
@@ -229,9 +266,9 @@ def render_certificate_authorities_page(csrf, message='', certificates=None):
         ('management-suite-key', 'Management Suite signing key', 'Verifies fleet policy and format-3 release catalogs.'),
     ), '/certificate-authorities')
     body = (portal_ui.page_heading('Maintenance', 'CA & signing trust',
-            'Manage outbound service trust anchors and the Management Suite signing key.') + _notice(message) +
+            'Manage outbound service trust anchors and the Management Suite signing key.') + '<div id="certificate-workspace">' + _notice(message) +
             '<section class="card"><div class="module-grid">' + ''.join(cards) + '</div></section>'
-            '<section class="card"><div class="section-title"><h2>Install trust</h2></div>' + upload + '</section>')
+            '<section class="card"><div class="section-title"><h2>Install trust</h2></div>' + upload + '</section></div>')
     return portal_ui.shell('IoT-MD CA and signing trust', 'certificate_authorities', body, csrf, script)
 
 
@@ -244,7 +281,9 @@ def render_api_client_trust_page(csrf, message='', certificates=None):
     clients = []
     for details in certificates.get('api_clients', ()) or ():
         action = (render_api_scope_editor(csrf, details, '/api-client-trust') +
-                  '<form method="post" action="/revoke-api-client"><input type="hidden" name="csrf" value="' + html_escape(csrf) +
+                  '<form data-portal-async data-portal-refresh-target="#api-client-workspace" '
+                  'data-portal-refresh-url="/api-client-trust" method="post" action="/revoke-api-client">'
+                  '<input type="hidden" name="csrf" value="' + html_escape(csrf) +
                   '"><input type="hidden" name="fingerprint" value="' + html_escape(details.get('fingerprint', '')) +
                   '"><input type="hidden" name="return_to" value="/api-client-trust"' +
                   '"><div class="actions"><span></span><button class="danger compact">Revoke client</button></div></form>')
@@ -256,12 +295,12 @@ def render_api_client_trust_page(csrf, message='', certificates=None):
         ('qualification-client-cert', 'Qualification automation certificate', 'Enrolls a client with qualification evidence and scenario scopes.'),
     ), '/api-client-trust')
     body = (portal_ui.page_heading('Maintenance', 'API client trust',
-            'Manage who may authenticate to the mutual-TLS Device API.') + _notice(message) +
-            '<section class="card"><div class="section-title"><h2>Trusted client issuers</h2></div><div class="module-grid">' +
+            'Manage who may authenticate to the mutual-TLS Device API.') + '<div id="certificate-workspace">' + _notice(message) +
+            '<div id="api-client-workspace"><section class="card"><div class="section-title"><h2>Trusted client issuers</h2></div><div class="module-grid">' +
             (''.join(ca_cards) or '<p class="muted">No Device API client issuer CA is installed.</p>') + '</div></section>'
             '<section class="card"><div class="section-title"><h2>Enrolled API callers</h2></div><div class="module-grid">' +
             (''.join(clients) or '<p class="muted">No Device API caller certificate is enrolled.</p>') + '</div></section>'
-            '<section class="card"><div class="section-title"><h2>Install API trust</h2></div>' + upload + '</section>')
+            '<section class="card"><div class="section-title"><h2>Install API trust</h2></div>' + upload + '</section></div></div>')
     return portal_ui.shell('IoT-MD API client trust', 'api_client_trust', body, csrf, script)
 
 
@@ -270,7 +309,7 @@ def render_device_certificates_page(csrf, message='', certificates=None):
     method_label = METHODS.get(_method(certificates), ('Unknown certificate method', ''))[0]
     body = (portal_ui.page_heading('Maintenance', 'Device certificates',
             'Inspect the identities currently presented by this device. Install or replace identities through Certificate enrollment.') +
-            _notice(message) +
+            '<div id="certificate-workspace">' + _notice(message) +
             '<section class="card"><div class="section-title"><h2>Installed device identities</h2></div>'
             '<p class="muted">The Device API/fleet identity is presented by the inbound mutual-TLS endpoint. '
             'MQTT, upgrade and syslog connections instead validate their remote servers using the trust anchors under CA &amp; signing trust.</p>'
@@ -280,7 +319,7 @@ def render_device_certificates_page(csrf, message='', certificates=None):
             '<section class="card"><div class="section-title"><h2>Certificate renewal</h2></div>'
             '<p>Current enrollment method: <strong>' + html_escape(method_label) + '</strong></p>'
             '<p class="muted">Request immediate renewal of every identity managed by the current enrollment method.</p>' +
-            _renew_action(csrf, certificates, '/device-certificates') + '</section>')
+            _renew_action(csrf, certificates, '/device-certificates') + '</section></div>')
     return portal_ui.shell('IoT-MD device certificates', 'device_certificates', body, csrf)
 
 
