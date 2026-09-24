@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.62 - 2026-09-24
+
+- Add a signed dummy release for exercising the Alpha 61 upgrade and
+  configuration-profile workflow. No intentional functional changes; retain
+  native ABI 6 and use release sequence 2767.
+
 ## 3.0.0-alpha.61 - 2026-09-24
 
 - Add a dedicated `configuration:write` Device API scope and validated profile
