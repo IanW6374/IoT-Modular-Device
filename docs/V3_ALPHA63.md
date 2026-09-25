@@ -19,6 +19,5 @@ steps: review gates, select a scenario, execute and recover, verify the
 observation, and record evidence. Restart/reconnect pages remain reserved for
 operations that really interrupt the session.
 
-The native platform ABI is unchanged. Application, core and universal artifacts
-are published together so Alpha 63 can be exercised through every supported
-upgrade method.
+The native platform ABI is unchanged. Alpha 63 is published as an application
+artifact and remains compatible with the Alpha 62 native core.

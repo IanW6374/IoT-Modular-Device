@@ -252,7 +252,9 @@ COMPACT_MPY_SIZE_LIMITS = {
     # Bound both the transport and each independently loaded dispatcher.
     'portal_server.mpy': 10000,
     'portal_route_access.mpy': 6500,
-    'portal_route_settings.mpy': 6000,
+    # Alpha 63 adds structured in-place action responses across settings.
+    # This remains below the proven access-route allocation.
+    'portal_route_settings.mpy': 6500,
     'portal_route_upload.mpy': 3500,
     'portal_route_live.mpy': 5500,
 }
