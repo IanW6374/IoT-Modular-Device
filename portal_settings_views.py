@@ -651,7 +651,7 @@ def render_device_control_page(csrf, error=''):
         '<section class="card"><div class="section-title"><h2>Factory default</h2></div>'
         '<p class="warning"><strong>This cannot be undone.</strong> Network, MQTT, portal, '
         'Home Assistant, module, certificate, ACME and log-history data will be erased. '
-        'The signed core, active application and upgrade verification key are retained.</p>'
+        'The signed core, active application and update verification key are retained.</p>'
         '<form method="post" action="/factory-default" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">'
         '<div class="grid"><label class="field">Current administrator password'
@@ -894,11 +894,11 @@ def render_health_history_page(csrf, status):
         ('API',
          ('api_requests', 'api_commands', 'api_failures'),
          ()),
-        ('Upgrades', (), ('last_update_result',)),
+        ('Updates', (), ('last_update_result',)),
     )
     grouped = []
     shown_counters = set()
-    # Scheduler persistence is shown on Upgrades, not duplicated as health data.
+    # Scheduler persistence is shown on Updates, not duplicated as health data.
     shown_observations = {'last_release_check'}
 
     def health_item(key, value, label=None):
@@ -911,7 +911,7 @@ def render_health_history_page(csrf, status):
 
     def update_result_items(value):
         if not isinstance(value, dict) or not value:
-            return health_item('last_update_result', 'No upgrade recorded')
+            return health_item('last_update_result', 'No update recorded')
         rows = []
         for key, label in (
             ('kind', 'Type'), ('result', 'Result'), ('version', 'Version'),
@@ -926,7 +926,7 @@ def render_health_history_page(csrf, status):
                 label
             ))
         return ''.join(rows) or health_item(
-            'last_update_result', 'No upgrade recorded'
+            'last_update_result', 'No update recorded'
         )
 
     for title, counter_keys, observation_keys in data_groups:
@@ -1002,7 +1002,7 @@ def render_health_history_page(csrf, status):
     body = (
         portal_ui.page_heading(
             'Maintenance', 'Health history',
-            'Persistent reset, connectivity, memory, MQTT, API and upgrade health information.'
+            'Persistent reset, connectivity, memory, MQTT, API and update health information.'
         ) + '<section class="card"><div class="section-title"><h2>Health data</h2>'
         '<span class="badge">Updated ' + html_escape(_health_time_text(
             _latest_health_time(health), timezone_name

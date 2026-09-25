@@ -259,6 +259,18 @@ class V3OperationalQualificationTests(unittest.TestCase):
         with self.assertRaises(QualificationError):
             self.recorder.restart_failed_gate('certificate-renewal', 'admin', ' ', 0)
 
+    def test_canary_failure_can_be_reset_after_active_pause_is_cleared(self):
+        self.recorder.sample('healthy', 200, True, canary_paused=True)
+
+        result = self.recorder.restart_failed_gate(
+            'canary-health', 'admin', 'Fleet pause reviewed', 0, False
+        )
+
+        gate = next(item for item in result['gates'] if item['name'] == 'canary-health')
+        self.assertEqual(gate['status'], 'not-run')
+        retry = self.recorder.retry_history()[-1]
+        self.assertEqual(retry['gate'], 'canary-health')
+
     def test_close_releases_all_owned_namespaces(self):
         self.assertEqual(self.recorder.close(), 3)
         self.assertTrue(self.namespace.closed)

@@ -155,10 +155,13 @@ class AlphaQualificationService:
     def record_validation(self, name, successful):
         return self._record('record_validation', name, successful)
 
-    def restart_failed_gate(self, name, actor, reason, generation):
+    def restart_failed_gate(self, name, actor, reason, generation,
+                            canary_paused=None):
         if not self.start():
             raise ValueError('qualification recorder unavailable: ' + self.error)
-        return self.recorder.restart_failed_gate(name, actor, reason, generation)
+        return self.recorder.restart_failed_gate(
+            name, actor, reason, generation, canary_paused
+        )
 
     def _record(self, method, *values):
         if not self.start():

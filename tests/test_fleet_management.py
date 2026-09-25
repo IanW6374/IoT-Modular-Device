@@ -67,11 +67,27 @@ class FleetManagementTests(unittest.TestCase):
         self.assertEqual(snapshot['pending_commands'][0]['id'], 'command-1')
         self.assertEqual(
             service.command_release(snapshot['pending_commands'][0], 'stable'),
-            ('alpha', 0),
+            ('alpha', 0, ''),
         )
 
         service.complete_command('command-1', 'complete')
         self.assertEqual(service.pending_commands(), [])
+
+    def test_format_two_command_targets_an_update_type(self):
+        policy = self.policy()
+        policy['format_version'] = 2
+        policy['commands'][0]['release_type'] = 'universal'
+        policy['signature'] = update_security.sign_manifest(
+            'fleet-policy', policy, self.private_key
+        )
+
+        service = self.service()
+        snapshot = service.apply_policy(policy)
+
+        self.assertEqual(
+            service.command_release(snapshot['pending_commands'][0], 'stable'),
+            ('alpha', 0, 'universal'),
+        )
 
     def test_microcontroller_epoch_is_normalised_for_policy_validity(self):
         unix_now = self.now

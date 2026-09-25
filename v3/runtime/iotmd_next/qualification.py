@@ -595,7 +595,8 @@ class OperationalQualification:
         self._require_started()
         return self._history['retry_generation']
 
-    def restart_failed_gate(self, name, actor, reason, generation):
+    def restart_failed_gate(self, name, actor, reason, generation,
+                            canary_paused=None):
         """Archive failed evidence before clearing only its active test window."""
         self._require_started()
         if self._history_namespace is None:
@@ -608,7 +609,7 @@ class OperationalQualification:
         gate = next((item for item in evidence['gates'] if item['name'] == name), None)
         if gate is None or gate['status'] != 'failed':
             raise QualificationError('only a failed qualification gate can be restarted')
-        if name == 'canary-health':
+        if name == 'canary-health' and canary_paused is not False:
             raise QualificationError('resolve the active canary pause; this gate clears automatically')
         if name == 'paired-updates' and self._campaign is None:
             raise QualificationError('persistent campaign is required to preserve canary evidence')
@@ -625,7 +626,9 @@ class OperationalQualification:
         if name in VALIDATION_COUNTERS:
             keys = tuple(VALIDATION_COUNTERS[name] + suffix for suffix in
                          ('_attempts', '_successes', '_failures'))
-        if not keys:
+        if name == 'canary-health':
+            keys = ()
+        if keys is None:
             raise QualificationError('this qualification gate cannot be restarted')
         now = _integer(int(self._now()), 'qualification time', 1)
         archived = dict(self._history)
@@ -648,7 +651,9 @@ class OperationalQualification:
         except Exception:
             self._history = previous_history
             raise
-        campaign = self._campaign is not None and all(key in CAMPAIGN_COUNTERS for key in keys)
+        campaign = bool(keys) and self._campaign is not None and all(
+            key in CAMPAIGN_COUNTERS for key in keys
+        )
         previous = self._campaign if campaign else self._state
         updated = dict(previous)
         updated['counters'] = dict(previous['counters'])
@@ -656,7 +661,9 @@ class OperationalQualification:
             updated['counters'][key] = 0
         if not campaign:
             updated['gate_started_at'] = dict(previous['gate_started_at'])
-            if name in ('health', 'storage'):
+            if name == 'canary-health':
+                updated['canary_paused'] = False
+            elif name in ('health', 'storage'):
                 updated['gate_started_at'][name] = now
             if name == 'storage':
                 updated['minimum_storage_free_bytes'] = None

@@ -793,7 +793,7 @@ async def start_web_portal(portal):
                     )
                 else:
                     await action_response.send(
-                        '200 OK', 'Upgrade preferences saved',
+                        '200 OK', 'Update preferences saved',
                         redirect='/update-settings'
                     )
             elif method == 'POST' and route in ('/revoke-api-client', '/update-api-client-scopes'):
@@ -919,18 +919,17 @@ async def start_web_portal(portal):
                 ))
             elif method == 'POST' and path.startswith('/set-loglevel'):
                 try:
-                    apply_logging_change(
-                        form_params.get('level', ''),
-                        form_params.get('log_buffer_lines', 200), levels,
-                        loglevel_setter, log_buffer_lines_setter, log_output
-                    )
+                    level = str(form_params.get('level', '')).upper()
+                    if level not in levels:
+                        raise ValueError('invalid log level')
+                    apply_loglevel_change(level, loglevel_setter, log_output)
                 except (ValueError, RuntimeError) as exc:
                     await send_response(
                         writer, '400 Bad Request', str(exc), 'text/plain'
                     )
                 else:
                     await action_response.send(
-                        '200 OK', 'Log settings applied', redirect='/logging'
+                        '200 OK', 'Log level changed to ' + level
                     )
             elif path.startswith('/update-progress'):
                 requested_id = parse_query(path).get('id', '')
@@ -1122,7 +1121,7 @@ async def start_web_portal(portal):
                 )
                 message = result.get('message', '') if isinstance(result, dict) else str(result or '')
                 await action_response.send(
-                    '200 OK', message or 'Staged upgrade discarded',
+                    '200 OK', message or 'Staged update discarded',
                     redirect='/updates'
                 )
             elif method == 'POST' and path.startswith('/rollback-application'):

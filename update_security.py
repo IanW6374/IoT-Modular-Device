@@ -357,6 +357,8 @@ def manifest_message(bundle_type, manifest):
                 str(command.get('action', '')),
                 str(command.get('release_sequence', '')),
             ))
+            if format_version >= 2:
+                fields.append(str(command.get('release_type', '')))
     else:
         raise ValueError('unsupported signed message type: ' + str(bundle_type))
     return ('\n'.join(fields) + '\n').encode()

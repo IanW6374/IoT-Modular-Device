@@ -2165,11 +2165,11 @@ async def fleet_policy_monitor():
         for command in fleet_service.pending_commands():
             identifier = command.get('id', '')
             action = command.get('action', '')
-            policy_channel, target_sequence = fleet_service.command_release(command, release_channel)
+            policy_channel, target_sequence, target_type = fleet_service.command_release(command, release_channel)
             if action == 'activate-update' and not fleet_service.within_maintenance_window(): continue
             try:
                 if action == 'check-update':
-                    await check_release_once(False, policy_channel, target_sequence)
+                    await check_release_once(False, policy_channel, target_sequence, target_type)
                 elif action == 'download-update':
                     await download_release_once()
                 elif action == 'activate-update':
@@ -2292,7 +2292,7 @@ async def complete_portal_update(identifier, progress_callback=None):
         raise
 
 
-async def _check_release_once(channel=None, target_sequence=0):
+async def _check_release_once(channel=None, target_sequence=0, target_type=''):
     global release_available, release_available_choices
     catalogs = await release_update.fetch_release_catalogs(
         release_manifest_url, str(channel or release_channel), release_ca_cert_path)
@@ -2314,6 +2314,8 @@ async def _check_release_once(channel=None, target_sequence=0):
                 item for item in releases
                 if int(item.get('release_sequence', 0) or 0) == sequence
             ]
+        if target_type:
+            releases = [item for item in releases if str(item.get('type', '')) == str(target_type)]
         applicable = []
         for candidate in releases:
             if candidate.get('type') == 'application' and not release_update.application_release_applicable(
@@ -2557,7 +2559,8 @@ async def start_admin_portal():
             'restart.request': request_pending_restart,
             'shutdown.request': request_device_shutdown,
             'qualification.get': qualification_service.status,
-            'qualification.restart': qualification_service.restart_failed_gate,
+            'qualification.restart': lambda name, actor, reason, generation: qualification_service.restart_failed_gate(
+                name, actor, reason, generation, bool(fleet_service.state.get('rollout_paused', False))),
             'qualification.event': qualification_controls.record,
             'qualification.scenario': qualification_controls.scenario,
         })

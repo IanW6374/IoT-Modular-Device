@@ -53,11 +53,14 @@ async def complete_resumable_update(identifier, complete, record, log_output):
 def render_refresh_controls_html(button_id='refresh-toggle', refresh_scope='log and value'):
     return (
         '<div class="refresh-controls">' +
-        '<span class="badge good refresh-status">auto refresh</span>' +
         '<button id="' + html_escape(button_id) + '" class="secondary compact refresh-toggle" type="button" ' +
         'title="Pause or resume ' + html_escape(refresh_scope) + ' auto refresh.">Pause</button>' +
         '</div>'
     )
+
+
+def render_refresh_status_html():
+    return '<span class="badge good refresh-status">Live · just updated</span>'
 
 def display_release_version(value):
     """Remove internal core and MicroPython decoration from a release label."""
@@ -79,13 +82,13 @@ def release_offer_text(status):
         version = display_release_version(version)
     paired = status.get('paired_update', {}) or {}
     if int(paired.get('total_steps', 0) or 0) > 1:
-        return 'Paired upgrade (core + application)', version
+        return 'Paired update (core + application)', version
     labels = {
-        'application': 'Application upgrade',
-        'firmware': 'Core firmware upgrade',
-        'universal': 'Universal upgrade',
+        'application': 'Application update',
+        'firmware': 'Core firmware update',
+        'universal': 'Universal update',
     }
-    return labels.get(release_type, 'Upgrade'), version
+    return labels.get(release_type, 'Update'), version
 
 
 def release_offer_options(status):
@@ -114,7 +117,7 @@ def release_option_label(option):
         'application': 'Application',
         'firmware': 'Core firmware',
         'universal': 'Universal',
-    }.get(release_type, 'Upgrade')
+    }.get(release_type, 'Update')
     return version + ' — ' + kind
 
 def staged_version_text(status):
@@ -338,7 +341,7 @@ def render_update_summary_html(status, include_staged=True):
     if int(paired.get('total_steps', 0) or 0) > 1:
         paired_html = (
             '<p class="portal-status" role="status" aria-live="polite"><strong>'
-            'Paired upgrade</strong> — ' + html_escape(
+            'Paired update</strong> — ' + html_escape(
                 'Core' if paired.get('active_type') == 'firmware' else
                 portal_ui.capitalized(paired.get('active_type', ''))
             ) + ' ' + html_escape(paired.get('step', 0)) + ' of ' +
@@ -360,7 +363,7 @@ def render_update_summary_html(status, include_staged=True):
                 (' — ' + html_escape(entry.get('detail', '')) if entry.get('detail') else '') +
                 '</li>'
             )
-        history_html = '<details class="update-history"><summary>Recent upgrade history</summary><ul>' + ''.join(rows) + '</ul></details>'
+        history_html = '<details class="update-history"><summary>Recent update history</summary><ul>' + ''.join(rows) + '</ul></details>'
     update_is_staged = (
         status.get('universal_update_status') == 'ready' or
         status.get('firmware_update_status') == 'ready' or
@@ -412,14 +415,14 @@ def render_update_activation_html(status, token):
     options = ''
     if option_html:
         options = (
-            '<span class="update-options"><span class="update-options-label">Application upgrade options:</span>' +
+            '<span class="update-options"><span class="update-options-label">Application update options:</span>' +
             ''.join(option_html) + '</span>'
         )
     return (
         '<form action="/activate-update" method="post" class="update-activate">' +
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
         options +
-        '<button class="secondary" type="submit" title="Apply the selected overwrite options and restart into the staged upgrade. The previous application is retained for rollback.">Restart and install</button>' +
+        '<button class="secondary" type="submit" title="Apply the selected overwrite options and restart into the staged update. The previous application is retained for rollback.">Restart and install</button>' +
         '</form>'
     )
 
@@ -465,7 +468,7 @@ def render_release_check_html(status, token, select_only=False):
         release_type, available = release_offer_text(status)
         action = (
             '<a class="button secondary" href="/update-install">'
-            'Choose upgrade method</a>'
+            'Choose update method</a>'
             if select_only else
             '<form action="/download-release" method="post">' +
             '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
@@ -483,7 +486,7 @@ def render_release_check_html(status, token, select_only=False):
         '<form action="/check-release" method="post">' +
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
         '<button class="secondary" type="submit" title="Check the configured signed release channel now.">'
-        'Check for upgrades</button></form>'
+        'Check for updates</button></form>'
     )
     return download + check
 
@@ -555,18 +558,27 @@ def render_overview_status(status):
 
 
 def _qualification_retry_form(token, gate, generation):
-    if gate.get('status') != 'failed' or gate.get('name') == 'canary-health':
+    if gate.get('status') != 'failed':
         return ''
+    canary = gate.get('name') == 'canary-health'
+    summary = 'Reset blocked gate' if canary else 'Restart failed test'
+    button = 'Reset gate' if canary else 'Restart test'
+    confirmation = (
+        'The active canary pause has been resolved; archive this blocked result.'
+        if canary else
+        'Restart this test from zero; retain the failed result.'
+    )
     return (
-        '<details class="qualification-retry"><summary>Restart failed test</summary>'
+        '<details class="qualification-retry"><summary>' + summary + '</summary>'
         '<form data-portal-async data-portal-refresh-target="#qualification-workspace" data-portal-refresh-url="/release-qualification" data-portal-status="Restarting test…" action="/restart-qualification-gate" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<input type="hidden" name="gate" value="' + html_escape(gate['name']) + '">'
         '<input type="hidden" name="generation" value="' + html_escape(generation) + '">'
         '<label class="field">Reason for retry<input name="reason" required maxlength="160"></label>'
         '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
-        'Restart this test from zero; retain the failed result.</label>'
-        '<div class="actions"><span></span><button type="submit" data-busy-label="Restarting…">Restart test</button></div></form></details>'
+        + confirmation + '</label>'
+        '<div class="actions"><span></span><button type="submit" data-busy-label="Restarting…">' +
+        button + '</button></div></form></details>'
     )
 
 
@@ -770,7 +782,7 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
             'evidence and passes.</div><p class="muted">A later successful observation does not clear a '
             'latched failure. Restart failed test archives the failed evidence '
             'and requires fresh testing. Health and storage need a new full observation window. '
-            'An active canary pause must instead be resolved; that gate updates automatically.</p>'
+            'Canary Health can be reset after its active fleet pause has been resolved.</p>'
             '<div class="metrics qualification-gates">' +
             ''.join(rows) + '</div>' + qualification_controls + history_content +
             implementation_content + native_content
@@ -778,7 +790,7 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
     body = (
         portal_ui.page_heading(
             'Maintenance', 'Release qualification',
-            'Review soak, recovery, renewal, upgrade and canary evidence for this release.'
+            'Review soak, recovery, renewal, update and canary evidence for this release.'
         ) + '<div id="qualification-workspace">' + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>Promotion gates</h2></div>' +
         content + '</section></div>'
@@ -857,17 +869,16 @@ def render_logging_page(token, current_loglevel, levels, logs,
             'Maintenance', 'Device log',
             'Review live device logs and adjust runtime verbosity.'
         ) + _notice(message) +
-        '<section class="card"><div class="section-title"><h2>Logs</h2>'
+        '<section class="card"><div class="section-title"><div class="section-title-heading"><h2>Logs</h2>' +
+        render_refresh_status_html() + '</div>'
         '<div class="actions"><a class="button secondary compact" href="/download-logs">'
         'Download logs</a>' + render_refresh_controls_html(
             'log-refresh-toggle', 'log'
         ) + '</div></div>'
-        '<form data-portal-async action="/set-loglevel" method="post" class="log-toolbar">'
+        '<form id="log-level-form" data-portal-async data-portal-status="Changing log level…" action="/set-loglevel" method="post" class="log-toolbar">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
-        '<label>Log level <select name="level">' + options + '</select></label>'
-        '<label>Stored lines <input name="log_buffer_lines" type="number" min="0" max="500" '
-        'required value="' + html_escape(settings.get('log_buffer_lines', 200)) + '"></label>'
-        '<span data-portal-form-status class="portal-status action-form-status"></span><button class="secondary" type="submit" data-busy-label="Applying…">Apply</button></form>'
+        '<label>Log level <select id="log-level" name="level">' + options + '</select></label>'
+        '<span data-portal-form-status class="portal-status action-form-status"></span></form>'
         '<label class="log-filter">Filter displayed logs '
         '<input id="log-filter" type="search" value="' + html_escape(filter_text) + '" '
         'placeholder="Error, MQTT, module…"></label>'
@@ -876,15 +887,16 @@ def render_logging_page(token, current_loglevel, levels, logs,
     interval = max(1000, int(log_refresh_ms or 5000))
     script = (
         'var logRefreshPaused=false,logRefreshButton=document.getElementById("log-refresh-toggle"),'
-        'logRefreshState=document.querySelector(".refresh-status");'
+        'logRefreshState=document.querySelector(".refresh-status"),logLastUpdated=new Date();'
         'var logFilter=document.getElementById("log-filter"),latestLogs=document.getElementById("logs").textContent;'
+        'document.getElementById("log-level").onchange=function(){document.getElementById("log-level-form").requestSubmit();};'
         'function filteredLogs(text){var term=String(logFilter.value||"").trim().toLowerCase();if(!term)return text;'
         'return String(text).split("\\n").filter(function(line){return line.toLowerCase().indexOf(term)>=0;}).join("\\n");}'
         'function showLogs(text,follow){var e=document.getElementById("logs");latestLogs=String(text);'
         'e.textContent=filteredLogs(latestLogs);if(follow)e.scrollTop=e.scrollHeight;}'
         'logFilter.oninput=function(){showLogs(latestLogs,false);};'
         'function updateLogRefresh(){logRefreshButton.textContent=logRefreshPaused?"Resume":"Pause";'
-        'logRefreshState.textContent=logRefreshPaused?"refresh paused":"auto refresh";'
+        'logRefreshState.textContent=(logRefreshPaused?"Paused · ":"Live · ")+logLastUpdated.toLocaleTimeString();'
         'logRefreshState.className=logRefreshPaused?"badge warn refresh-status":"badge good refresh-status";}'
         'logRefreshButton.onclick=function(){logRefreshPaused=!logRefreshPaused;updateLogRefresh();'
         'if(!logRefreshPaused)refreshLogs();};'
@@ -892,7 +904,7 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'function refreshLogs(){if(logRefreshPaused)return;var e=document.getElementById("logs"),b=nearBottom(e);'
         'fetch("/logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
-        'if(t!==null&&t!==undefined&&latestLogs!==t)showLogs(t,b);})'
+        'if(t!==null&&t!==undefined){if(latestLogs!==t)showLogs(t,b);logLastUpdated=new Date();updateLogRefresh();}})'
         '.catch(function(){});}portalAdaptivePoll(refreshLogs,' + str(interval) + ');updateLogRefresh();'
     )
     return portal_ui.shell('IoT-MD device log', 'logging', body, token, script)
@@ -921,7 +933,8 @@ def render_audit_logging_page(token, logs, log_refresh_ms=5000):
             'Maintenance', 'Audit log',
             'Review security-relevant portal authentication and API connection events.'
         ) +
-        '<section class="card"><div class="section-title"><h2>Audit events</h2>'
+        '<section class="card"><div class="section-title"><div class="section-title-heading"><h2>Audit events</h2>' +
+        render_refresh_status_html() + '</div>'
         '<div class="actions"><a class="button secondary compact" '
         'href="/download-audit-logs">Download audit log</a>' +
         render_refresh_controls_html('audit-refresh-toggle', 'audit') +
@@ -931,9 +944,9 @@ def render_audit_logging_page(token, logs, log_refresh_ms=5000):
     interval = max(1000, int(log_refresh_ms or 5000))
     script = (
         'var auditRefreshPaused=false,auditRefreshButton=document.getElementById("audit-refresh-toggle"),'
-        'auditRefreshState=document.querySelector(".refresh-status");'
+        'auditRefreshState=document.querySelector(".refresh-status"),auditLastUpdated=new Date();'
         'function updateAuditRefresh(){auditRefreshButton.textContent=auditRefreshPaused?"Resume":"Pause";'
-        'auditRefreshState.textContent=auditRefreshPaused?"refresh paused":"auto refresh";'
+        'auditRefreshState.textContent=(auditRefreshPaused?"Paused · ":"Live · ")+auditLastUpdated.toLocaleTimeString();'
         'auditRefreshState.className=auditRefreshPaused?"badge warn refresh-status":"badge good refresh-status";}'
         'auditRefreshButton.onclick=function(){auditRefreshPaused=!auditRefreshPaused;updateAuditRefresh();'
         'if(!auditRefreshPaused)refreshAuditLogs();};'
@@ -941,7 +954,8 @@ def render_audit_logging_page(token, logs, log_refresh_ms=5000):
         'function refreshAuditLogs(){if(auditRefreshPaused)return;var e=document.getElementById("audit-logs"),'
         'b=auditNearBottom(e);fetch("/audit-logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
-        'if(t!==null&&t!==undefined&&e.textContent!==t){e.textContent=t;if(b)e.scrollTop=e.scrollHeight;}})'
+        'if(t!==null&&t!==undefined){if(e.textContent!==t){e.textContent=t;if(b)e.scrollTop=e.scrollHeight;}'
+        'auditLastUpdated=new Date();updateAuditRefresh();}})'
         '.catch(function(){});}portalAdaptivePoll(refreshAuditLogs,' + str(interval) + ');updateAuditRefresh();'
     )
     return portal_ui.shell(
@@ -1077,7 +1091,7 @@ def render_update_preferences(csrf, settings):
         '>Automatically download applicable signed releases</label>'
         '<label class="check"><input type="checkbox" name="release_auto_activate"' + activate +
         '>Automatically activate verified releases</label>' +
-        portal_ui.save_actions('Save upgrade preferences') + '</form>'
+        portal_ui.save_actions('Save update preferences') + '</form>'
     )
 
 def update_preferences_script():
@@ -1102,20 +1116,20 @@ def update_upload_script():
         '"update-primary"),fileSelection=document.getElementById("update-file-selection"),'
         'fileGuidance=document.getElementById("update-file-guidance"),'
         'activeRequest=null,updateCancelled=false,uploadInProgress=false,pollTimer=null,uploadIds=[],stageList='
-        'document.getElementById("update-stage-list"),workflows={application:[["method","Manual upgrade selected"],'
+        'document.getElementById("update-stage-list"),workflows={application:[["method","Manual update selected"],'
         '["select","Select signed file"],["prepare","Prepare and hash file"],'
         '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
-        '["ready","Restart and install"]],firmware:[["method","Manual upgrade selected"],'
+        '["ready","Restart and install"]],firmware:[["method","Manual update selected"],'
         '["select","Select signed file"],["prepare","Prepare and hash file"],'
         '["upload_core","Upload core firmware"],["write_core","Write core firmware"],'
         '["verify_core","Verify core firmware"],["ready","Restart and install"]],universal:'
-        '[["method","Manual upgrade selected"],["select","Select signed file"],'
+        '[["method","Manual update selected"],["select","Select signed file"],'
         '["inspect","Inspect paired manifest"],'
         '["upload_core","Upload core firmware"],'
         '["write_core","Write core firmware"],["verify_core","Verify core firmware"],'
         '["upload_application","Upload application"],["verify_application","Verify and stage application"],'
         '["pair","Pair verified components"],["ready","Restart and install"]]},defaultWorkflow='
-        '[["method","Manual upgrade selected"],["select","Select signed file"],["upload","Upload release"],'
+        '[["method","Manual update selected"],["select","Select signed file"],["upload","Upload release"],'
         '["verify","Verify and stage"],'
         '["activate","Restart and install"]];'
         'function workflowKind(file){if(!file)return "";return /\\.iotuni$/i.test(file.name)?"universal":'
@@ -1152,14 +1166,14 @@ def update_upload_script():
         'out=document.getElementById("update-result");document.getElementById('
         '"update-file-name").textContent=selected?selected.name:"No file selected";cancelButton.disabled=!selected;'
         'cancelButton.hidden=!selected;primaryButton.hidden=false;primaryButton.disabled=!selected;'
-        'primaryButton.textContent="Stage upgrade";renderWorkflow(workflowKind(selected));'
+        'primaryButton.textContent="Stage update";renderWorkflow(workflowKind(selected));'
         'fileSelection.classList.toggle("has-selection",!!selected);'
         'fileGuidance.hidden=!!selected;'
         'if(selected){out.className="portal-status";out.textContent="";}};'
         'cancelButton.onclick=function(){updateCancelled=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";if(pollTimer)clearTimeout(pollTimer);'
         'if(activeRequest)activeRequest.abort();discardSessions();uploadForm.reset();document.getElementById("update-file-name").textContent='
         '"No file selected";cancelButton.disabled=true;cancelButton.hidden=true;primaryButton.hidden=false;primaryButton.disabled=true;'
-        'primaryButton.textContent="Stage upgrade";fileSelection.classList.remove("busy");'
+        'primaryButton.textContent="Stage update";fileSelection.classList.remove("busy");'
         'fileSelection.classList.remove("has-selection");'
         'fileGuidance.hidden=false;'
         'renderWorkflow("");document.getElementById("update-result").className="portal-status";'
@@ -1169,7 +1183,7 @@ def update_upload_script():
         'primaryButton.hidden=true;cancelButton.disabled=false;cancelButton.hidden=false;fileSelection.classList.add("busy");var input='
         'document.getElementById("update-bundle"),f=input.files&&input.files[0],out=document.getElementById('
         '"update-result");if(!f){portalRequire(input,'
-        '"Choose a .iotapp, .iotcore or .iotuni upgrade bundle");primaryButton.disabled=true;'
+        '"Choose a .iotapp, .iotcore or .iotuni update bundle");primaryButton.disabled=true;'
         'primaryButton.hidden=false;cancelButton.disabled=true;cancelButton.hidden=true;fileSelection.classList.remove('
         '"busy");return;}var firmware=/\\.iotcore$/i.test(f.name),'
         'application=/\\.iotapp$/i.test(f.name),universal=/\\.iotuni$/i.test(f.name);'
@@ -1189,19 +1203,19 @@ def update_upload_script():
         'input.value="";document.getElementById("update-file-name").textContent="No file selected";'
         'fileGuidance.hidden=false;fileSelection.classList.remove("busy");cancelButton.disabled=true;cancelButton.hidden=true;'
         'fileSelection.classList.remove("has-selection");'
-        'primaryButton.hidden=false;primaryButton.disabled=true;primaryButton.textContent="Stage upgrade";}'
-        'if(!firmware&&!application&&!universal){terminalFailure("Choose a .iotapp, .iotcore or .iotuni upgrade bundle.");'
+        'primaryButton.hidden=false;primaryButton.disabled=true;primaryButton.textContent="Stage update";}'
+        'if(!firmware&&!application&&!universal){terminalFailure("Choose a .iotapp, .iotcore or .iotuni update bundle.");'
         'renderWorkflow("");return;}'
         'var selectedKind=universal?"universal":(firmware?"firmware":"application");configureWorkflow(selectedKind);'
         'out.className="portal-status";out.replaceChildren();'
         'var id="",polling=false,finished=false;function showStaged(){setStage("ready",1);return fetch('
         '"/updates?source=staged",{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){'
         'location.replace("/login?reason=expired");throw new Error("Session expired");}if(!r.ok)throw new Error('
-        '"Unable to load staged upgrade");return r.text();}).then(function(html){var parsed=new DOMParser().parseFromString('
+        '"Unable to load staged update");return r.text();}).then(function(html){var parsed=new DOMParser().parseFromString('
         'html,"text/html"),fresh=parsed.querySelector("main .card"),current=uploadForm.closest(".card");if(!fresh||!current)'
-        'throw new Error("Staged upgrade view is unavailable");history.replaceState(null,"","/updates?source=staged");'
+        'throw new Error("Staged update view is unavailable");history.replaceState(null,"","/updates?source=staged");'
         'current.replaceWith(fresh);var restart=fresh.querySelector(".upgrade-stage-action button");if(restart)restart.focus();'
-        '}).catch(function(){out.className="portal-status success";out.textContent="Upgrade staged. You can leave this page and restart later.";});}'
+        '}).catch(function(){out.className="portal-status success";out.textContent="Update staged. You can leave this page and restart later.";});}'
         'function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
         'function startPolling(){if(polling)return;polling=true;poll();}function poll(){fetch("/update-progress?id="+encodeURIComponent(id),'
         '{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){location.replace('
@@ -1231,7 +1245,7 @@ def update_upload_script():
         'request.onload=function(){if(request.status===401){location.replace("/login?reason=expired");reject(new Error("Session expired"));return;}'
         'if(request.status<200||request.status>=300){reject(new Error(request.responseText||"Chunk upload failed"));return;}'
         'try{resolve(JSON.parse(request.responseText));}catch(error){reject(new Error("Invalid upload response"));}};'
-        'request.onerror=function(){reject(new Error("Chunk upload failed"));};request.onabort=function(){reject(new Error("Upgrade cancelled"));};'
+        'request.onerror=function(){reject(new Error("Chunk upload failed"));};request.onabort=function(){reject(new Error("Update cancelled"));};'
         'request.onloadend=function(){if(activeRequest===request)activeRequest=null;};request.send(blob);});}'
         'function sendChunk(offset){var uploadStage=firmware?"upload_core":"upload_application";if(offset>=f.size){'
         'setStage(uploadStage,1);'
@@ -1334,7 +1348,7 @@ def _upgrade_steps(kind, method=''):
         'Select version' if str(method).lower() == 'automatic'
         else 'Select signed file'
     )
-    return (str(method) + ' upgrade selected', selection) + steps
+    return (str(method) + ' update selected', selection) + steps
 
 
 def _upgrade_step_list(steps, active=0, completed=0, identifier='',
@@ -1400,7 +1414,7 @@ def _upgrade_check_badge(status, identifier=''):
     elif check == 'Checking':
         label = 'Checking…'
     elif status.get('release_available_version') or check == 'Release available':
-        label, tone = 'Upgrade available', ' good'
+        label, tone = 'Update available', ' good'
     elif check != 'Not checked':
         label, tone = 'Up to date', ' good'
     return (
@@ -1427,16 +1441,16 @@ def render_upgrade_history(status):
             '</li>'
         )
     return (
-        '<section class="card"><div class="section-title"><h2>Upgrade history</h2></div>' +
+        '<section class="card"><div class="section-title"><h2>Update history</h2></div>' +
         ('<ul class="update-history">' + ''.join(rows) + '</ul>' if rows else
-         '<p class="muted">No upgrades or version checks recorded yet.</p>') + '</section>'
+         '<p class="muted">No updates or version checks recorded yet.</p>') + '</section>'
     )
 
 
 def _upgrade_method_choices(status, source=''):
     choices = [
         ('automatic', 'Automatic', 'Choose a version from the release server.'),
-        ('manual', 'Manual', 'Choose a signed upgrade file from this browser.'),
+        ('manual', 'Manual', 'Choose a signed update file from this browser.'),
     ]
     ready = _upgrade_ready(status)
     if ready:
@@ -1460,19 +1474,19 @@ def _upgrade_method_choices(status, source=''):
             '<' + tag + ' class="upgrade-method-choice"' + attributes + '><strong>' +
             title + '</strong>' + (_upgrade_check_badge(status, 'upgrade-check-result') if key == 'automatic' else '') +
             '<small>' + html_escape(
-                'Discard the staged upgrade to choose a new release.' if disabled else description
+                'Discard the staged update to choose a new release.' if disabled else description
             ) + '</small></' + tag + '>'
         )
-    return '<nav class="upgrade-method-choices" aria-label="Upgrade method">' + ''.join(items) + '</nav>'
+    return '<nav class="upgrade-method-choices" aria-label="Update method">' + ''.join(items) + '</nav>'
 
 
 def _upgrade_method_workspace(status):
     status = status or {}
     return (
-        '<section class="card"><div class="section-title"><h2>Select upgrade method</h2></div>'
+        '<section class="card"><div class="section-title"><h2>Select update method</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list((
-            'Select upgrade method', 'Select release', 'Verify and stage',
+            'Select update method', 'Select release', 'Verify and stage',
             'Restart and install',
         )) + '</aside><div class="upgrade-operation"><p class="muted">'
         'Select a method above to begin. New releases are verified and staged before you choose to restart.'
@@ -1486,20 +1500,20 @@ def _manual_upgrade_workspace(token):
         html_escape(token) + '"><div id="update-file-selection" class="upgrade-file-selection-fields">'
         '<input id="update-bundle" class="file-input-hidden" type="file" required '
         'accept=".iotapp,.iotcore,.iotuni"><label class="button secondary file-button" '
-        'for="update-bundle">Choose upgrade file</label>'
+        'for="update-bundle">Choose update file</label>'
         '<span class="selected-release-label">Selected file</span>'
         '<span id="update-file-name" class="file-name">No file selected</span>'
-        '<span id="update-file-guidance" class="file-guidance">Use a universal upgrade for '
+        '<span id="update-file-guidance" class="file-guidance">Use a universal update for '
         'routine updates. Application and core files are intended for recovery.</span>'
         '<span class="stage-only-hint">Staging does not restart the device.</span>'
         '<div class="upgrade-step-actions">'
-        '<button id="update-primary" type="submit" disabled>Stage upgrade</button></div></div></form>'
+        '<button id="update-primary" type="submit" disabled>Stage update</button></div></div></form>'
     )
     return (
-        '<section class="card"><div class="section-title"><h2>Manual upgrade</h2></div>'
+        '<section class="card"><div class="section-title"><h2>Manual update</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list(
-            ('Manual upgrade selected', 'Select signed file', 'Upload release',
+            ('Manual update selected', 'Select signed file', 'Upload release',
              'Verify and stage', 'Restart and install'), active=1, completed=1,
             identifier='update-stage-list', step_controls={1: selection}
         ) + '</aside><div class="upgrade-operation">'
@@ -1519,17 +1533,17 @@ def _automatic_upgrade_workspace(token, status):
         '<form id="upgrade-check-form" action="/check-release" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">' +
         '<div class="actions manual-upgrade-buttons"><button class="secondary" '
-        'type="submit">Check for upgrades</button></div></form>'
+        'type="submit">Check for updates</button></div></form>'
         if status.get('release_checks_enabled') else
         '<p class="muted">Configure the release server in <a href="/update-settings">'
-        'Upgrade settings</a> to check for upgrades.</p>'
+        'Update settings</a> to check for updates.</p>'
     )
     if not choices:
         return (
-            '<section class="card"><div class="section-title"><h2>Automatic upgrade</h2></div>'
+            '<section class="card"><div class="section-title"><h2>Automatic update</h2></div>'
             '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
             _upgrade_step_list((
-                'Automatic upgrade selected', 'Select version', 'Download release',
+                'Automatic update selected', 'Select version', 'Download release',
                 'Verify and stage', 'Restart and install',
             ), active=1, completed=1, step_controls={1: check}) +
             '</aside></div></section>'
@@ -1548,10 +1562,10 @@ def _automatic_upgrade_workspace(token, status):
         html_escape(token) + '"><select id="automatic-release-version-select" '
         'name="release_version" aria-label="Version" required>' + option_html + '</select>'
         '<span class="stage-only-hint">Stages only; restart when ready.</span>'
-        '<button type="submit">Stage upgrade</button></form>' + check + '</div>'
+        '<button type="submit">Stage update</button></form>' + check + '</div>'
     )
     return (
-        '<section class="card"><div class="section-title"><h2>Automatic upgrade</h2></div>'
+        '<section class="card"><div class="section-title"><h2>Automatic update</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list(
             steps, active=1, completed=1, identifier='automatic-stage-list',
@@ -1566,11 +1580,11 @@ def automatic_upgrade_selection_script():
         'function bindAutomaticSelection(){var automaticSelect=document.getElementById("automatic-release-version-select"),automaticSteps='
         'document.getElementById("automatic-stage-list"),automaticControl=document.getElementById('
         '"automatic-release-control");'
-        'var automaticFlows={application:["Automatic upgrade selected","Select version","Inspect signed release",'
+        'var automaticFlows={application:["Automatic update selected","Select version","Inspect signed release",'
         '"Download application","Verify and stage application","Restart and install"],firmware:'
-        '["Automatic upgrade selected","Select version","Inspect signed release","Download core firmware",'
+        '["Automatic update selected","Select version","Inspect signed release","Download core firmware",'
         '"Write core firmware","Verify core firmware","Restart and install"],universal:'
-        '["Automatic upgrade selected","Select version","Inspect paired manifest","Download core firmware",'
+        '["Automatic update selected","Select version","Inspect paired manifest","Download core firmware",'
         '"Write core firmware","Verify core firmware","Download application","Verify and stage application",'
         '"Pair verified components","Restart and install"]};'
         'function renderAutomaticFlow(){if(!automaticSelect)return;var option=automaticSelect.options['
@@ -1606,20 +1620,20 @@ def upgrade_check_script():
         'result.className="badge";result.textContent="Checking…";function failed(message){result.className="badge warn";'
         'result.textContent="Check failed";result.title=message;'
         'button.disabled=false;}function checked(s){result.textContent=s.message||"Check complete";'
-        'if(s.phase==="failed"){failed(s.message||"Upgrade check failed");return;}'
+        'if(s.phase==="failed"){failed(s.message||"Update check failed");return;}'
         'if(s.phase==="complete"){portalRefreshTarget("#upgrade-page-content","/updates?source=automatic",'
-        's.message||"Upgrade check complete");return;}'
+        's.message||"Update check complete");return;}'
         'setTimeout(function(){poll(s.id);},800);}function poll(id){fetch("/task-status?id="+'
         'encodeURIComponent(id),{cache:"no-store",credentials:"same-origin"}).then(read).then(function(s){'
-        's.id=id;checked(s);}).catch(function(){failed("Could not check upgrades. Please retry.");});}'
+        's.id=id;checked(s);}).catch(function(){failed("Could not check updates. Please retry.");});}'
         'function read(r){if(r.status===401){location.replace("/login?reason=expired");throw new Error();}'
         'if(!r.ok)throw new Error();return r.json();}'
         'fetch("/check-release",{method:"POST",credentials:"same-origin",headers:{'
         '"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},'
         'body:new URLSearchParams(new FormData(checkForm)).toString()}).then(read).then(function(s){'
         'if(s.task_id)poll(s.task_id);else portalRefreshTarget("#upgrade-page-content",'
-        '"/updates?source=automatic",s.message||"Upgrade check complete");'
-        '}).catch(function(){failed("Could not check upgrades. Please retry.");});};}'
+        '"/updates?source=automatic",s.message||"Update check complete");'
+        '}).catch(function(){failed("Could not check updates. Please retry.");});};}'
     )
 
 def _staged_update_workspace(token, status):
@@ -1631,10 +1645,10 @@ def _staged_update_workspace(token, status):
     )
     if not activation:
         return (
-            '<section class="card"><div class="section-title"><h2>No upgrade staged</h2></div>'
+            '<section class="card"><div class="section-title"><h2>No update staged</h2></div>'
             '<p class="muted">Check the signed release channel or upload a signed file first.</p>'
             '<div class="actions"><span></span><a class="button" href="/updates">'
-            'Find an upgrade</a></div></section>'
+            'Find an update</a></div></section>'
         )
     if status.get('universal_update_status') == 'ready':
         ready_steps = _upgrade_steps('universal')
@@ -1642,7 +1656,7 @@ def _staged_update_workspace(token, status):
         ready_steps = _upgrade_steps('firmware')
     else:
         ready_steps = _upgrade_steps('application')
-    ready_steps = ('Upgrade method selected', 'Release selected') + tuple(
+    ready_steps = ('Update method selected', 'Release selected') + tuple(
         step.replace('Upload ', 'Transfer ') for step in ready_steps
     )
     selected_release = (
@@ -1651,7 +1665,7 @@ def _staged_update_workspace(token, status):
         '<small>Staged and ready. Restart when ready.</small></div>'
     )
     return (
-        '<section class="card"><div class="section-title"><h2>Staged upgrade</h2></div>'
+        '<section class="card"><div class="section-title"><h2>Staged update</h2></div>'
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list(
             ready_steps, active=len(ready_steps) - 1,
@@ -1660,7 +1674,7 @@ def _staged_update_workspace(token, status):
         ) + '</aside><div class="upgrade-operation">'
         '<div class="actions manual-upgrade-buttons"><form data-portal-async '
         'data-portal-refresh-target="#upgrade-page-content" data-portal-refresh-url="/updates" '
-        'data-portal-status="Discarding staged upgrade…" action="/discard-update" method="post">'
+        'data-portal-status="Discarding staged update…" action="/discard-update" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<button class="danger" type="submit" data-busy-label="Discarding…">Discard</button></form></div>'
         '</div></div></section>'
@@ -1714,13 +1728,13 @@ def render_update_install_page(token, status=None, message='', error=False, sour
     )
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Upgrade',
+            'Maintenance', 'Update',
             'Select a method, stage a release, then restart when ready.'
         ) + '<div id="upgrade-page-content">' + _notice(message, error) + workspace +
         render_upgrade_history(status) + '</div>'
     )
     return portal_ui.shell(
-        'IoT-MD upgrade', 'updates', body, token, script
+        'IoT-MD update', 'updates', body, token, script
     )
 
 
@@ -1736,8 +1750,8 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
     )
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Upgrade',
-            'The selected signed upgrade is being downloaded, verified and staged.'
+            'Maintenance', 'Update',
+            'The selected signed update is being downloaded, verified and staged.'
         ) + '<section class="card"><div class="section-title"><h2>' +
         html_escape(title) + '</h2></div><div class="manual-upgrade-workspace">'
         '<aside class="upgrade-steps-panel">' +
@@ -1749,7 +1763,7 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         '<p id="upgrade-task-status" class="portal-status" role="status" aria-live="polite"></p>' +
         '<div class="actions manual-upgrade-buttons"><a id="upgrade-task-return" '
         'class="button secondary" href="' + html_escape(return_url) + '" hidden>'
-        'Return to upgrades</a></div></div></div></section>'
+        'Return to updates</a></div></div></div></section>'
     )
     script = (
         'var i=' + repr(str(task_id)) + ',b=document.getElementById("upgrade-task-status"),'
@@ -1774,9 +1788,9 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         '"complete":(k===n?"active":""),k<n?100:(k===n?percent:0));});}'
         'function showReady(){fetch(' + repr(str(return_url)) + ',{cache:"no-store",credentials:"same-origin"})'
         '.then(function(x){if(x.status===401){location.replace("/login");throw new Error("Session expired");}'
-        'if(!x.ok)throw new Error("Unable to load staged upgrade");return x.text();}).then(function(html){var parsed='
+        'if(!x.ok)throw new Error("Unable to load staged update");return x.text();}).then(function(html){var parsed='
         'new DOMParser().parseFromString(html,"text/html"),fresh=parsed.querySelector("main"),current=document.getElementById('
-        '"main-content");if(!fresh||!current)throw new Error("Staged upgrade view is unavailable");current.innerHTML='
+        '"main-content");if(!fresh||!current)throw new Error("Staged update view is unavailable");current.innerHTML='
         'fresh.innerHTML;history.replaceState(null,"",' + repr(str(return_url)) + ');var restart=current.querySelector('
         '".upgrade-stage-action button");if(restart)restart.focus();}).catch(function(){r.hidden=false;});}'
         'function poll(){fetch("/task-status?id="+encodeURIComponent(i),{cache:"no-store",credentials:'
@@ -1790,7 +1804,7 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         'setTimeout(poll,1200);});}poll();'
     )
     return portal_ui.shell(
-        'IoT-MD install upgrade', 'updates', body, token, script
+        'IoT-MD install update', 'updates', body, token, script
     )
 
 def render_persistent_task_route(
@@ -1802,7 +1816,7 @@ def render_persistent_task_route(
     current = task_status_getter(task_id) if task_status_getter else {}
     if route == '/update-task':
         return render_upgrade_task_page(
-            token, task_id, current.get('message', 'Processing upgrade'),
+            token, task_id, current.get('message', 'Processing update'),
             status, '/updates?source=staged'
         )
     return_route = '/' + str(params.get('return', 'updates')).lstrip('/')
@@ -1819,13 +1833,13 @@ def render_persistent_task_route(
 def render_update_settings_page(token, settings=None, message='', error=False):
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Upgrade settings',
+            'Maintenance', 'Update settings',
             'Configure the release channel, schedule, download and activation preferences.'
         ) + _notice(message, error) + '<section class="card">' +
         render_update_preferences(token, settings or {}) + '</section>'
     )
     return portal_ui.shell(
-        'IoT-MD upgrade settings', 'update_settings', body, token,
+        'IoT-MD update settings', 'update_settings', body, token,
         update_preferences_script()
     )
 

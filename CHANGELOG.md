@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.65 - 2026-09-25
+
+- Rename the portal's user-facing Upgrade areas to Updates and delay pointer
+  submenu expansion so moving across the navigation no longer opens menus
+  accidentally; keyboard focus remains immediate and accessible.
+- Simplify live Device and Audit logging: place a timestamped live/paused badge
+  beside the section title, apply log-level changes immediately, and keep the
+  stored-line limit in Logging settings only.
+- Allow an administrator to reset a blocked Canary Health qualification gate
+  after the active fleet pause has been resolved, preserving the failed evidence
+  in the audited retry history and requiring fresh qualification evidence.
+- Add signed fleet-policy targeting for Application, Core and Universal update
+  types so Management Suite deployments cannot select a different artifact with
+  the same release sequence. Retain native ABI 6; sequence 2770.
+
 ## 3.0.0-alpha.64 - 2026-09-25
 
 - Restore reliable nested Maintenance submenus with delegated click handling

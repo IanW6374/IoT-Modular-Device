@@ -19,7 +19,7 @@ import update_security
 import timezone_rules
 
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 STATE_FORMAT_VERSION = 1
 DEFAULT_STATE_PATH = '.fleet-state.json'
 FLEET_VERIFICATION_KEY_PATH = '.fleet-verification-key'
@@ -54,7 +54,8 @@ def validate_policy_structure(policy):
     unknown = set(policy) - ALLOWED_POLICY_FIELDS
     if unknown:
         raise ValueError('unknown fleet policy field: ' + sorted(unknown)[0])
-    if policy.get('format_version') != FORMAT_VERSION:
+    policy_format = policy.get('format_version')
+    if policy_format not in (1, FORMAT_VERSION):
         raise ValueError('unsupported fleet policy format')
     if policy.get('target_board') != update_security.TARGET_BOARD:
         raise ValueError('fleet policy target board is invalid')
@@ -118,9 +119,10 @@ def validate_policy_structure(policy):
         raise ValueError('fleet policy commands are invalid')
     identifiers = set()
     for command in commands:
-        if not isinstance(command, dict) or set(command) != {
-            'id', 'action', 'release_sequence'
-        }:
+        expected_command_fields = {'id', 'action', 'release_sequence'}
+        if policy_format >= 2:
+            expected_command_fields.add('release_type')
+        if not isinstance(command, dict) or set(command) != expected_command_fields:
             raise ValueError('fleet policy command is invalid')
         identifier = str(command['id'])
         if not identifier or len(identifier) > 64 or identifier in identifiers:
@@ -131,6 +133,9 @@ def validate_policy_structure(policy):
         _bounded_integer(
             command['release_sequence'], 'command release sequence', 0, 2147483647
         )
+        if policy_format >= 2 and command['release_type'] not in (
+                '', 'application', 'firmware', 'universal'):
+            raise ValueError('fleet command release type is invalid')
     if policy.get('signature_scheme') != update_security.SIGNATURE_SCHEME:
         raise ValueError('fleet policy signature scheme is invalid')
     signature = str(policy.get('signature', '')).lower()
@@ -232,6 +237,7 @@ class FleetService:
         return (
             updates.get('channel') or default_channel,
             int(command.get('release_sequence', 0) or 0),
+            str(command.get('release_type', '') or ''),
         )
 
     def complete_command(self, identifier, result='complete', detail=''):

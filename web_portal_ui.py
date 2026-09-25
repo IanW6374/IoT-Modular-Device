@@ -55,8 +55,8 @@ PORTAL_CSS = (
     '.nav-submenu-trigger:after{content:"▸";margin-left:8px;font-size:.72rem}'
     '.nav-subgroup.open>.nav-submenu-trigger:after{content:"▾"}.nav-submenu{display:none;gap:2px;'
     'margin:0 0 3px 10px;padding:2px 0 2px 7px;border-left:2px solid var(--line)}'
-    '.nav-subgroup.open>.nav-submenu,.nav-subgroup:hover>.nav-submenu,'
-    '.nav-subgroup:focus-within>.nav-submenu{display:grid}.nav-submenu .nav-link{font-size:.84rem}'
+    '.nav-subgroup.open>.nav-submenu,.nav-subgroup:focus-within>.nav-submenu{display:grid}'
+    '.nav-submenu .nav-link{font-size:.84rem}'
     '.nav-menu-trigger{border:0;background:transparent;color:var(--muted);font-weight:650}'
     '.nav-menu-trigger:hover,.nav-menu-trigger[aria-current="page"]{background:var(--bg);color:var(--ink)}'
     '.device-status-dot{width:.62rem;height:.62rem;flex:0 0 .62rem;border-radius:50%;'
@@ -81,8 +81,7 @@ PORTAL_CSS = (
     'border:1px solid #91ccd2;border-radius:10px;background:#f3fbfc;color:var(--accent2);font-size:.78rem}'
     '.active-task[hidden]{display:none}.active-task a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
     '.active-task.failed{border-color:var(--bad);background:#fff7f7;color:var(--bad)}'
-    '.nav-group:hover>.nav-dropdown,.nav-group:focus-within>.nav-dropdown,'
-    '.nav-group.open>.nav-dropdown{display:grid;gap:2px}'
+    '.nav-group:focus-within>.nav-dropdown,.nav-group.open>.nav-dropdown{display:grid;gap:2px}'
     '.breadcrumb{display:flex;align-items:center;justify-content:flex-end;gap:7px;white-space:nowrap;'
     'margin:0 0 18px;color:var(--muted);font-size:.78rem}.breadcrumb a{color:var(--muted)}'
     '.breadcrumb-separator{color:#91a0a6}'
@@ -95,6 +94,8 @@ PORTAL_CSS = (
     'border:1px solid var(--line);border-radius:var(--radius);padding:23px;margin:17px 0;'
     'box-shadow:var(--shadow)}.section-title{display:flex;align-items:flex-end;'
     'justify-content:space-between;gap:16px;margin-bottom:12px}'
+    '.section-title-heading{display:flex;align-items:center;gap:9px;flex-wrap:wrap}'
+    '.section-title-heading h2{margin:0}'
     'h1,h2,h3{letter-spacing:-.025em}h1{margin:0}h2{font-size:1.15rem;margin:0 0 10px}'
     'h3{font-size:1rem;margin:0}.section-title h2{margin:0}'
     '.settings-subsection{margin-top:14px;padding:17px;border:1px solid var(--line);border-radius:12px;'
@@ -448,6 +449,19 @@ PORTAL_JS = (
     'var groups=document.querySelectorAll(".nav-group");function close(skip){for(var i=0;i<groups.length;i++){'
     'if(groups[i]===skip)continue;groups[i].classList.remove("open");var x=groups[i].querySelector('
     '".nav-menu-trigger");if(x)x.setAttribute("aria-expanded","false");}}'
+    'if(window.matchMedia&&window.matchMedia("(hover:hover)").matches){var hoverDelay=260,leaveDelay=180;'
+    'function hoverOpen(group,trigger){clearTimeout(group._navLeaveTimer);group._navHoverTimer=setTimeout('
+    'function(){close(group);group.classList.add("open");trigger.setAttribute("aria-expanded","true");},hoverDelay);}'
+    'function hoverClose(group,trigger){clearTimeout(group._navHoverTimer);group._navLeaveTimer=setTimeout('
+    'function(){if(!group.matches(":focus-within")){group.classList.remove("open");trigger.setAttribute('
+    '"aria-expanded","false");}},leaveDelay);}for(var gi=0;gi<groups.length;gi++){(function(group){var trigger='
+    'group.querySelector(":scope>.nav-menu-trigger");if(!trigger)return;group.addEventListener("mouseenter",function(){'
+    'hoverOpen(group,trigger);});group.addEventListener("mouseleave",function(){hoverClose(group,trigger);});})(groups[gi]);}'
+    'var subgroups=document.querySelectorAll(".nav-subgroup");for(var si=0;si<subgroups.length;si++){(function(group){'
+    'var trigger=group.querySelector(":scope>.nav-submenu-trigger");if(!trigger)return;group.addEventListener('
+    '"mouseenter",function(){clearTimeout(group._navLeaveTimer);group._navHoverTimer=setTimeout(function(){'
+    'group.classList.add("open");trigger.setAttribute("aria-expanded","true");},hoverDelay);});group.addEventListener('
+    '"mouseleave",function(){hoverClose(group,trigger);});})(subgroups[si]);}}'
     'document.addEventListener("click",function(e){var trigger=e.target&&e.target.closest?'
     'e.target.closest(".nav-menu-trigger,.nav-submenu-trigger"):null;if(!trigger){close();return;}'
     'e.stopPropagation();if(trigger.classList.contains("nav-submenu-trigger")){var subgroup=trigger.parentNode,'
@@ -570,7 +584,7 @@ LOGGING_NAVIGATION = (
 
 UPGRADE_NAVIGATION = (
     ('update_settings', '/update-settings', 'Settings'),
-    ('updates', '/updates', 'Upgrade'),
+    ('updates', '/updates', 'Update'),
 )
 
 
@@ -597,7 +611,7 @@ NAVIGATION = (
         ('maintenance_logging', '/logging', 'Logging', LOGGING_NAVIGATION),
         ('device_control', '/device-control', 'Power & reset'),
         ('release_qualification', '/release-qualification', 'Release qualification'),
-        ('maintenance_updates', '/updates', 'Upgrades', UPGRADE_NAVIGATION),
+        ('maintenance_updates', '/updates', 'Updates', UPGRADE_NAVIGATION),
         ('user_settings', '/user', 'Users'),
     )),
 )

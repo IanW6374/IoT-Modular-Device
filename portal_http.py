@@ -346,7 +346,7 @@ def apply_portal_action(action, path, action_handler, log_output, params=None):
 
 def log_upgrade_upload_failure(log_output, phase, exc):
     log_output(
-        'Local', 'Upgrade',
+        'Local', 'Update',
         {'log': 'Upload ' + str(phase) + ' failed - ' + str(exc), 'force': True},
         'ERROR'
     )
