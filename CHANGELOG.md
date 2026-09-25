@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.64 - 2026-09-25
+
+- Restore reliable nested Maintenance submenus with delegated click handling
+  and pointer/keyboard CSS fallbacks.
+- Keep controlled qualification actions aligned by placing the disruptive
+  scenario control at the bottom-right of its panel.
+- Make exact-sequence automatic and fleet-managed release checks compatible
+  with the already-loaded Alpha 62 native-core module, avoiding the Alpha 63
+  `for_release_sequence` attribute failure. Retain native ABI 6; sequence 2769.
+
 ## 3.0.0-alpha.63 - 2026-09-24
 
 - Apply the Upgrade page's concise workflow and in-place interaction model

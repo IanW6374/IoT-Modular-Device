@@ -56,6 +56,11 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "getattr(device_config, 'MINIMUM_ACTIVATION_HEAP_BYTES'", source
         )
 
+    def test_application_release_check_does_not_require_new_core_helper(self):
+        source = Path('iotmd_runtime.py').read_text()
+        self.assertNotIn('release_update.for_release_sequence', source)
+        self.assertIn("item.get('release_sequence', 0)", source)
+
     def test_qualification_controls_are_created_after_log_output(self):
         source = Path('iotmd_runtime.py').read_text()
         self.assertLess(

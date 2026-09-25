@@ -2306,7 +2306,14 @@ async def _check_release_once(channel=None, target_sequence=0):
         hardware_platform.runtime_version()
     )
     for releases in catalogs:
-        releases = release_update.for_release_sequence(releases, target_sequence)
+        # Do not require a helper that may be absent from the already-loaded
+        # native-core copy of release_update during an application-only update.
+        sequence = int(target_sequence or 0)
+        if sequence:
+            releases = [
+                item for item in releases
+                if int(item.get('release_sequence', 0) or 0) == sequence
+            ]
         applicable = []
         for candidate in releases:
             if candidate.get('type') == 'application' and not release_update.application_release_applicable(

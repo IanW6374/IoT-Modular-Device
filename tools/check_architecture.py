@@ -28,7 +28,9 @@ LINE_LIMITS = {
     'iotmd.py': 20,
     # Alpha 6 adds only compatibility-runtime wiring for the extracted
     # qualification service. The gate remains below the pre-v3 monolith size.
-    'iotmd_runtime.py': 3400,
+    # Alpha 64 keeps exact-sequence filtering inside the application boundary
+    # so it remains compatible with the already-loaded Alpha 62 core module.
+    'iotmd_runtime.py': 3410,
     # Source route handling remains readable here; the production builder
     # promotes the two largest dispatchers to independently loaded modules.
     # Alpha 63 adds JSON action responses while the compact route modules
