@@ -779,6 +779,11 @@ class WebPortalTests(unittest.TestCase):
 
         self.assertIn('Enable the mTLS device API', api)
         self.assertIn('Mutual TLS (required)', api)
+        api_listener = api.split('<h2>API listener</h2>', 1)[1].split('</section>', 1)[0]
+        self.assertIn('class="actions device-api-actions"', api_listener)
+        self.assertNotIn('settings-save-bar', api_listener)
+        self.assertIn('>Discard changes</button>', api_listener)
+        self.assertIn('>Save API settings</button>', api_listener)
         self.assertIn('CN=automation', api)
         self.assertIn('/revoke-api-client', api)
         self.assertIn('action="/update-api-client-scopes"', api)
@@ -805,8 +810,9 @@ class WebPortalTests(unittest.TestCase):
         html = render_settings_page('csrf', {})
         primary = html.split('aria-label="Primary"', 1)[1].split('</nav>', 1)[0]
 
-        for label in ('Device', 'Maintenance', 'Module', 'Status'):
+        for label in ('Device', 'Maintenance', 'Module'):
             self.assertIn('>' + label + '</button>', primary)
+        self.assertNotIn('>Status</button>', primary)
         self.assertNotIn('>User</button>', primary)
         self.assertNotIn('nav-menu-trigger" type="button" href=', primary)
         self.assertIn('aria-label="Device submenu"', html)
@@ -833,7 +839,6 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('aria-expanded="false">Certificates</button>', html)
         self.assertIn('aria-expanded="false">Logging</button>', html)
         self.assertIn('aria-label="Logging submenu"', html)
-        self.assertLess(primary.index('>Status</button>'), primary.index('>Device</button>'))
         self.assertLess(primary.index('>Device</button>'), primary.index('>Module</button>'))
         self.assertLess(primary.index('>Module</button>'), primary.index('>Maintenance</button>'))
         self.assertNotIn('aria-label="User submenu"', html)
@@ -1010,9 +1015,13 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('href="/logging-settings"', html)
         self.assertNotIn('name="log_buffer_lines"', html)
         self.assertNotIn('>Stored lines <input', html)
-        self.assertIn('class="badge good refresh-status">Live · just updated', html)
-        self.assertIn('id="log-level-form" data-portal-async', html)
+        self.assertIn('class="badge good refresh-status">INFO · Live · just updated', html)
+        self.assertIn('id="log-level-form" action="/set-loglevel"', html)
+        self.assertNotIn('id="log-level-form" data-portal-async', html)
         self.assertIn('requestSubmit()', html)
+        self.assertIn('activeLogLevel+" · "', html)
+        self.assertIn('placeholder="Filter text"', html)
+        self.assertNotIn('Log level changed to INFO', html)
         self.assertNotIn('>Apply</button>', html)
 
         certificates = web_portal.render_certificate_route(
@@ -2171,8 +2180,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<span>Viewer privileges</span>', personalised)
         self.assertIn('<span aria-hidden="true">VU</span>', personalised)
         self.assertIn('class="portal-identity nav-menu-trigger"', personalised)
-        self.assertIn('class="device-status-dot good"', personalised)
-        self.assertIn('aria-label="Device status: running"', personalised)
+        self.assertNotIn('class="device-status-dot', personalised)
+        self.assertNotIn('aria-label="Device status:', personalised)
         self.assertIn('data-session-timeout-ms="900000"', personalised)
         self.assertNotIn('<!--session-timeout-->', personalised)
         self.assertIn('<button disabled aria-disabled="true"', personalised)
@@ -2319,7 +2328,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('id="update-upload-form"', updates)
         self.assertNotIn('Back to update summary', updates)
         self.assertIn('id="update-upload-form"', manual_update)
-        self.assertIn('Stage update', manual_update)
+        self.assertIn('Start update', manual_update)
         self.assertIn(
             'Use a universal update for routine updates. '
             'Application and core files are intended for recovery.',
@@ -2327,7 +2336,7 @@ class WebPortalTests(unittest.TestCase):
         )
         self.assertIn('function terminalFailure(text)', manual_update)
         self.assertIn(
-            'id="update-primary" type="submit" disabled>Stage update',
+            'id="update-primary" form="update-upload-form" type="submit" disabled>Start update',
             manual_update,
         )
         self.assertNotIn('Universal .iotuni updates are recommended;', updates)
@@ -2340,6 +2349,10 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('class="manual-upgrade-workspace"', manual_update)
         self.assertIn('id="update-cancel"', manual_update)
         self.assertIn('id="update-cancel" class="danger" type="button" hidden>Discard', manual_update)
+        self.assertLess(
+            manual_update.index('id="update-primary"'),
+            manual_update.index('id="update-cancel"'),
+        )
         self.assertNotIn('>Cancel</button>', manual_update)
         self.assertNotIn('Working…</button>', manual_update)
         self.assertNotIn('Current task', manual_update)
@@ -2565,7 +2578,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Restart and install', staged_html)
         self.assertNotIn('Base firmware update', staged_html)
         self.assertNotIn('id="firmware-upload-form"', staged_html)
-        self.assertEqual(staged_html.count('>Restart and install</button>'), 2)
+        self.assertEqual(staged_html.count('>Restart and install</button>'), 1)
+        self.assertIn('class="upgrade-stage-action-control"><form', staged_html)
+        self.assertIn('background:var(--surface)', portal_ui.PORTAL_CSS)
         self.assertNotIn('Restart and install core firmware', staged_html)
         self.assertIn(
             'Application — 1.1 / Core firmware — mp-1.28.0', staged_html
@@ -2708,7 +2723,7 @@ class WebPortalTests(unittest.TestCase):
             'csrf', {}, source='manual'
         )
         self.assertIn('id="update-upload-form"', manual)
-        self.assertIn('Stage update', manual)
+        self.assertIn('Start update', manual)
         available = web_portal.render_updates_page('csrf', {
             'release_checks_enabled': True,
             'release_available_type': 'universal',
@@ -2720,6 +2735,14 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('action="/download-release"', available)
         self.assertIn('>Update available</span>', available)
         self.assertNotIn('Choose update method</a>', available)
+        failed_check = web_portal.render_updates_page('csrf', {
+            'release_checks_enabled': True,
+            'release_check_status': 'Check failed: temporary network error',
+            'update_status': 'idle',
+            'firmware_update_status': 'idle',
+        }, {})
+        self.assertIn('>Check required</span>', failed_check)
+        self.assertIn('title="Check failed: temporary network error"', failed_check)
         automatic = web_portal.render_update_install_page('csrf', {
             'release_checks_enabled': True,
             'release_available_type': 'universal',
@@ -2753,8 +2776,13 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('automaticSelect.onchange=renderAutomaticFlow', automatic)
         self.assertIn('button.textContent="Restart and install"', automatic)
         self.assertIn('button.disabled=true', automatic)
-        self.assertIn('>Stage update</button>', automatic)
+        self.assertIn('>Start update</button>', automatic)
         self.assertIn('action="/check-release"', automatic)
+        self.assertIn('bindUpgradeCheck();', automatic)
+        self.assertLess(
+            version_step.index('action="/check-release"'),
+            version_step.index('class="selected-release-label">Selected version'),
+        )
         self.assertIn('Automatic update selected', automatic)
         self.assertIn('Select version', automatic)
         self.assertIn('Inspect paired manifest', automatic)

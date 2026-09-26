@@ -460,8 +460,11 @@ def render_device_api_page(csrf, settings, message='', error=False):
         'required value="' + html_escape(settings.get('api_port', 8444)) + '"></label>'
         '<div class="property-row"><span>Authentication</span><strong>Mutual TLS (required)</strong></div>'
         '</div><p class="muted">A dedicated API client CA and at least one enrolled client '
-        'certificate are required. Configure these under Maintenance / Certificates.</p>' +
-        portal_ui.save_actions('Save API settings') +
+        'certificate are required. Configure these under Maintenance / Certificates.</p>'
+        '<div class="actions device-api-actions"><span class="portal-status action-form-status" '
+        'data-portal-form-status role="status" aria-live="polite"></span>'
+        '<div class="settings-save-controls"><button class="secondary" type="reset">Discard changes</button>'
+        '<button type="submit" data-busy-label="Saving…">Save API settings</button></div></div>'
         '</form></section><section id="device-api-clients" class="card"><div class="section-title">'
         '<h2>Enrolled clients</h2></div><div class="module-grid">' + ''.join(rows) +
         '</div></section>'

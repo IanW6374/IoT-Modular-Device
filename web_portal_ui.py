@@ -148,7 +148,8 @@ PORTAL_CSS = (
     '.settings-save-bar{position:sticky;z-index:3;bottom:12px;margin-top:18px;padding:10px 12px;'
     'border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.96);'
     'box-shadow:0 8px 24px rgba(17,42,52,.14)}.settings-save-controls{display:flex;gap:9px;'
-    'align-items:center;margin-left:auto}.action-form-status{margin:0;min-width:0}'
+    'align-items:center;margin-left:auto}.device-api-actions{margin-top:18px;padding:0}'
+    '.action-form-status{margin:0;min-width:0}'
     '.workflow-steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;'
     'margin:4px 0 22px;padding:0;list-style:none}.workflow-steps li{position:relative;display:grid;'
     'justify-items:center;gap:7px;padding:0 7px;color:var(--muted);font-size:.78rem;font-weight:700;'
@@ -265,7 +266,8 @@ PORTAL_CSS = (
     '.upgrade-stage-list li.complete{--step-progress:100%;--step-colour:var(--good);color:var(--good)}'
     '.upgrade-stage-list li.complete:not(:last-child):after{background:var(--good)}'
     '.upgrade-stage-action{flex-grow:1.6}.upgrade-stage-action-control{position:relative;z-index:1;display:flex;'
-    'align-items:center;align-self:center;justify-content:center}.upgrade-stage-action-control form{margin:0}'
+    'align-items:center;align-self:center;justify-content:center;padding:0 .35rem;background:var(--surface)}'
+    '.upgrade-stage-action-control form{margin:0}'
     '.upgrade-stage-action-control button{min-height:3.25rem;padding:7px 9px;font-size:.72rem;line-height:1.15}'
     '.upgrade-stage-step-control{grid-row:3;display:grid;justify-items:center;align-content:start;gap:7px;'
     'width:min(100%,16rem);margin-top:13px;text-align:center}.upgrade-file-selection,.upgrade-file-selection-fields,'
@@ -277,7 +279,8 @@ PORTAL_CSS = (
     '.upgrade-stage-step-control .file-name,.upgrade-stage-step-control .file-guidance,.stage-only-hint{'
     'display:block;font-size:.7rem;line-height:1.25}.upgrade-step-actions{display:flex;justify-content:center;gap:7px;'
     'flex-wrap:wrap}.upgrade-file-selection [hidden]{display:none}.selected-release-label{display:none;color:var(--accent2);font-size:.66rem;font-weight:800;'
-    'letter-spacing:.06em;text-transform:uppercase}.upgrade-file-selection-fields.has-selection .selected-release-label{'
+    'letter-spacing:.06em;text-transform:uppercase}.upgrade-version-selection .selected-release-label,'
+    '.upgrade-file-selection-fields.has-selection .selected-release-label{'
     'display:block}.upgrade-file-selection-fields.has-selection .file-name{width:100%;padding:9px 11px;border:2px solid '
     'var(--accent);border-radius:9px;background:#f3fbfc;color:var(--ink);font-size:.78rem;font-weight:800;'
     'overflow-wrap:anywhere}.upgrade-file-selection-fields.busy .file-button{display:none}'
@@ -391,7 +394,14 @@ PORTAL_CSS = (
     'width:100%;justify-content:flex-start;padding:10px;background:var(--surface);'
     'border:1px solid var(--line);border-radius:12px}.nav-actions.open{display:flex}'
     '.topbar{flex-wrap:wrap}.nav-link{flex:1 0 auto}.upgrade-method-choices{'
-    'grid-template-columns:repeat(2,minmax(0,1fr))}}'
+    'grid-template-columns:repeat(2,minmax(0,1fr))}'
+    '.upgrade-stage-list{flex-direction:column;min-width:0;gap:0}.upgrade-stage-list li{flex:none;'
+    'grid-template-columns:3.25rem minmax(0,1fr);grid-template-rows:auto;justify-items:stretch;align-items:center;'
+    'min-height:4.25rem;text-align:left}.upgrade-stage-name{align-items:center;justify-content:flex-start;'
+    'max-width:none;min-height:0;padding:8px 14px 8px 0;order:2}.upgrade-stage-ring{order:1}'
+    '.upgrade-stage-list li:not(:last-child):after{left:1.55rem;right:auto;top:50%;bottom:-50%;width:3px;height:auto}'
+    '.upgrade-stage-step-control{grid-column:1/-1;grid-row:auto;width:100%;margin:4px 0 12px;'
+    'padding-left:3.25rem;text-align:center}.upgrade-stage-step-control>*{max-width:15rem}}'
     '@media(max-width:600px){main{width:auto;margin:0 11px;padding:28px 0 44px}'
     '.brand-title{font-size:.9rem}.page-head{align-items:flex-start;flex-direction:column}'
     '.page-head h1{font-size:2rem}.actions,.controls{align-items:stretch}.actions>*{max-width:100%}'
@@ -402,13 +412,6 @@ PORTAL_CSS = (
     '.metric.wide{grid-column:1/-1;min-width:0}'
     '.upgrade-grid{grid-template-columns:1fr}'
     '.upgrade-method-choices{grid-template-columns:1fr}'
-    '.upgrade-stage-list{flex-direction:column;min-width:0;gap:0}.upgrade-stage-list li{flex:none;'
-    'grid-template-columns:3.25rem minmax(0,1fr);grid-template-rows:auto;justify-items:stretch;align-items:center;'
-    'min-height:4.25rem;text-align:left}.upgrade-stage-name{align-items:center;justify-content:flex-start;'
-    'max-width:none;min-height:0;padding:8px 14px 8px 0;order:2}.upgrade-stage-ring{order:1}'
-    '.upgrade-stage-list li:not(:last-child):after{left:1.55rem;right:auto;top:50%;bottom:-50%;width:3px;height:auto}'
-    '.upgrade-stage-step-control{grid-column:1/-1;grid-row:auto;width:100%;margin:4px 0 12px;'
-    'padding-left:3.25rem;text-align:center}.upgrade-stage-step-control>*{max-width:15rem}'
     '.identity-menu{margin-left:0}.card,.panel{padding:18px}.grid,.portal-user-grid{grid-template-columns:1fr}'
     '.settings-save-bar{bottom:7px;align-items:stretch}.settings-save-controls{width:100%;margin-left:0}'
     '.settings-save-controls>*{flex:1}.workflow-steps{grid-template-columns:1fr;gap:8px}'
@@ -589,10 +592,8 @@ UPGRADE_NAVIGATION = (
 
 
 NAVIGATION = (
-    ('status', '/', 'Status', (
-        ('overview', '/', 'Overview'),
-    )),
     ('device', '/device-api', 'Device', (
+        ('overview', '/', 'Overview'),
         ('device_api', '/device-api', 'Device API'),
         ('logging_settings', '/logging-settings', 'Logging'),
         ('messaging', '/messaging', 'MQTT'),
@@ -651,11 +652,11 @@ def capitalized(value):
 
 def brand():
     return (
-        '<div class="brand"><span class="brand-mark" aria-label="IoT-MD">'
+        '<a class="brand" href="/" aria-label="IoT-MD overview"><span class="brand-mark" aria-label="IoT-MD">'
         '<span aria-hidden="true">IoT</span><span aria-hidden="true">MD</span></span>'
         '<span class="brand-copy">'
         '<span class="eyebrow">IoT-MD</span><span class="brand-title">'
-        'IoT Modular Device</span></span></div>'
+        'IoT Modular Device</span></span></a>'
     )
 
 
@@ -871,7 +872,7 @@ def navigation(active, csrf):
         links.append(
             '<div class="nav-group"><button class="nav-link nav-menu-trigger" type="button" '
             'aria-haspopup="true" aria-expanded="false"' + current + '>' +
-            ('<!--device-status-->' if key == 'status' else '') + escape(label) + '</button>'
+            escape(label) + '</button>'
             '<div class="nav-dropdown" role="menu" aria-label="' + escape(label) +
             ' submenu">' + ''.join(child_links) + '</div></div>'
         )

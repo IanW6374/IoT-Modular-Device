@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.66 - 2026-09-26
+
+- Refine the Update workflow: keep update checks in place, align Automatic and
+  Manual selections, move the start action beside Discard, mask the progress
+  connector behind one primary restart control, and collapse the redundant
+  top-level Status menu into Device / Overview.
+- Show the active Device log level in its live badge, suppress successful
+  log-level notices, use `Filter text` as the filter example, and present the
+  Device API save/discard controls without a separate inset save bar.
+- Retain native ABI 6; sequence 2771.
+
 ## 3.0.0-alpha.65 - 2026-09-25
 
 - Rename the portal's user-facing Upgrade areas to Updates and delay pointer

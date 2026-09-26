@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import portal_live_views as views
 import portal_http
 import web_portal_ui as ui
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 STATUS = {
     'update_history': [{'time': 1700000000, 'event': 'confirmed', 'kind': 'universal', 'version': '3.0.0-alpha.34'}],
@@ -100,10 +100,10 @@ with sync_playwright() as p:
         page.set_viewport_size({'width': width, 'height': 1080})
         for route in ('/updates', '/updates?source=manual', '/updates?source=automatic',
                       '/updates?source=rollback', '/updates?fixture=staged'):
-            page.goto(base + route)
+            page.goto(base + route, wait_until='domcontentloaded', timeout=10000)
             page.wait_for_selector('.upgrade-stage-ring')
-            assert page.locator('h1').inner_text() == 'Upgrade'
-            assert page.get_by_role('heading', name='Upgrade history', exact=True).is_visible()
+            assert page.locator('h1').inner_text() == 'Update'
+            assert page.get_by_role('heading', name='Update history', exact=True).is_visible()
             assert page.locator('#upgrade-check-result').count() == 1
             assert page.locator('#upgrade-check-result').evaluate('''(badge)=>{
                 const card=badge.parentElement, title=card.querySelector('strong');
@@ -113,47 +113,55 @@ with sync_playwright() as p:
             }'''), (width, route, 'badge not top right')
             assert page.locator('.metric.update-status').count() == 0
             rings = page.locator('.upgrade-stage-ring').evaluate_all('(els)=>els.map(e=>({x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y}))')
-            assert len({round(r['y']) if width > 600 else round(r['x']) for r in rings}) == 1, (width, route, rings)
+            assert len({round(r['y']) if width > 900 else round(r['x']) for r in rings}) == 1, (width, route, rings)
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, route, 'overflow')
             assert page.locator('.upgrade-steps-panel').evaluate('(e)=>e.scrollWidth<=e.clientWidth'), (width, route, 'track overflow')
-            assert page.locator('.upgrade-operation').evaluate('(e)=>Array.from(e.querySelectorAll("button")).every(b=>b.getBoundingClientRect().bottom<=e.closest("section").getBoundingClientRect().bottom)'), (width, route, 'action outside card')
+            operation = page.locator('.upgrade-operation')
+            if operation.count():
+                assert operation.evaluate('(e)=>Array.from(e.querySelectorAll("button")).every(b=>b.getBoundingClientRect().bottom<=e.closest("section").getBoundingClientRect().bottom)'), (width, route, 'action outside card')
         print('CSP layout passed at', width, flush=True)
     page.set_viewport_size({'width': 1440, 'height': 1080})
-    page.goto(base + '/updates?source=manual')
+    page.goto(base + '/updates?source=manual', wait_until='domcontentloaded', timeout=10000)
     page.locator('#update-bundle').set_input_files({'name':'universal.iotuni', 'mimeType':'application/octet-stream','buffer':b'test'})
     assert page.locator('#update-stage-list li').count() == 10
-    assert page.locator('#update-primary').inner_text() == 'Stage upgrade'
+    assert page.locator('#update-primary').inner_text() == 'Start update'
     assert page.locator('#update-primary').is_enabled()
     page.evaluate('setMilestone(document.querySelector("#update-stage-list li.active"),"active",42)')
     assert page.locator('#update-stage-list li.active .upgrade-stage-percent').inner_text() == '42%'
     assert '42%' in page.locator('#update-stage-list li.active .upgrade-stage-ring').evaluate('(e)=>getComputedStyle(e).backgroundImage')
-    page.screenshot(path='build/alpha34-manual-desktop.png', full_page=True)
+    page.screenshot(path='build/update-manual-desktop.png', full_page=True)
     page.locator('#update-cancel').click()
     assert page.locator('#update-primary').is_disabled()
-    page.goto(base + '/updates?source=automatic')
+    page.goto(base + '/updates?source=automatic', wait_until='domcontentloaded', timeout=10000)
     assert page.locator('#automatic-stage-list li').count() == 10
     page.locator('#automatic-release-version-select').select_option('3.0.0-alpha.33')
     assert page.locator('#automatic-stage-list li').count() == 6
     page.locator('#automatic-release-version-select').select_option('3.0.0-alpha.34')
-    page.screenshot(path='build/alpha34-automatic-desktop.png', full_page=True)
-    with page.expect_navigation():
-        page.get_by_role('button', name='Check for upgrades', exact=True).click()
-    page.goto(base + '/updates?fixture=staged')
+    page.screenshot(path='build/update-automatic-desktop.png', full_page=True)
+    checked_url = page.url
+    page.get_by_role('button', name='Check for updates', exact=True).click()
+    expect(page.locator('#upgrade-check-result')).not_to_have_text('Checking…')
+    assert page.url == checked_url
+    page.goto(base + '/updates?fixture=staged', wait_until='domcontentloaded', timeout=10000)
     assert page.get_by_role('link', name='Staged', exact=False).count() == 1
     assert page.locator('.upgrade-stage-list li').count() == 10
     assert page.locator('.upgrade-stage-list li.complete').count() == 9
     assert '100%' in page.locator('.upgrade-stage-list li.complete .upgrade-stage-ring').first.evaluate('(e)=>getComputedStyle(e).backgroundImage')
-    page.screenshot(path='build/alpha34-staged-desktop.png', full_page=True)
-    page.goto(base + '/updates?fixture=empty')
+    assert page.locator('.upgrade-stage-action button').count() == 1
+    assert page.locator('.upgrade-stage-action-control').evaluate(
+        '(e)=>getComputedStyle(e).backgroundColor!=="rgba(0, 0, 0, 0)"'
+    )
+    page.screenshot(path='build/update-staged-desktop.png', full_page=True)
+    page.goto(base + '/updates?fixture=empty', wait_until='domcontentloaded', timeout=10000)
     assert page.locator('.upgrade-method-choice').count() == 2
     page.get_by_role('link', name='Automatic', exact=False).click()
-    assert page.get_by_role('button', name='Check for upgrades').count() == 1
+    assert page.get_by_role('button', name='Check for updates').count() == 1
     page.set_viewport_size({'width':390, 'height':844})
-    page.goto(base + '/updates?source=automatic')
-    page.screenshot(path='build/alpha34-automatic-mobile.png', full_page=True)
+    page.goto(base + '/updates?source=automatic', wait_until='domcontentloaded', timeout=10000)
+    page.screenshot(path='build/update-automatic-mobile.png', full_page=True)
     for width in (1440, 390):
         page.set_viewport_size({'width':width, 'height':1080})
-        page.goto(base + '/release-qualification')
+        page.goto(base + '/release-qualification', wait_until='domcontentloaded', timeout=10000)
         page.get_by_text('Restart failed test', exact=True).click()
         form = page.locator('form[action="/restart-qualification-gate"]')
         assert not form.evaluate('(e)=>e.checkValidity()')
