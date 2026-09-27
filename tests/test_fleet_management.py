@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 import fleet_management
+import management_trust
 import timezone_rules
 import update_security
 
@@ -65,7 +66,7 @@ class FleetManagementTests(unittest.TestCase):
         self.assertEqual(snapshot['policy_sequence'], 1)
         self.assertEqual(
             snapshot['verification_key_fingerprint'],
-            update_security.verification_key_fingerprint(str(self.key_path)),
+            management_trust.verification_key_fingerprint(str(self.key_path)),
         )
         self.assertTrue(snapshot['within_maintenance_window'])
         self.assertEqual(snapshot['pending_commands'][0]['id'], 'command-1')

@@ -44,6 +44,7 @@ CORE_FILES = (
     'portal_presenters.py',
     'portal_settings_views.py',
     'api_security.py',
+    'management_trust.py',
     'fleet_management.py',
     'configuration_profiles.py',
     'configuration_manager.py',

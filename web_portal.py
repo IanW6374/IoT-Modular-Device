@@ -1149,9 +1149,8 @@ async def start_web_portal(portal):
                     'check-release', action_path, action_handler, log_output, form_params
                 )
                 if headers.get('accept', '') == 'application/json':
-                    await send_response(writer, '200 OK', json.dumps(
-                        result if isinstance(result, dict) else {'message': str(result)}
-                    ), 'application/json')
+                    payload = result if isinstance(result, dict) else {'message': str(result)}
+                    await send_response(writer, '200 OK', json.dumps(payload), 'application/json')
                 elif isinstance(result, dict) and result.get('task_id'):
                     await send_redirect(
                         writer, '/task?id=' + str(result['task_id']) + '&return=updates'
@@ -1162,7 +1161,11 @@ async def start_web_portal(portal):
                 result = apply_portal_action(
                     'download-release', action_path, action_handler, log_output, form_params
                 )
-                if isinstance(result, dict) and result.get('task_id'):
+                if headers.get('accept', '') == 'application/json':
+                    await send_response(writer, '200 OK', json.dumps(
+                        result if isinstance(result, dict) else {'message': str(result)}
+                    ), 'application/json')
+                elif isinstance(result, dict) and result.get('task_id'):
                     await send_redirect(
                         writer, '/update-task?id=' + str(result['task_id'])
                     )

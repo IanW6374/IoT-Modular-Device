@@ -1609,10 +1609,14 @@ def _automatic_upgrade_workspace(token, status):
             steps, active=1, completed=1, identifier='automatic-stage-list',
             step_controls={1: version_control}
         ) +
-        '</aside><div class="upgrade-operation"><div class="actions manual-upgrade-buttons">'
+        '</aside><div class="upgrade-operation"><p id="automatic-update-status" class="portal-status" '
+        'role="status" aria-live="polite"></p><div class="actions manual-upgrade-buttons">'
         '<button form="automatic-download-form" type="submit">Start update</button>'
-        '<form action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
-        html_escape(token) + '"><button class="danger" type="submit">Discard</button></form>'
+        '<form data-portal-async data-portal-refresh-target="#upgrade-page-content" '
+        'data-portal-refresh-url="/updates" data-portal-status="Discarding update…" '
+        'action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
+        html_escape(token) + '"><button class="danger" type="submit" '
+        'data-busy-label="Discarding…">Discard</button></form>'
         '</div></div></div></section>'
     )
 
@@ -1651,6 +1655,51 @@ def automatic_upgrade_selection_script():
         'if(automaticSelect){automaticSelect.onchange=renderAutomaticFlow;renderAutomaticFlow();}}'
         'bindAutomaticSelection();document.addEventListener("portal:content-updated",function(event){if(event.detail&&'
         'event.detail.selector==="#upgrade-page-content")bindAutomaticSelection();});'
+    )
+
+
+def automatic_upgrade_download_script():
+    return (
+        'function bindAutomaticDownload(){var form=document.getElementById("automatic-download-form"),'
+        'out=document.getElementById("automatic-update-status"),steps=Array.from(document.querySelectorAll('
+        '"#automatic-stage-list li")),button=document.querySelector('
+        '"button[form=automatic-download-form]");if(!form||form.dataset.portalBound)return;'
+        'form.dataset.portalBound="1";function status(kind,message){if(!out)return;out.className="portal-status"+'
+        '(kind?" "+kind:"");out.textContent=message||"";}function setStep(x,state,percent){percent=Math.max(0,'
+        'Math.min(100,Math.round(Number(percent)||0)));var ring=x.querySelector(".upgrade-stage-ring");if(!ring){'
+        'x.className=(state?state+" ":"")+"upgrade-stage-action";if(state==="active")x.setAttribute('
+        '"aria-current","step");else x.removeAttribute("aria-current");return;}x.className=state;x.style.setProperty('
+        '"--step-progress",percent+"%");ring.setAttribute("aria-valuenow",String(percent));x.querySelector('
+        '".upgrade-stage-percent").textContent=percent+"%";if(state==="active")x.setAttribute('
+        '"aria-current","step");else x.removeAttribute("aria-current");}var position=1;function stage(message,percent){'
+        'var m=String(message||"").toLowerCase().replace(/_/g," "),n=2;if(m.indexOf("writing")>=0)n=4;else if('
+        'm.indexOf("verif")>=0&&(m.indexOf("core")>=0||m.indexOf("firmware")>=0))n=5;else if('
+        'm.indexOf("application")>=0&&m.indexOf("verif")>=0)n=steps.length-3;else if(m.indexOf("pair")>=0)'
+        'n=steps.length-2;else if(m.indexOf("download")>=0||m.indexOf("receiving")>=0)n='
+        'm.indexOf("application")>=0&&steps.length===10?6:3;else if(m.indexOf("verif")>=0)n=steps.length-2;'
+        'if(steps.length===6&&m.indexOf("verif")>=0)n=4;n=Math.min(n,Math.max(0,steps.length-2));if(n<position)'
+        'return;position=n;steps.forEach(function(x,k){setStep(x,k<n?"complete":(k===n?"active":""),'
+        'k<n?100:(k===n?percent:0));});status("",message||"Working…");}function failed(message){status("error",'
+        'message||"Update failed");if(button)button.disabled=false;}function poll(id){fetch("/task-status?id="+'
+        'encodeURIComponent(id),{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){'
+        'location.replace("/login?reason=expired");throw new Error("Session expired");}if(!r.ok)throw new Error('
+        '"Unable to read update status");return r.json();}).then(function(s){var message=s.message||s.phase||'
+        '"Working…",percent=typeof s.percent==="number"?s.percent:0;stage(message,percent);if(s.phase==="failed")'
+        '{failed(message);return;}if(s.phase==="complete"){steps.forEach(function(x,k){setStep(x,k<steps.length-1?'
+        '"complete":(k===steps.length-1?"active":""),k<steps.length-1?100:0);});portalRefreshTarget('
+        '"#upgrade-page-content","/updates?source=staged");return;}setTimeout(function(){poll(id);},600);}).catch('
+        'function(error){if(error.message!=="Session expired")setTimeout(function(){poll(id);},1200);});}'
+        'form.onsubmit=function(event){event.preventDefault();if(!form.reportValidity())return;steps=Array.from('
+        'document.querySelectorAll("#automatic-stage-list li"));position=1;if(button)button.disabled=true;'
+        'status("","Starting update…");fetch(form.action,{method:"POST",credentials:"same-origin",headers:{'
+        '"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams('
+        'new FormData(form)).toString()}).then(function(r){return r.text().then(function(body){var value={};try{value='
+        'body?JSON.parse(body):{};}catch(error){value={message:body};}if(r.status===401){location.replace('
+        '"/login?reason=expired");throw new Error("Session expired");}if(!r.ok)throw new Error(value.error||value.message||'
+        '"Unable to start update");return value;});}).then(function(value){if(!value.task_id)throw new Error(value.message||'
+        '"Update task was not started");poll(value.task_id);}).catch(function(error){if(error.message!=="Session expired")'
+        'failed(error.message);});};}bindAutomaticDownload();document.addEventListener("portal:content-updated",'
+        'function(event){if(event.detail&&event.detail.selector==="#upgrade-page-content")bindAutomaticDownload();});'
     )
 
 
@@ -1764,7 +1813,8 @@ def render_update_install_page(token, status=None, message='', error=False, sour
         script = update_upload_script()
     elif source == 'automatic':
         workspace = _automatic_upgrade_workspace(token, status)
-        script = automatic_upgrade_selection_script() + upgrade_check_script()
+        script = (automatic_upgrade_selection_script() + upgrade_check_script() +
+                  automatic_upgrade_download_script())
     else:
         workspace = _upgrade_method_workspace(status)
         source = ''

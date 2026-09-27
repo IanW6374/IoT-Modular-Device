@@ -1,7 +1,7 @@
 """Certificate inventory and lifecycle alerts for the device application."""
 
 import certificate_enrollment_service
-import update_security
+import management_trust
 try:
     import uos as os
 except ImportError:
@@ -12,7 +12,7 @@ def _file_status(path, include_fingerprint=False):
     try:
         details = {'installed': os.stat(path)[6] > 0, 'size': os.stat(path)[6]}
         if include_fingerprint and details['installed']:
-            details['fingerprint'] = update_security.verification_key_fingerprint(path)
+            details['fingerprint'] = management_trust.verification_key_fingerprint(path)
         return details
     except OSError:
         return {'installed': False, 'size': 0}

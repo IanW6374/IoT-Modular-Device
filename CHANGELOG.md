@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.71 - 2026-09-27
+
+- Move Management signing-key fingerprint reporting into an application-owned
+  compatibility module so an application update does not require a new helper
+  from the retained native core.
+- Keep Automatic updates on the Updates page, start and poll the background
+  download within the existing progress graph, and transition in place to the
+  staged restart control. Retain the task route as a non-JavaScript fallback.
+- Retain native ABI 6; sequence 2776.
+
 ## 3.0.0-alpha.70 - 2026-09-27
 
 - Add a signed application-only dummy release for exercising the Alpha 69

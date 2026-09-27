@@ -1301,6 +1301,11 @@ class WebPortalTests(unittest.TestCase):
                             'task_id': 'release-check-1',
                             'message': 'Checking the signed release channel',
                         }
+                    if action == 'download-release':
+                        return {
+                            'task_id': 'release-download-1',
+                            'message': 'Downloading signed release',
+                        }
                     return ''
 
                 await web_portal.start_web_portal(PortalDependencies(
@@ -1614,6 +1619,19 @@ class WebPortalTests(unittest.TestCase):
                 self.assertIn('"task_id": "release-check-1"', inline_check)
                 self.assertNotIn('Location:', inline_check)
                 self.assertEqual(portal_actions[-1][0], 'check-release')
+                download_body = (
+                    'csrf=' + csrf_token + '&release_version=3.0.0-alpha.71'
+                ).encode()
+                inline_download = await request(
+                    ('POST /download-release HTTP/1.1\r\nCookie: iotmd_session=' +
+                     session_id + '\r\nAccept: application/json\r\nContent-Length: ' +
+                     str(len(download_body)) + '\r\n\r\n').encode() + download_body
+                )
+                self.assertIn('200 OK', inline_download)
+                self.assertIn('application/json', inline_download)
+                self.assertIn('"task_id": "release-download-1"', inline_download)
+                self.assertNotIn('Location:', inline_download)
+                self.assertEqual(portal_actions[-1][0], 'download-release')
                 action_count = len(portal_actions)
                 rejected_check = await request(
                     ('POST /check-release HTTP/1.1\r\nCookie: iotmd_session=' +
@@ -2801,6 +2819,11 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('>Discard</button>', automatic)
         self.assertIn('action="/check-release"', automatic)
         self.assertIn('bindUpgradeCheck();', automatic)
+        self.assertIn('bindAutomaticDownload();', automatic)
+        self.assertIn('fetch(form.action,{method:"POST"', automatic)
+        self.assertIn('portalRefreshTarget("#upgrade-page-content","/updates?source=staged")', automatic)
+        self.assertIn('id="automatic-update-status"', automatic)
+        self.assertIn('data-portal-refresh-target="#upgrade-page-content"', automatic)
         self.assertLess(
             version_step.index('action="/check-release"'),
             version_step.index('class="selected-release-label">Selected version'),

@@ -61,6 +61,18 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertNotIn('release_update.for_release_sequence', source)
         self.assertIn("item.get('release_sequence', 0)", source)
 
+    def test_management_fingerprint_does_not_require_new_core_helper(self):
+        for relative in (
+            'certificate_status.py', 'fleet_management.py', 'iotmd_runtime.py'
+        ):
+            source = Path(relative).read_text()
+            self.assertNotIn(
+                'update_security.verification_key_fingerprint', source
+            )
+            self.assertNotIn(
+                'update_security.verification_key_install_result', source
+            )
+
     def test_qualification_controls_are_created_after_log_output(self):
         source = Path('iotmd_runtime.py').read_text()
         self.assertLess(

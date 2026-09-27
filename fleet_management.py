@@ -16,6 +16,7 @@ except ImportError:
     time = None
 
 import update_security
+import management_trust
 import timezone_rules
 
 
@@ -273,7 +274,7 @@ class FleetService:
             'device_id': self.device_id,
             'cohort': self.cohort,
             'verification_key_fingerprint':
-            update_security.verification_key_fingerprint(self.key_path),
+            management_trust.verification_key_fingerprint(self.key_path),
             'within_maintenance_window': self.within_maintenance_window(),
             'pending_commands': self.pending_commands(),
         })

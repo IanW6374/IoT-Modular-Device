@@ -148,6 +148,10 @@ with sync_playwright() as p:
     page.get_by_role('button', name='Check for updates', exact=True).click()
     expect(page.locator('#upgrade-check-result')).not_to_have_text('Checking…')
     assert page.url == checked_url
+    page.get_by_role('button', name='Start update', exact=True).click()
+    page.wait_for_timeout(750)
+    assert page.url == checked_url
+    assert page.get_by_role('link', name='Return to updates', exact=True).count() == 0
     page.goto(base + '/updates?fixture=staged', wait_until='domcontentloaded', timeout=10000)
     assert page.get_by_role('link', name='Staged', exact=False).count() == 1
     assert page.locator('.upgrade-stage-list li').count() == 10

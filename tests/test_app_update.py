@@ -537,7 +537,7 @@ class AppUpdateTests(unittest.TestCase):
             'portal_live_views.py',
             'portal_module_transport.py',
             'portal_presenters.py', 'portal_settings_views.py',
-            'api_security.py', 'configuration_profiles.py',
+            'api_security.py', 'management_trust.py', 'configuration_profiles.py',
             'configuration_manager.py', 'api_contracts.py',
             'device_api.py', 'device_api_inventory.py', 'feature_flags.py',
             'network_transports.py', 'tls_sessions.py',
