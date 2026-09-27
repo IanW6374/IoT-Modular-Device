@@ -5,6 +5,8 @@ try:
 except ImportError:
     time = None
 
+_DOWNLOAD_CONTROL = {'active': False, 'discard': False}
+
 
 def _now():
     return int(time.time()) if time else 0
@@ -74,3 +76,38 @@ def progress(tasks, name):
         })
 
     return report
+
+
+def cancellable_progress(control, report=None):
+    """Wrap an optional progress reporter with a shared cancellation flag."""
+    async def notify(*values):
+        if control.get('discard'):
+            raise ValueError('update was discarded')
+        if report:
+            result = report(*values)
+            if result is not None:
+                await result
+    return notify
+
+
+def discard_update(discard):
+    """Request cancellation and discard any already staged update state."""
+    active = bool(_DOWNLOAD_CONTROL.get('active'))
+    _DOWNLOAD_CONTROL['discard'] = active
+    discarded = discard()
+    if active:
+        return 'Update discard requested'
+    return 'Staged upgrade discarded' if discarded else 'No staged upgrade to discard'
+
+
+def begin_cancellable(report=None):
+    _DOWNLOAD_CONTROL.update({'active': True, 'discard': False})
+    return cancellable_progress(_DOWNLOAD_CONTROL, report)
+
+
+def finish_cancellable(discard):
+    cancelled = bool(_DOWNLOAD_CONTROL.get('discard'))
+    _DOWNLOAD_CONTROL.update({'active': False, 'discard': False})
+    if cancelled:
+        discard()
+        raise ValueError('update was discarded')

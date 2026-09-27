@@ -14,7 +14,7 @@ OVERVIEW_FIELDS = (
     ('running_version', 'Application version'),
     ('firmware_running_version', 'Core version'),
     ('base_version', 'MicroPython version'),
-    ('release_qualification_summary', 'Release qualification'),
+    ('release_qualification_summary', 'Device qualification'),
 )
 
 

@@ -2073,22 +2073,18 @@ def portal_action(action, params):
             return 'Universal update activation failed: ' + detail
         schedule_hardware_reset('universal_update_reboot', 8000)
         return 'Universal core and application update staged; rebooting into trial versions'
-
     if action == 'discard-update':
-        return ('Staged upgrade cancelled' if update_service.discard_staged()
-                else 'No staged upgrade to cancel')
+        return portal_task_registry.discard_update(update_service.discard_staged)
     if action == 'rollback-application':
         try:
             result = app_update.rollback_to_previous()
         except Exception as exc:
             return 'Application rollback failed: ' + str(exc)
-
         schedule_hardware_reset('application_manual_rollback', 8000)
         return (
             'Application switched to slot ' + str(result.get('active', '')) +
             '; rebooting'
         )
-
     if action == 'check-release':
         if not release_manifest_url:
             return 'Release checks are not configured'
@@ -2417,6 +2413,7 @@ async def download_release_once(progress_callback=None):
     release = release_available
     if not release:
         raise ValueError('no checked release is available')
+    progress_callback = portal_task_registry.begin_cancellable(progress_callback)
     try:
         state = await release_update.stage_release(
             release, release_ca_cert_path,
@@ -2433,6 +2430,8 @@ async def download_release_once(progress_callback=None):
             release.get('version', '')
         )
         raise
+    finally:
+        portal_task_registry.finish_cancellable(update_service.discard_staged)
     update_orchestrator.mark_staged(release)
     logOutput(
         'Local', 'Release update',

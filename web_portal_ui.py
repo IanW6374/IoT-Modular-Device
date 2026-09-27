@@ -590,6 +590,13 @@ UPGRADE_NAVIGATION = (
     ('updates', '/updates', 'Update'),
 )
 
+QUALIFICATION_NAVIGATION = (
+    ('qualification_summary', '/release-qualification', 'Summary'),
+    ('qualification_tests', '/qualification-tests', 'Tests'),
+    ('qualification_evidence', '/qualification-evidence', 'Evidence'),
+    ('qualification_platform', '/qualification-platform', 'Platform'),
+)
+
 
 NAVIGATION = (
     ('device', '/device-api', 'Device', (
@@ -611,7 +618,8 @@ NAVIGATION = (
         ('health_history', '/health-history', 'Health history'),
         ('maintenance_logging', '/logging', 'Logging', LOGGING_NAVIGATION),
         ('device_control', '/device-control', 'Power & reset'),
-        ('release_qualification', '/release-qualification', 'Release qualification'),
+        ('device_qualification', '/release-qualification', 'Device qualification',
+         QUALIFICATION_NAVIGATION),
         ('maintenance_updates', '/updates', 'Updates', UPGRADE_NAVIGATION),
         ('user_settings', '/user', 'Users'),
     )),

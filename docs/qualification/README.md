@@ -63,3 +63,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.65 update UX and typed fleet deployment](v3.0.0-alpha.65.md)
 - [v3.0.0-alpha.66 portal interaction refinement](v3.0.0-alpha.66.md)
 - [v3.0.0-alpha.67 logging, API and qualification refinement](v3.0.0-alpha.67.md)
+- [v3.0.0-alpha.68 update and qualification workflow refinement](v3.0.0-alpha.68.md)

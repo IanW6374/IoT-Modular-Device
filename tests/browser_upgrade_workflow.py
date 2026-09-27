@@ -60,12 +60,18 @@ class Handler(BaseHTTPRequestHandler):
                 status.pop('release_available_version')
                 status.pop('release_available_options')
             body = views.render_updates_page('test-csrf', status, source=query.get('source', [''])[0])
-            if path.path == '/release-qualification':
+            qualification_sections = {
+                '/release-qualification': 'summary',
+                '/qualification-tests': 'tests',
+                '/qualification-evidence': 'evidence',
+                '/qualification-platform': 'platform',
+            }
+            if path.path in qualification_sections:
                 body = views.render_release_qualification_page('test-csrf', {
                     'available': True, 'summary': 'Blocked', 'retry_generation': 0,
                     'evidence': {'gates': [{'name': 'health', 'status': 'failed', 'observed': 200, 'required': 2400},
                                            {'name': 'storage', 'status': 'passed', 'observed': 2400, 'required': 2400}]},
-                })
+                }, section=qualification_sections[path.path])
             body = body.replace('<!--session-timeout-->', '3600000')
             body, headers = portal_http.secure_html_response(body, (), 'test-nonce')
         data = body.encode()
@@ -161,6 +167,10 @@ with sync_playwright() as p:
     page.screenshot(path='build/update-automatic-mobile.png', full_page=True)
     for width in (1440, 390):
         page.set_viewport_size({'width':width, 'height':1080})
+        for route in ('/release-qualification', '/qualification-tests',
+                      '/qualification-evidence', '/qualification-platform'):
+            page.goto(base + route, wait_until='domcontentloaded', timeout=10000)
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.goto(base + '/release-qualification', wait_until='domcontentloaded', timeout=10000)
         page.get_by_text('Restart failed test', exact=True).click()
         form = page.locator('form[action="/restart-qualification-gate"]')

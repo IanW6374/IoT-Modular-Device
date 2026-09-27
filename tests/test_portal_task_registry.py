@@ -49,6 +49,27 @@ class PortalTaskRegistryTests(unittest.TestCase):
         self.assertEqual(tasks['certificate-renewal']['phase'], 'failed')
         self.assertEqual(tasks['certificate-renewal']['message'], 'network unavailable')
 
+    def test_release_download_can_be_discarded_while_in_progress(self):
+        reports = []
+        discarded = []
+        progress = portal_task_registry.begin_cancellable(
+            lambda *values: reports.append(values)
+        )
+
+        self.assertEqual(
+            portal_task_registry.discard_update(lambda: discarded.append(True)),
+            'Update discard requested',
+        )
+        with self.assertRaisesRegex(ValueError, 'update was discarded'):
+            asyncio.run(progress('receiving', 1, 2))
+        with self.assertRaisesRegex(ValueError, 'update was discarded'):
+            portal_task_registry.finish_cancellable(
+                lambda: discarded.append(True)
+            )
+
+        self.assertEqual(reports, [])
+        self.assertEqual(discarded, [True, True])
+
 
 if __name__ == '__main__':
     unittest.main()

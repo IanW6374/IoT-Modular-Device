@@ -45,6 +45,10 @@ _CERTIFICATE_ROUTES = (
     '/certificates', '/certificate-authorities',
     '/api-client-trust', '/device-certificates'
 )
+_QUALIFICATION_SECTIONS = {
+    '/release-qualification': 'summary', '/qualification-tests': 'tests',
+    '/qualification-evidence': 'evidence', '/qualification-platform': 'platform',
+}
 
 def _is_certificate_request(method, route, path):
     return bool(
@@ -693,7 +697,8 @@ async def start_web_portal(portal):
                 await send_response(
                     writer, '200 OK', render_release_qualification_page(
                         csrf_token,
-                        qualification_getter() if qualification_getter else {}
+                        qualification_getter() if qualification_getter else {},
+                        '', False, qualification_section
                     )
                 )
             elif method == 'POST' and route == '/restart-qualification-gate':
@@ -716,7 +721,7 @@ async def start_web_portal(portal):
                 html = render_release_qualification_page(
                     csrf_token,
                     qualification_getter() if qualification_getter else {},
-                    message, error
+                    message, error, 'tests'
                 )
                 await action_response.send(
                     status_code, message, error, html=html
@@ -1266,7 +1271,8 @@ async def start_web_portal(portal):
             is_factory_default = route == '/factory-default'
             is_configuration_backup = route == '/configuration-backup'
             is_health_history = route == '/health-history'
-            is_qualification = route == '/release-qualification'
+            is_qualification = route in _QUALIFICATION_SECTIONS
+            qualification_section = _QUALIFICATION_SECTIONS.get(route, '')
             is_certificate_request = _is_certificate_request(
                 method, route, action_path
             )

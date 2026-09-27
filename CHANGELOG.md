@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.68 - 2026-09-27
+
+- Remove the redundant update-available status banner while retaining the
+  Automatic method badge, and make Discard available throughout automatic
+  download and staging as it is for manual updates.
+- Open Device log at the newest entries by default.
+- Split Device qualification into Summary, Tests, Evidence and Platform pages
+  under one submenu so routine status and specialist actions are easier to
+  navigate.
+- Retain native ABI 6; sequence 2773.
+
 ## 3.0.0-alpha.67 - 2026-09-27
 
 - Keep the Device log live badge focused on refresh state and time, preserve the

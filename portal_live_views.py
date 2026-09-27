@@ -578,8 +578,12 @@ def _qualification_retry_form(token, gate, generation):
     )
 
 
-def render_release_qualification_page(token, status=None, message='', error=False):
+def render_release_qualification_page(token, status=None, message='', error=False,
+                                      section='summary'):
     status = status or {}
+    section = str(section or 'summary')
+    if section not in ('summary', 'tests', 'evidence', 'platform'):
+        section = 'summary'
     evidence = status.get('evidence')
     controlled_options = ''.join(
             '<option value="' + name + '">' +
@@ -603,7 +607,7 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
         '<h3>Run disruptive scenario</h3>'
         '<p class="muted">Alpha builds only. The device initiates a real fault, but an independent observer must verify recovery.</p>'
         '<form data-portal-async data-portal-refresh-target="#qualification-workspace" '
-        'data-portal-refresh-url="/release-qualification" data-portal-status="Starting scenario…" action="/run-qualification-scenario" method="post">'
+        'data-portal-refresh-url="/qualification-tests" data-portal-status="Starting scenario…" action="/run-qualification-scenario" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<div class="grid"><label class="field">Scenario<select name="scenario">'
         '<option value="watchdog-recovery">Watchdog recovery</option>'
@@ -616,7 +620,7 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
         '<section class="qualification-action"><h3>Record observed evidence</h3>'
         '<p class="muted">Record only an observed HIL or interoperability result. Evidence counters determine gate status.</p>'
         '<form data-portal-async data-portal-dirty data-portal-refresh-target="#qualification-workspace" '
-        'data-portal-refresh-url="/release-qualification" data-portal-status="Recording evidence…" action="/record-qualification-event" method="post">'
+        'data-portal-refresh-url="/qualification-tests" data-portal-status="Recording evidence…" action="/record-qualification-event" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<div class="grid"><label class="field">Gate<select name="gate">' + controlled_options + '</select></label>'
         '<label class="field">Outcome<select name="outcome"><option value="success">Success</option>'
@@ -771,7 +775,7 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
             '<div class="metrics">' + ''.join(implementation_rows) + '</div>'
             if implementation_rows else ''
         )
-        content = (
+        summary_content = (
             '<div class="' + ('notice' if evidence.get('promotion_ready') else 'warning') + '"><strong>' +
             html_escape(status.get('summary', 'Not started')) +
             '</strong> — promotion remains closed until every gate has observed '
@@ -780,19 +784,39 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
             'and requires fresh testing. Health and storage need a new full observation window. '
             'Canary Health clears automatically after its active fleet pause is resolved.</p>'
             '<div class="metrics qualification-gates">' +
-            ''.join(rows) + '</div>' + qualification_controls + history_content +
-            implementation_content + native_content
+            ''.join(rows) + '</div>'
         )
+        if section == 'tests':
+            content = qualification_controls
+        elif section == 'evidence':
+            content = history_content or '<p class="muted">No previous release or retry evidence is available.</p>'
+        elif section == 'platform':
+            content = (
+                implementation_content + native_content or
+                '<p class="muted">No platform qualification details are available.</p>'
+            )
+        else:
+            content = summary_content
+    page_titles = {
+        'summary': ('Device qualification', 'Promotion gates',
+                    'Review the current release qualification decision.'),
+        'tests': ('Qualification tests', 'Controlled tests',
+                  'Run disruptive scenarios and record independently observed evidence.'),
+        'evidence': ('Qualification evidence', 'Evidence history',
+                     'Review previous release evidence and failed-test retries.'),
+        'platform': ('Platform qualification', 'Platform capabilities',
+                     'Review native update boundaries and implementation gates.'),
+    }
+    page_title, card_title, description = page_titles[section]
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Release qualification',
-            'Review soak, recovery, renewal, update and canary evidence for this release.'
+            'Maintenance', page_title, description
         ) + '<div id="qualification-workspace">' + _notice(message, error) +
-        '<section class="card"><div class="section-title"><h2>Promotion gates</h2></div>' +
+        '<section class="card"><div class="section-title"><h2>' + card_title + '</h2></div>' +
         content + '</section></div>'
     )
     return portal_ui.shell(
-        'IoT-MD release qualification', 'release_qualification', body, token
+        'IoT-MD ' + page_title.lower(), 'qualification_' + section, body, token
     )
 
 def render_overview_modules(modules):
@@ -914,7 +938,8 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'fetch("/logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
         'if(t!==null&&t!==undefined){if(latestLogs!==t)showLogs(t,b);logLastUpdated=new Date();updateLogRefresh();}})'
-        '.catch(function(){});}portalAdaptivePoll(refreshLogs,' + str(interval) + ');updateLogRefresh();'
+        '.catch(function(){});}showLogs(latestLogs,true);portalAdaptivePoll(refreshLogs,' +
+        str(interval) + ');updateLogRefresh();'
     )
     return portal_ui.shell('IoT-MD device log', 'logging', body, token, script)
 
@@ -1586,6 +1611,8 @@ def _automatic_upgrade_workspace(token, status):
         ) +
         '</aside><div class="upgrade-operation"><div class="actions manual-upgrade-buttons">'
         '<button form="automatic-download-form" type="submit">Start update</button>'
+        '<form action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
+        html_escape(token) + '"><button class="danger" type="submit">Discard</button></form>'
         '</div></div></div></section>'
     )
 
@@ -1748,7 +1775,7 @@ def render_update_install_page(token, status=None, message='', error=False, sour
         portal_ui.page_heading(
             'Maintenance', 'Update',
             'Select a method, stage a release, then restart when ready.'
-        ) + '<div id="upgrade-page-content">' + _notice(message, error) + workspace +
+        ) + '<div id="upgrade-page-content">' + (_notice(message, error) if error else '') + workspace +
         render_upgrade_history(status) + '</div>'
     )
     return portal_ui.shell(
@@ -1781,7 +1808,9 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         '<p id="upgrade-task-status" class="portal-status" role="status" aria-live="polite"></p>' +
         '<div class="actions manual-upgrade-buttons"><a id="upgrade-task-return" '
         'class="button secondary" href="' + html_escape(return_url) + '" hidden>'
-        'Return to updates</a></div></div></div></section>'
+        'Return to updates</a><form action="/discard-update" method="post">'
+        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+        '<button class="danger" type="submit">Discard</button></form></div></div></div></section>'
     )
     script = (
         'var i=' + repr(str(task_id)) + ',b=document.getElementById("upgrade-task-status"),'

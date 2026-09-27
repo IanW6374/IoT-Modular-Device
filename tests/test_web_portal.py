@@ -93,10 +93,10 @@ class WebPortalTests(unittest.TestCase):
         overview = web_portal.render_overview_status({
             'release_qualification_summary': 'Blocked',
         })
-        self.assertIn('Release qualification', overview)
+        self.assertIn('Device qualification', overview)
         self.assertIn('metric bad metric-link', overview)
         self.assertIn('href="/release-qualification"', overview)
-        page = web_portal.render_release_qualification_page('csrf', {
+        status = {
             'available': True,
             'summary': 'In progress',
             'native_update': {
@@ -122,23 +122,38 @@ class WebPortalTests(unittest.TestCase):
                 'promotion_ready': False,
                 'passed_gates': ['soak'], 'failed_gates': [],
             }],
-        })
-        self.assertIn('Release qualification', page)
+        }
+        page = web_portal.render_release_qualification_page('csrf', status)
+        tests_page = web_portal.render_release_qualification_page(
+            'csrf', status, section='tests'
+        )
+        evidence_page = web_portal.render_release_qualification_page(
+            'csrf', status, section='evidence'
+        )
+        platform_page = web_portal.render_release_qualification_page(
+            'csrf', status, section='platform'
+        )
+        self.assertIn('Device qualification', page)
         self.assertIn('power recovery', page)
         self.assertIn('not-run', page)
-        self.assertIn('Native paired-update boundary', page)
-        self.assertIn('ota_1', page)
-        self.assertIn('Mechanism only; qualification is separate', page)
-        self.assertIn('Independent recovery', page)
-        self.assertIn('Native job queue', page)
-        self.assertIn('Physical resources', page)
-        self.assertIn('adc, gpio, i2c, spi, uart', page)
+        self.assertNotIn('Run disruptive scenario', page)
+        self.assertIn('Run disruptive scenario', tests_page)
+        self.assertIn('Native paired-update boundary', platform_page)
+        self.assertIn('ota_1', platform_page)
+        self.assertIn('Mechanism only; qualification is separate', platform_page)
+        self.assertIn('Independent recovery', platform_page)
+        self.assertIn('Native job queue', platform_page)
+        self.assertIn('Physical resources', platform_page)
+        self.assertIn('adc, gpio, i2c, spi, uart', platform_page)
         self.assertIn('Controlled qualification test', page)
-        self.assertIn('Previous release evidence', page)
-        self.assertIn('3.0.0-alpha.16', page)
+        self.assertIn('Previous release evidence', evidence_page)
+        self.assertIn('3.0.0-alpha.16', evidence_page)
         self.assertIn('/release-qualification', portal_ui.navigation(
-            'release_qualification', 'csrf'
+            'qualification_summary', 'csrf'
         ))
+        navigation = portal_ui.navigation('qualification_tests', 'csrf')
+        self.assertIn('aria-expanded="true">Device qualification</button>', navigation)
+        self.assertIn('href="/qualification-tests" aria-current="page">Tests</a>', navigation)
 
     def test_certificate_routes_are_dispatched_to_lazy_adapter(self):
         self.assertTrue(web_portal._is_certificate_request(
@@ -1020,6 +1035,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertLess(html.index('payload=new URLSearchParams'), html.index('logLevel.disabled=true'))
         self.assertNotIn('activeLogLevel+" · "', html)
         self.assertIn('placeholder="Filter text"', html)
+        self.assertIn('showLogs(latestLogs,true)', html)
         self.assertNotIn('Log level changed to INFO', html)
         self.assertNotIn('>Apply</button>', html)
 
@@ -2729,10 +2745,11 @@ class WebPortalTests(unittest.TestCase):
             'release_available_version': '3.0.0-alpha.29',
             'update_status': 'idle',
             'firmware_update_status': 'idle',
-        }, {})
+        }, {}, 'Release available')
         self.assertIn('href="/updates?source=automatic"', available)
         self.assertNotIn('action="/download-release"', available)
         self.assertIn('>Update available</span>', available)
+        self.assertNotIn('<p class="notice" role="status">Release available</p>', available)
         self.assertNotIn('Choose update method</a>', available)
         failed_check = web_portal.render_updates_page('csrf', {
             'release_checks_enabled': True,
@@ -2776,6 +2793,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('button.textContent="Restart and install"', automatic)
         self.assertIn('button.disabled=true', automatic)
         self.assertIn('>Start update</button>', automatic)
+        self.assertIn('action="/discard-update"', automatic)
+        self.assertIn('>Discard</button>', automatic)
         self.assertIn('action="/check-release"', automatic)
         self.assertIn('bindUpgradeCheck();', automatic)
         self.assertLess(
@@ -2796,6 +2815,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('id="upgrade-task-steps"', task)
         self.assertNotIn('id="upgrade-task-progress"', task)
         self.assertIn('id="upgrade-task-status"', task)
+        self.assertIn('action="/discard-update"', task)
+        self.assertIn('>Discard</button>', task)
         task_selection = task.split('Select version', 1)[1].split('</li>', 1)[0]
         self.assertIn('class="selected-release-summary"', task_selection)
         self.assertIn('3.0.0-alpha.29', task_selection)
@@ -2969,9 +2990,13 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('>Reset gate</button>', canary)
         self.assertIn('Canary Health clears automatically', canary)
 
-        self.assertIn('action="/record-qualification-event"', page)
-        self.assertIn('action="/run-qualification-scenario"', page)
-        self.assertIn('simulation alone is not qualification evidence', page)
+        tests_page = web_portal.render_release_qualification_page(
+            'csrf', {'available': True, 'evidence': {'gates': []}},
+            section='tests'
+        )
+        self.assertIn('action="/record-qualification-event"', tests_page)
+        self.assertIn('action="/run-qualification-scenario"', tests_page)
+        self.assertIn('simulation alone is not qualification evidence', tests_page)
         self.assertEqual(
             portal_routes.required_role('POST', '/record-qualification-event'),
             'administrator'
