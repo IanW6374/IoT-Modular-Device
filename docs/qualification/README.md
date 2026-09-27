@@ -68,3 +68,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.70 managed upgrade-flow test](v3.0.0-alpha.70.md)
 - [v3.0.0-alpha.71 fleet trust and automatic-update regression](v3.0.0-alpha.71.md)
 - [v3.0.0-alpha.72 managed and automatic upgrade-flow test](v3.0.0-alpha.72.md)
+- [v3.0.0-alpha.73 fleet policy format-2 core compatibility](v3.0.0-alpha.73.md)

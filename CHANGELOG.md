@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.73 - 2026-09-27
+
+- Publish a matched application and core update so the frozen fleet-policy
+  canonicalizer includes the format-2 command `release_type` field signed by
+  current Management Suite deployments.
+- This is a universal upgrade requirement for devices retaining an Alpha 62
+  core; re-enrolling the same signing identity cannot repair the differing
+  signed-message formats. Retain native ABI 6; sequence 2778.
+
 ## 3.0.0-alpha.72 - 2026-09-27
 
 - Add a signed application-only dummy release for exercising Alpha 71's fleet

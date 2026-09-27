@@ -33,7 +33,7 @@ import universal_upload
 import hardware_platform
 import boot_state
 import recovery_boot
-import update_security, management_trust
+import update_security
 import update_support
 import wifi_recovery
 import release_update
@@ -1711,7 +1711,7 @@ def validate_uploaded_certificates():
             'restart': True,
         }
     if management_suite_key_stage:
-        return management_trust.verification_key_install_result(fleet_management.FLEET_VERIFICATION_KEY_PATH)
+        return update_security.verification_key_install_result(fleet_management.FLEET_VERIFICATION_KEY_PATH)
     reloaded = []
     if all(portal_staged):
         start_task('portal_certificate_reload', reload_portal_listener())

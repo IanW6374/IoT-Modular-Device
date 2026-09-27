@@ -88,6 +88,47 @@ class UpdateSecurityTests(unittest.TestCase):
         self.assertEqual(update_security._highest_bit(255), 128)
         self.assertEqual(update_security._highest_bit(256), 256)
 
+    def test_format_two_fleet_signature_binds_command_release_type(self):
+        policy = {
+            'format_version': 2,
+            'target_board': 'esp32-s3',
+            'policy_sequence': 1,
+            'issued_at': 10,
+            'not_before': 10,
+            'expires_at': 20,
+            'target_device': 'device-1',
+            'target_cohort': '',
+            'maintenance': {
+                'weekdays': [0], 'start_minute': 0, 'duration_minutes': 1440,
+            },
+            'updates': {
+                'channel': 'alpha', 'automatic_download': True,
+                'automatic_activation': True, 'maximum_consecutive_failures': 1,
+            },
+            'telemetry': {
+                'enabled': True, 'minimum_interval_s': 60,
+                'severities': ['warning'],
+            },
+            'commands': [{
+                'id': 'command-1', 'action': 'download-update',
+                'release_sequence': 2778, 'release_type': 'universal',
+            }],
+        }
+        universal = update_security.manifest_message('fleet-policy', policy)
+        policy['commands'][0]['release_type'] = 'application'
+        application = update_security.manifest_message('fleet-policy', policy)
+
+        self.assertNotEqual(universal, application)
+        policy['format_version'] = 1
+        legacy_application = update_security.manifest_message(
+            'fleet-policy', policy
+        )
+        policy['commands'][0]['release_type'] = 'universal'
+        self.assertEqual(
+            legacy_application,
+            update_security.manifest_message('fleet-policy', policy),
+        )
+
     def test_automatic_release_check_schedule_uses_local_time(self):
         monday_at_three = (2026, 8, 24, 3, 0, 0, 0, 236)
         self.assertEqual(
