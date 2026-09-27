@@ -36,7 +36,7 @@ use `-k` to bypass verification.
 
 Install one or more API client CAs under **Maintenance > Certificates > API
 client trust**, then
-enable the listener under **Device > Device API**. Each client certificate is
+enable the listener under **Device > API**. Each client certificate is
 registered by SHA-256 fingerprint with a label and scopes. Read requests require
 `read`, module commands require `write`, fleet reads require `fleet:read`, fleet
 changes require `fleet:write`, controlled evidence requires `qualification:write`,
@@ -45,7 +45,7 @@ scenarios require `qualification:execute`. Revocation is checked for every reque
 including requests on reused TLS connections.
 
 An administrator can expand or reduce an existing caller's permissions under
-**Device > Device API** or **Maintenance > Certificates > API client trust**.
+**Maintenance > Certificates > API client trust**.
 Open **Edit API scopes**, select one or more permissions, and save. The registry
 updates the existing fingerprint in place, so the certificate does not need to
 be uploaded again. At least one supported scope must remain.

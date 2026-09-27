@@ -594,7 +594,7 @@ UPGRADE_NAVIGATION = (
 NAVIGATION = (
     ('device', '/device-api', 'Device', (
         ('overview', '/', 'Overview'),
-        ('device_api', '/device-api', 'Device API'),
+        ('device_api', '/device-api', 'API'),
         ('logging_settings', '/logging-settings', 'Logging'),
         ('messaging', '/messaging', 'MQTT'),
         ('settings', '/settings', 'Network'),

@@ -9,8 +9,7 @@ import web_portal_ui as portal_ui
 import timezone_rules
 from portal_http import html_escape, js_escape, configuration_backup_filename
 from portal_presenters import (
-    render_api_scope_editor, render_badge, render_certificate_badge,
-    render_label,
+    render_badge, render_certificate_badge, render_label,
 )
 
 def _notice(message='', error=False):
@@ -410,45 +409,9 @@ def render_messaging_page(csrf, settings, message='', error=False):
 
 def render_device_api_page(csrf, settings, message='', error=False):
     enabled = ' checked' if settings.get('api_enabled') else ''
-    clients = settings.get('api_clients', []) or []
-    rows = []
-    for client in clients:
-        fingerprint = str(client.get('fingerprint', ''))
-        expiry_level = client.get('expiry_level', 'unknown')
-        badge_text = (
-            'expired' if expiry_level == 'expired' else
-            (str(client.get('days_remaining')) + ' days'
-             if expiry_level in ('warning', 'critical') else 'enrolled')
-        )
-        rows.append(
-            '<article class="module-card"><div class="module-head"><div><h3>' +
-            html_escape(client.get('label', 'API client')) + '</h3><p class="muted">' +
-            html_escape(', '.join(client.get('scopes', []))) + '</p></div>' +
-            render_badge(
-                badge_text,
-                'good' if expiry_level in ('ok', 'unknown') else 'warn'
-            ) + '</div><div class="property-grid">'
-            '<div class="property-row"><span>Subject</span><strong>' +
-            html_escape(client.get('subject', '')) + '</strong></div>'
-            '<div class="property-row"><span>Fingerprint</span><strong>' +
-            html_escape(fingerprint) + '</strong></div>'
-            '<div class="property-row"><span>Expires</span><strong>' +
-            html_escape(client.get('not_after', 'unknown')) + '</strong></div></div>' +
-            render_api_scope_editor(csrf, client, '/device-api') +
-            '<form data-portal-async data-portal-refresh-target="#device-api-clients" '
-            'data-portal-refresh-url="/device-api" method="post" action="/revoke-api-client">'
-            '<input type="hidden" '
-            'name="csrf" value="' + html_escape(csrf) + '"><input type="hidden" '
-            'name="fingerprint" value="' + html_escape(fingerprint) + '">'
-            '<div class="actions"><span data-portal-form-status class="portal-status action-form-status"></span>'
-            '<button class="danger compact" type="submit" data-busy-label="Revoking…">'
-            'Revoke client</button></div></form></article>'
-        )
-    if not rows:
-        rows.append('<p class="muted">No API client certificates are enrolled.</p>')
     body = (
         portal_ui.page_heading(
-            'Device', 'Device API',
+            'Device', 'API',
             'Expose module state and commands over a versioned HTTPS API secured with mutual TLS.'
         ) + _notice(message, error) +
         '<section class="card"><div class="section-title"><h2>API listener</h2></div>'
@@ -465,11 +428,9 @@ def render_device_api_page(csrf, settings, message='', error=False):
         'data-portal-form-status role="status" aria-live="polite"></span>'
         '<div class="settings-save-controls"><button class="secondary" type="reset">Discard changes</button>'
         '<button type="submit" data-busy-label="Saving…">Save API settings</button></div></div>'
-        '</form></section><section id="device-api-clients" class="card"><div class="section-title">'
-        '<h2>Enrolled clients</h2></div><div class="module-grid">' + ''.join(rows) +
-        '</div></section>'
+        '</form></section>'
     )
-    return portal_ui.shell('IoT-MD Device API', 'device_api', body, csrf)
+    return portal_ui.shell('IoT-MD API', 'device_api', body, csrf)
 
 def render_user_settings_page(
     csrf, settings, message='', error=False, password_message='', password_error=False,

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.67 - 2026-09-27
+
+- Keep the Device log live badge focused on refresh state and time, preserve the
+  selected level in its dropdown, and include that value when changing levels.
+- Rename the Device API portal tab to API and keep enrolled-client management
+  solely under Maintenance / Certificates / API client trust.
+- Remove the Canary Health reset control because its blocked state clears
+  automatically after the active fleet pause is resolved.
+- Retain native ABI 6; sequence 2772.
+
 ## 3.0.0-alpha.66 - 2026-09-26
 
 - Refine the Update workflow: keep update checks in place, align Automatic and

@@ -562,27 +562,19 @@ def render_overview_status(status):
 
 
 def _qualification_retry_form(token, gate, generation):
-    if gate.get('status') != 'failed':
+    if gate.get('status') != 'failed' or gate.get('name') == 'canary-health':
         return ''
-    canary = gate.get('name') == 'canary-health'
-    summary = 'Reset blocked gate' if canary else 'Restart failed test'
-    button = 'Reset gate' if canary else 'Restart test'
-    confirmation = (
-        'The active canary pause has been resolved; archive this blocked result.'
-        if canary else
-        'Restart this test from zero; retain the failed result.'
-    )
     return (
-        '<details class="qualification-retry"><summary>' + summary + '</summary>'
+        '<details class="qualification-retry"><summary>Restart failed test</summary>'
         '<form data-portal-async data-portal-refresh-target="#qualification-workspace" data-portal-refresh-url="/release-qualification" data-portal-status="Restarting test…" action="/restart-qualification-gate" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<input type="hidden" name="gate" value="' + html_escape(gate['name']) + '">'
         '<input type="hidden" name="generation" value="' + html_escape(generation) + '">'
         '<label class="field">Reason for retry<input name="reason" required maxlength="160"></label>'
         '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
-        + confirmation + '</label>'
+        'Restart this test from zero; retain the failed result.</label>'
         '<div class="actions"><span></span><button type="submit" data-busy-label="Restarting…">' +
-        button + '</button></div></form></details>'
+        'Restart test</button></div></form></details>'
     )
 
 
@@ -786,7 +778,7 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
             'evidence and passes.</div><p class="muted">A later successful observation does not clear a '
             'latched failure. Restart failed test archives the failed evidence '
             'and requires fresh testing. Health and storage need a new full observation window. '
-            'Canary Health can be reset after its active fleet pause has been resolved.</p>'
+            'Canary Health clears automatically after its active fleet pause is resolved.</p>'
             '<div class="metrics qualification-gates">' +
             ''.join(rows) + '</div>' + qualification_controls + history_content +
             implementation_content + native_content
@@ -874,7 +866,7 @@ def render_logging_page(token, current_loglevel, levels, logs,
             'Review live device logs and adjust runtime verbosity.'
         ) +
         '<section class="card"><div class="section-title"><div class="section-title-heading"><h2>Logs</h2>' +
-        render_refresh_status_html(current_loglevel) + '</div>'
+        render_refresh_status_html() + '</div>'
         '<div class="actions"><a class="button secondary compact" href="/download-logs">'
         'Download logs</a>' + render_refresh_controls_html(
             'log-refresh-toggle', 'log'
@@ -893,16 +885,17 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'var logRefreshPaused=false,logRefreshButton=document.getElementById("log-refresh-toggle"),'
         'logRefreshState=document.querySelector(".refresh-status"),logLastUpdated=new Date(),'
         'logLevel=document.getElementById("log-level"),logLevelError=document.getElementById("log-level-error");'
-        'var activeLogLevel=logLevel.value,logFilter=document.getElementById("log-filter"),'
+        'var confirmedLogLevel=logLevel.value,logFilter=document.getElementById("log-filter"),'
         'latestLogs=document.getElementById("logs").textContent;'
         'document.getElementById("log-level-form").onsubmit=function(event){event.preventDefault();var form=this,'
-        'selected=logLevel.value;logLevel.disabled=true;logLevelError.textContent="";fetch(form.action,{method:"POST",'
+        'selected=logLevel.value,payload=new URLSearchParams(new FormData(form)).toString();'
+        'logLevel.disabled=true;logLevelError.textContent="";fetch(form.action,{method:"POST",'
         'credentials:"same-origin",headers:{"Accept":"application/json","Content-Type":'
-        '"application/x-www-form-urlencoded"},body:new URLSearchParams(new FormData(form)).toString()}).then(function(response){'
+        '"application/x-www-form-urlencoded"},body:payload}).then(function(response){'
         'return response.text().then(function(text){if(response.status===401){location.replace("/login?reason=expired");'
         'throw new Error("Session expired");}if(!response.ok)throw new Error(text||"Unable to change log level");});'
-        '}).then(function(){activeLogLevel=selected;updateLogRefresh();}).catch(function(error){logLevel.value='
-        'activeLogLevel;if(error.message!=="Session expired")logLevelError.textContent=error.message;'
+        '}).then(function(){confirmedLogLevel=selected;}).catch(function(error){logLevel.value='
+        'confirmedLogLevel;if(error.message!=="Session expired")logLevelError.textContent=error.message;'
         '}).finally(function(){logLevel.disabled=false;});};'
         'logLevel.onchange=function(){document.getElementById("log-level-form").requestSubmit();};'
         'function filteredLogs(text){var term=String(logFilter.value||"").trim().toLowerCase();if(!term)return text;'
@@ -911,7 +904,7 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'e.textContent=filteredLogs(latestLogs);if(follow)e.scrollTop=e.scrollHeight;}'
         'logFilter.oninput=function(){showLogs(latestLogs,false);};'
         'function updateLogRefresh(){logRefreshButton.textContent=logRefreshPaused?"Resume":"Pause";'
-        'logRefreshState.textContent=activeLogLevel+" · "+(logRefreshPaused?"Paused · ":"Live · ")+'
+        'logRefreshState.textContent=(logRefreshPaused?"Paused · ":"Live · ")+'
         'logLastUpdated.toLocaleTimeString();'
         'logRefreshState.className=logRefreshPaused?"badge warn refresh-status":"badge good refresh-status";}'
         'logRefreshButton.onclick=function(){logRefreshPaused=!logRefreshPaused;updateLogRefresh();'
