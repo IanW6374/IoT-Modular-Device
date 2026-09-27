@@ -67,3 +67,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.69 Management trust observability](v3.0.0-alpha.69.md)
 - [v3.0.0-alpha.70 managed upgrade-flow test](v3.0.0-alpha.70.md)
 - [v3.0.0-alpha.71 fleet trust and automatic-update regression](v3.0.0-alpha.71.md)
+- [v3.0.0-alpha.72 managed and automatic upgrade-flow test](v3.0.0-alpha.72.md)

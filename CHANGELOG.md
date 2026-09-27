@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.72 - 2026-09-27
+
+- Add a signed application-only dummy release for exercising Alpha 71's fleet
+  trust preflight and in-page Automatic update workflow. No intentional
+  functional changes; retain native ABI 6 and use sequence 2777.
+
 ## 3.0.0-alpha.71 - 2026-09-27
 
 - Move Management signing-key fingerprint reporting into an application-owned
