@@ -63,6 +63,10 @@ class FleetManagementTests(unittest.TestCase):
         snapshot = service.apply_policy(self.policy())
 
         self.assertEqual(snapshot['policy_sequence'], 1)
+        self.assertEqual(
+            snapshot['verification_key_fingerprint'],
+            update_security.verification_key_fingerprint(str(self.key_path)),
+        )
         self.assertTrue(snapshot['within_maintenance_window'])
         self.assertEqual(snapshot['pending_commands'][0]['id'], 'command-1')
         self.assertEqual(

@@ -162,6 +162,25 @@ def validate_public_key_bytes(value):
     return point
 
 
+def verification_key_fingerprint(path=CATALOG_VERIFICATION_KEY_PATH):
+    """Return the SHA-256 fingerprint of one normalized P-256 public key."""
+    try:
+        with open(path, 'rb') as stream:
+            point = validate_public_key_bytes(stream.read())
+        value = _int_to_bytes(point[0]) + _int_to_bytes(point[1])
+        return binascii.hexlify(hashlib.sha256(value).digest()).decode()
+    except Exception:
+        return ''
+
+
+def verification_key_install_result(path=CATALOG_VERIFICATION_KEY_PATH):
+    return {
+        'message': 'Management Suite signing key installed and active. '
+                   'SHA-256 fingerprint: ' + verification_key_fingerprint(path),
+        'restart': False,
+    }
+
+
 def staged_verification_key(path, exists):
     """Validate and return a staged Management Suite key, if present."""
     staged = path + '.manual'

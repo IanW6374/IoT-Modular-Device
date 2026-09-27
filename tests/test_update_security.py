@@ -563,6 +563,15 @@ class UpdateSecurityTests(unittest.TestCase):
             lambda source, target: committed.append((source, target))
         ))
         self.assertEqual(committed, [(staged, key_path)])
+        Path(key_path).write_bytes(Path(staged).read_bytes())
+        expected = hashlib.sha256(Path(key_path).read_bytes()).hexdigest()
+        self.assertEqual(
+            update_security.verification_key_fingerprint(key_path), expected
+        )
+        self.assertIn(
+            expected,
+            update_security.verification_key_install_result(key_path)['message']
+        )
 
         Path(staged).write_bytes(b'not-a-signing-key')
         with self.assertRaisesRegex(ValueError, 'verification key'):

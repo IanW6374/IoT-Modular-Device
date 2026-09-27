@@ -1704,13 +1704,14 @@ def validate_uploaded_certificates():
     api_security.enrol_staged_clients(api_client_registry, client_stages)
     if all(portal_staged):
         credential_store.update_certificate_settings('manual', method='manual')
-
     if outbound_trust_changed:
         mark_restart_required('Outbound TLS trust changed')
         return {
             'message': 'Outbound TLS trust validated. Restart the device to reload active client connections.',
             'restart': True,
         }
+    if management_suite_key_stage:
+        return update_security.verification_key_install_result(fleet_management.FLEET_VERIFICATION_KEY_PATH)
     reloaded = []
     if all(portal_staged):
         start_task('portal_certificate_reload', reload_portal_listener())

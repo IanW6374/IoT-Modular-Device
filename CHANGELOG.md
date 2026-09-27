@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.69 - 2026-09-27
+
+- Show the normalized SHA-256 fingerprint of the active Management Suite
+  signing key under CA & signing trust.
+- Return the same fingerprint after installing a replacement key and expose it
+  in the read-only fleet state so Management can detect mismatched identities
+  before submitting a signed policy.
+- Retain native ABI 6; sequence 2774.
+
 ## 3.0.0-alpha.68 - 2026-09-27
 
 - Remove the redundant update-available status banner while retaining the

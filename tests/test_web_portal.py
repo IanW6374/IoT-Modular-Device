@@ -1059,10 +1059,14 @@ class WebPortalTests(unittest.TestCase):
         trust_cards = web_portal.render_certificate_route(
             '/certificate-authorities', 'csrf', certificates={
                 'mqtt_ca': {'installed': True, 'subject': 'Root'},
-                'management_suite_key': {'installed': True, 'size': 64},
+                'management_suite_key': {
+                    'installed': True, 'size': 64, 'fingerprint': 'a1' * 32,
+                },
             }
         )
         self.assertEqual(trust_cards.count('class="module-card certificate-card"'), 4)
+        self.assertIn('SHA-256 fingerprint', trust_cards)
+        self.assertIn('a1' * 32, trust_cards)
         self.assertIn('.certificate-card>form{margin-top:auto}', portal_ui.PORTAL_CSS)
         self.assertIn('.certificate-card>form .actions', portal_ui.PORTAL_CSS)
         device_certificates = web_portal.render_certificate_route(
