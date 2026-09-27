@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.74 - 2026-09-27
+
+- Treat an authenticated portal restart as an explicit manual universal-update
+  activation, so a fleet policy outside its maintenance window cannot block an
+  administrator from installing an already verified bundle.
+- Continue enforcing the maintenance window for managed and automatic
+  activation. Publish this compatibility-boundary release as a universal
+  update with a signed manual-activation bridge; retain native ABI 6 and use
+  sequence 2779.
+
 ## 3.0.0-alpha.73 - 2026-09-27
 
 - Publish a matched application and core update so the frozen fleet-policy

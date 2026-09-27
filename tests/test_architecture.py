@@ -61,6 +61,13 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertNotIn('release_update.for_release_sequence', source)
         self.assertIn("item.get('release_sequence', 0)", source)
 
+    def test_manual_universal_activation_has_an_explicit_context(self):
+        portal_source = Path('web_portal.py').read_text()
+        runtime_source = Path('iotmd_runtime.py').read_text()
+        self.assertIn("'activate-universal-manual'", portal_source)
+        self.assertIn("action == 'activate-universal-manual'", runtime_source)
+        self.assertIn('activation_maintenance_allowed(', runtime_source)
+
     def test_qualification_controls_are_created_after_log_output(self):
         source = Path('iotmd_runtime.py').read_text()
         self.assertLess(

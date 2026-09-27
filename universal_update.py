@@ -35,6 +35,16 @@ MAX_MANIFEST_BYTES = 4096
 DEFAULT_MAX_BYTES = 4 * 1024 * 1024
 
 
+def activation_maintenance_allowed(source, policy_present, within_window):
+    """Separate an operator restart from policy-controlled activation."""
+    source = str(source)
+    if source == 'manual':
+        return True
+    if source != 'managed':
+        raise ValueError('universal activation source is invalid')
+    return not bool(policy_present) or bool(within_window)
+
+
 def _hex_digest(hasher):
     return binascii.hexlify(hasher.digest()).decode()
 

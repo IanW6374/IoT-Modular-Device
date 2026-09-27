@@ -398,6 +398,24 @@ class UniversalUpdateTests(unittest.TestCase):
         self.assertEqual(calls, ['application', 'preflight', 'firmware'])
         self.assertEqual(universal_update.trial_timeout_ms(), 420000)
 
+    def test_manual_activation_overrides_fleet_maintenance_window(self):
+        self.assertTrue(universal_update.activation_maintenance_allowed(
+            'manual', True, False
+        ))
+        self.assertFalse(universal_update.activation_maintenance_allowed(
+            'managed', True, False
+        ))
+        self.assertTrue(universal_update.activation_maintenance_allowed(
+            'managed', True, True
+        ))
+        self.assertTrue(universal_update.activation_maintenance_allowed(
+            'managed', False, False
+        ))
+        with self.assertRaisesRegex(ValueError, 'source'):
+            universal_update.activation_maintenance_allowed(
+                'automatic', True, True
+            )
+
     def test_confirmation_failure_is_persisted_with_last_completed_phase(self):
         Path(universal_update.STATE_PATH).write_text(json.dumps({
             'status': 'activating', 'version': '3.0.0-alpha.12',

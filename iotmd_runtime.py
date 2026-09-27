@@ -2053,7 +2053,7 @@ def portal_action(action, params):
         schedule_hardware_reset('firmware_update_reboot', 8000)
         return 'Base firmware staged; rebooting into trial partition'
 
-    if action == 'activate-universal':
+    if action in ('activate-universal', 'activate-universal-manual'):
         if not web_portal_firmware_updates_enabled or not firmware_update.supported():
             detail = record_upgrade_failure(
                 'universal', 'activation', RuntimeError('firmware OTA is unavailable')
@@ -2062,9 +2062,9 @@ def portal_action(action, params):
         try:
             fleet_snapshot = fleet_service.snapshot()
             fleet_policy = fleet_snapshot.get('policy') or {}
-            maintenance_allowed = (
-                not fleet_policy or fleet_snapshot.get('within_maintenance_window')
-            )
+            maintenance_allowed = universal_update.activation_maintenance_allowed(
+                'manual' if action == 'activate-universal-manual' else 'managed', bool(fleet_policy),
+                fleet_snapshot.get('within_maintenance_window'))
             universal_update.activate_pending(maintenance_allowed)
         except Exception as exc:
             state = universal_update.update_status()

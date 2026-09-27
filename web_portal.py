@@ -1091,7 +1091,7 @@ async def start_web_portal(portal):
                 )
             elif method == 'POST' and path.startswith('/activate-universal'):
                 result = apply_portal_action(
-                    'activate-universal', action_path, action_handler, log_output, form_params
+                    'activate-universal-manual', action_path, action_handler, log_output, form_params
                 )
                 sessions.revoke(session_id)
                 await send_response(
