@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.70 - 2026-09-27
+
+- Add a signed application-only dummy release for exercising the Alpha 69
+  Management trust fingerprint and immediate deployment workflow. No
+  intentional functional changes; retain native ABI 6 and use sequence 2775.
+
 ## 3.0.0-alpha.69 - 2026-09-27
 
 - Show the normalized SHA-256 fingerprint of the active Management Suite
