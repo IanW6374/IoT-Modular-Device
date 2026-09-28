@@ -76,3 +76,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.78 frozen trial confirmation regression](v3.0.0-alpha.78.md)
 - [v3.0.0-alpha.79 managed confirmation test](v3.0.0-alpha.79.md)
 - [v3.0.0-alpha.80 managed schedule projection](v3.0.0-alpha.80.md)
+- [v3.0.0-alpha.81 history presentation](v3.0.0-alpha.81.md)

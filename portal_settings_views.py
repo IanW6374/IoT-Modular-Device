@@ -959,9 +959,12 @@ def render_health_history_page(csrf, status):
     events = []
     for event in list(health.get('events', []))[-24:][::-1]:
         events.append(
-            '<li><time>' + html_escape(_health_time_text(event.get('time'), timezone_name)) +
-            '</time> — <strong>' + html_escape(event.get('kind', '')) + '</strong> ' +
-            html_escape(event.get('detail', '')) + '</li>'
+            '<article class="history-event"><time class="history-time">' +
+            html_escape(_health_time_text(event.get('time'), timezone_name)) +
+            '</time><span class="history-marker"></span><div class="history-copy"><strong>' +
+            html_escape(event.get('kind', '')) + '</strong>' +
+            ('<p>' + html_escape(event.get('detail', '')) + '</p>'
+             if event.get('detail') else '') + '</div></article>'
         )
     body = (
         portal_ui.page_heading(
@@ -975,7 +978,8 @@ def render_health_history_page(csrf, status):
         '<section class="card"><div class="section-title"><h2>Current runtime health</h2></div>'
         '<div class="health-groups">' + runtime_cards + '</div></section>'
         '<section class="card"><div class="section-title"><h2>Recent significant events</h2></div>'
-        + ('<ul>' + ''.join(events) + '</ul>' if events else '<p class="muted">No events recorded.</p>') +
+        + ('<div class="history-timeline">' + ''.join(events) + '</div>'
+           if events else '<p class="muted">No events recorded.</p>') +
         '</section><section class="card"><div class="section-title"><h2>Reset history</h2></div>'
         '<p class="muted">Clear all persistent health counters, observations and events.</p>'
         '<form action="/reset-health-history" method="post"><input type="hidden" name="csrf" value="' +

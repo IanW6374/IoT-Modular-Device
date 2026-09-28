@@ -360,14 +360,25 @@ def render_update_summary_html(status, include_staged=True):
             entry_version = entry.get('version', '')
             if entry.get('kind') == 'firmware':
                 entry_version = display_release_version(entry_version)
-            rows.append(
-                '<li><strong>' + html_escape(entry.get('event', '')) + '</strong> ' +
-                html_escape(entry.get('kind', '')) + ' ' +
-                html_escape(entry_version) +
-                (' — ' + html_escape(entry.get('detail', '')) if entry.get('detail') else '') +
-                '</li>'
+            detail = ' · '.join(
+                str(value) for value in (
+                    entry.get('kind', ''), entry_version,
+                    entry.get('detail', ''),
+                ) if value
             )
-        history_html = '<details class="update-history"><summary>Recent update history</summary><ul>' + ''.join(rows) + '</ul></details>'
+            rows.append(
+                '<article class="history-event"><time class="history-time">' +
+                html_escape(_health_time_text(
+                    entry.get('time'), status.get('timezone_name', 'UTC')
+                )) + '</time><span class="history-marker"></span><div class="history-copy"><strong>' +
+                html_escape(entry.get('event', '')) + '</strong>' +
+                ('<p>' + html_escape(detail) + '</p>' if detail else '') +
+                '</div></article>'
+            )
+        history_html = (
+            '<details class="update-history"><summary>Recent update history</summary>'
+            '<div class="history-timeline">' + ''.join(rows) + '</div></details>'
+        )
     update_is_staged = (
         status.get('universal_update_status') == 'ready' or
         status.get('firmware_update_status') == 'ready' or
@@ -700,13 +711,17 @@ def render_release_qualification_page(token, status=None, message='', error=Fals
         )
         retries = status.get('retry_history') or ()
         if retries:
-            history_content += '<h3>Failed test retry history</h3><ul>' + ''.join(
-                '<li><strong>' + html_escape(item.get('gate', '')) + '</strong> — ' +
-                html_escape(_health_time_text(item.get('time'))) + ' UTC · ' +
-                html_escape(item.get('actor', '')) + ': ' + html_escape(item.get('reason', '')) +
-                '<br><small>Previous failed evidence: ' + html_escape(item.get('detail', '')) +
-                '</small></li>' for item in reversed(retries)
-            ) + '</ul>'
+            history_content += '<h3>Failed test retry history</h3><div class="history-timeline">' + ''.join(
+                '<article class="history-event"><time class="history-time">' +
+                html_escape(_health_time_text(item.get('time'))) +
+                ' UTC</time><span class="history-marker"></span><div class="history-copy"><strong>' +
+                html_escape(item.get('gate', '')) + ' · ' +
+                html_escape(item.get('actor', '')) + '</strong><p>' +
+                html_escape(item.get('reason', '')) +
+                (' · Previous failed evidence: ' + html_escape(item.get('detail', ''))
+                 if item.get('detail') else '') + '</p></div></article>'
+                for item in reversed(retries)
+            ) + '</div>'
         native = status.get('native_update') or {}
         snapshot = native.get('snapshot') or {}
         native_content = ''
@@ -1467,18 +1482,24 @@ def render_upgrade_history(status):
     )
     history.sort(key=lambda item: int(item.get('time', 0) or 0), reverse=True)
     for entry in history[:40]:
+        detail = []
+        if entry.get('version'):
+            detail.append(display_release_version(entry['version']))
+        if entry.get('detail'):
+            detail.append(entry['detail'])
         rows.append(
-            '<li><small>' + html_escape(_health_time_text(entry.get('time'), status.get('timezone_name', 'UTC'))) +
-            '</small> · <strong>' + html_escape(entry.get('event', '')) + '</strong> · ' +
-            html_escape(entry.get('kind', '')) +
-            (' · ' + html_escape(display_release_version(entry['version']))
-             if entry.get('version') else '') +
-            (' — ' + html_escape(entry['detail']) if entry.get('detail') else '') +
-            '</li>'
+            '<article class="history-event"><time class="history-time">' +
+            html_escape(_health_time_text(
+                entry.get('time'), status.get('timezone_name', 'UTC')
+            )) + '</time><span class="history-marker"></span><div class="history-copy">'
+            '<strong>' + html_escape(entry.get('event', '')) + ' · ' +
+            html_escape(entry.get('kind', '')) + '</strong>' +
+            ('<p>' + html_escape(' · '.join(detail)) + '</p>' if detail else '') +
+            '</div></article>'
         )
     return (
         '<section class="card"><div class="section-title"><h2>Update history</h2></div>' +
-        ('<ul class="update-history">' + ''.join(rows) + '</ul>' if rows else
+        ('<div class="history-timeline update-history">' + ''.join(rows) + '</div>' if rows else
          '<p class="muted">No updates or version checks recorded yet.</p>') + '</section>'
     )
 

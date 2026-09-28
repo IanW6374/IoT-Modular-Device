@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.81 - 2026-09-28
+
+- Present update history and persistent health events as concise chronological
+  timelines consistent with IoT-MD Management Suite activity.
+- Apply the same timeline treatment to recent overview update history and
+  failed qualification-test retry evidence.
+
 ## 3.0.0-alpha.80 - 2026-09-28
 
 - Report the configured automatic-update cadence, local activation time,

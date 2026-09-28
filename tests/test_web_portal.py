@@ -337,7 +337,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<h3>MQTT</h3>', page)
         self.assertIn('<h3>API</h3>', page)
         self.assertIn('<h3>Updates</h3>', page)
-        self.assertIn('<time>', page)
+        self.assertIn('class="history-timeline"', page)
+        self.assertIn('class="history-time"', page)
+        self.assertIn('class="history-marker"', page)
         self.assertNotIn('Time unavailable</time>', page)
         self.assertNotIn('Updated Time unavailable', page)
         self.assertIn('<h2>Current runtime health</h2>', page)
@@ -2983,7 +2985,11 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('<h2>Update history</h2>', page)
         self.assertIn('Check failed: &lt;offline&gt;', page)
         self.assertIn('automatic check', page)
-        self.assertLess(page.index('Check failed:'), page.index('>confirmed</strong>'))
+        self.assertIn('class="history-timeline update-history"', page)
+        self.assertLess(
+            page.index('Check failed:'),
+            page.index('>confirmed · universal</strong>'),
+        )
         self.assertNotIn('<details', page)
 
     def test_qualification_retry_requires_confirmation_and_admin_route(self):
@@ -2997,14 +3003,26 @@ class WebPortalTests(unittest.TestCase):
         self.assertFalse(portal_http.restart_qualification_gate(params, 'admin', handler)[1])
         self.assertEqual(calls, [('health', 'admin', 'MQTT fixed', 3)])
         self.assertEqual(portal_routes.required_role('POST', '/restart-qualification-gate'), 'administrator')
-        page = web_portal.render_release_qualification_page('csrf', {
+        qualification_status = {
             'available': True, 'retry_generation': 3,
             'evidence': {'gates': [{'name': 'health', 'status': 'failed', 'observed': 5, 'required': 10}]},
-        })
+            'retry_history': [{
+                'time': 1787396400, 'gate': 'health', 'actor': 'admin',
+                'reason': 'MQTT fixed', 'detail': 'Health gate failed',
+            }],
+        }
+        page = web_portal.render_release_qualification_page(
+            'csrf', qualification_status
+        )
         self.assertIn('action="/restart-qualification-gate"', page)
         self.assertIn('name="generation" value="3"', page)
         self.assertIn('name="confirm" value="yes" required', page)
         self.assertIn('disabled', portal_ui.restrict_actions(page, 'operator'))
+        evidence_page = web_portal.render_release_qualification_page(
+            'csrf', qualification_status, section='evidence'
+        )
+        self.assertIn('<h3>Failed test retry history</h3>', evidence_page)
+        self.assertIn('class="history-timeline"', evidence_page)
 
         canary = web_portal.render_release_qualification_page('csrf', {
             'available': True, 'retry_generation': 4,
