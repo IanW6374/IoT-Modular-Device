@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.77 - 2026-09-28
+
+- Add a signed application-only dummy release for end-to-end testing of the
+  corrected IoT-MD Management Suite deployment lifecycle from Alpha 76.
+
 ## 3.0.0-alpha.76 - 2026-09-28
 
 - Pass the Management Suite's requested release type through the public release
