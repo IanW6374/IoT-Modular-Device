@@ -70,3 +70,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.72 managed and automatic upgrade-flow test](v3.0.0-alpha.72.md)
 - [v3.0.0-alpha.73 fleet policy format-2 core compatibility](v3.0.0-alpha.73.md)
 - [v3.0.0-alpha.74 manual universal activation regression](v3.0.0-alpha.74.md)
+- [v3.0.0-alpha.75 managed application deployment test](v3.0.0-alpha.75.md)

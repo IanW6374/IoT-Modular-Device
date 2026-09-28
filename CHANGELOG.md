@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.75 - 2026-09-28
+
+- Add a signed application-only dummy release for testing immediate deployment
+  from IoT-MD Management Suite to an Alpha 74 device. No intentional functional
+  changes; retain native ABI 6 and use sequence 2780.
+
 ## 3.0.0-alpha.74 - 2026-09-27
 
 - Treat an authenticated portal restart as an explicit manual universal-update
