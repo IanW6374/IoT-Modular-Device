@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.79 - 2026-09-28
+
+- Add a signed application-only dummy release for verifying that Management
+  Suite 2.2.23 observes the complete stage, trial and confirmation lifecycle on
+  an Alpha 78 core.
+
 ## 3.0.0-alpha.78 - 2026-09-28
 
 - Move the final A/B application-trial commit into the frozen supervisor health
