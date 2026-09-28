@@ -15,7 +15,7 @@ import device_config
 
 
 RECOVERY_API_VERSION = 6
-CORE_API_VERSION = 10
+CORE_API_VERSION = 11
 TRIAL_DEADLINE_MS = 180000
 RECOVERY_STATE_PATH = '.recovery-state.json'
 MAX_TRIAL_UNHEALTHY_BOOTS = 2
@@ -195,6 +195,11 @@ def _complete_factory_reset(app_update, certificate_manager, credential_store,
 
 
 def mark_application_healthy():
+    # The frozen supervisor owns A/B trial state, so it must perform the final
+    # commit after the replaceable application reports local health.  This also
+    # avoids relying on a slot-loaded app_update module to mutate core state.
+    import app_update
+    app_update.confirm_update()
     try:
         import boot_state
         boot_state.store().confirm_health()

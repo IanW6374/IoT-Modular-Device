@@ -327,6 +327,15 @@ class RecoveryBootTests(unittest.TestCase):
             self.assertTrue(recovery_boot.cancel_trial_deadline_if_healthy())
         self.assertIsNone(recovery_boot._trial_timer)
 
+    def test_frozen_health_marker_commits_application_trial(self):
+        calls = []
+        app = SimpleNamespace(confirm_update=lambda: calls.append('confirmed'))
+        with patch.dict(sys.modules, {'app_update': app}), patch.object(
+            recovery_boot, '_native_platform', return_value=None
+        ):
+            recovery_boot.mark_application_healthy()
+        self.assertEqual(calls, ['confirmed'])
+
     def test_application_confirms_updates_only_after_portal_startup(self):
         source = (Path(self.previous_cwd) / 'iotmd_runtime.py').read_text()
         portal_start = source.index('portal_started = await start_admin_portal()')

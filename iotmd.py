@@ -7,7 +7,7 @@ contiguous heap allocation previously required during trial boot.
 
 import recovery_boot
 # Refuse a staged application if its paired core was rolled back first.
-REQUIRED_CORE_API = 10
+REQUIRED_CORE_API = 11
 core_api = int(getattr(recovery_boot, 'CORE_API_VERSION', 0) or 0)
 if core_api < REQUIRED_CORE_API:
     raise RuntimeError(

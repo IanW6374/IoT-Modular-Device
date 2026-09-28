@@ -73,3 +73,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.75 managed application deployment test](v3.0.0-alpha.75.md)
 - [v3.0.0-alpha.76 managed deployment executor regression](v3.0.0-alpha.76.md)
 - [v3.0.0-alpha.77 corrected managed deployment test](v3.0.0-alpha.77.md)
+- [v3.0.0-alpha.78 frozen trial confirmation regression](v3.0.0-alpha.78.md)

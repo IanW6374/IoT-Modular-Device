@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.78 - 2026-09-28
+
+- Move the final A/B application-trial commit into the frozen supervisor health
+  marker so a healthy slot cannot remain unconfirmed and be rolled back after
+  reaching the running state.
+- Advance the frozen core API to 11 and require the matched core/application
+  pair for this confirmation boundary.
+
 ## 3.0.0-alpha.77 - 2026-09-28
 
 - Add a signed application-only dummy release for end-to-end testing of the
