@@ -225,6 +225,14 @@ def network_trial_pending():
         return False
 
 
+def network_trial_confirmation_ready():
+    """Return true only after a boot has used the candidate network settings."""
+    trial = _read_network_trial()
+    return bool(
+        network_trial_pending() and int(trial.get('attempts', 0)) >= 1
+    )
+
+
 def prepare_network_trial_boot():
     """Allow one candidate boot; restore the previous generation after any reset."""
     trial = _read_network_trial()
@@ -245,6 +253,11 @@ def prepare_network_trial_boot():
 def confirm_network_trial():
     trial = _read_network_trial()
     if not trial:
+        return False
+    # A remote controller must not confirm the candidate during the same
+    # session that staged it. Confirmation is valid only after one boot has
+    # actually used the candidate network generation.
+    if int(trial.get('attempts', 0)) < 1:
         return False
     if _network_snapshot(load(require_provisioned=True)) != trial['candidate_wifi']:
         return False

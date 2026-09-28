@@ -35,7 +35,7 @@ API_CLIENT_REGISTRY_PATH = '/certs/api-clients.json'
 SYSLOG_CA_PATH = '/certs/trust/syslog-ca.der'
 DEVICE_API_HOST = '0.0.0.0'
 DEVICE_API_PORT = 8444
-DEVICE_API_MAX_BODY_BYTES = 8192
+DEVICE_API_MAX_BODY_BYTES = 32768
 
 DEVICE_INFO = {
     'mf': 'IoT-MD',

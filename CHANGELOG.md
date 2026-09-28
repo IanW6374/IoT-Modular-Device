@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.84 - 2026-09-28
+
+- Expand managed profiles to the device, Wi-Fi, logging, Home Assistant, MQTT,
+  syslog, automatic-update, portal, API and certificate lifecycle settings
+  supported by IoT-MD.
+- Accept encrypted Wi-Fi and MQTT secrets alongside their relevant settings and
+  authenticated certificate, private-key and trust payloads through the Device
+  API configuration scope.
+- Protect remotely changed Wi-Fi addressing with the existing reboot-and-
+  confirm network trial, allowing recovery when a pushed network profile cannot
+  reconnect.
+- Align profile validation with device limits, including the 500-line log
+  buffer maximum and supported UDP/TLS syslog transports.
+
 ## 3.0.0-alpha.83 - 2026-09-28
 
 - Replace separate Standard, Management Suite and Qualification API caller

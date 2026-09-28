@@ -53,7 +53,9 @@ class DeviceAPI:
                  fleet=None, support_getter=None, feature_flags=None,
                  configuration_getter=None, qualification_getter=None,
                  configuration_profile_applier=None, qualification_event=None,
-                 qualification_scenario=None):
+                 qualification_scenario=None, certificate_stager=None,
+                 certificate_applier=None, network_confirmer=None,
+                 configuration_restarter=None):
         self.broker = broker
         self.health = health
         self.registry = registry
@@ -67,6 +69,10 @@ class DeviceAPI:
         self.qualification_getter = qualification_getter
         self.qualification_event = qualification_event
         self.qualification_scenario = qualification_scenario
+        self.certificate_stager = certificate_stager
+        self.certificate_applier = certificate_applier
+        self.network_confirmer = network_confirmer
+        self.configuration_restarter = configuration_restarter
 
     def connection_opened(self, identity, peer='unknown'):
         client = self.registry.identify(identity)
@@ -99,7 +105,7 @@ class DeviceAPI:
         route = str(path).split('?', 1)[0]
         is_fleet = route.startswith('/api/v2/fleet')
         is_qualification = route.startswith('/api/v2/qualification')
-        if route == '/api/v2/configuration/profile' and method == 'POST':
+        if route.startswith('/api/v2/configuration/') and method == 'POST':
             scope = 'configuration:write'
         elif is_qualification and method == 'POST':
             scope = (
@@ -155,6 +161,35 @@ class DeviceAPI:
                 value, str(client.get('label', 'API client'))
             )
             return 202, {'accepted': True, 'profile': result}
+        certificate_prefix = '/api/v2/configuration/certificates/'
+        if method == 'POST' and route == certificate_prefix + 'apply':
+            if not self.certificate_applier:
+                raise RuntimeError('certificate profile management is unavailable')
+            return 202, {
+                'accepted': True, 'certificates': self.certificate_applier()
+            }
+        if method == 'POST' and route.startswith(certificate_prefix):
+            if not self.certificate_stager:
+                raise RuntimeError('certificate profile management is unavailable')
+            kind = route[len(certificate_prefix):]
+            if not kind or '/' in kind:
+                raise ValueError('certificate type is invalid')
+            return 202, {
+                'accepted': True,
+                'certificate': self.certificate_stager(kind, body),
+            }
+        if method == 'POST' and route == '/api/v2/configuration/network/confirm':
+            if not self.network_confirmer:
+                raise RuntimeError('network confirmation is unavailable')
+            return 200, {
+                'confirmed': bool(self.network_confirmer())
+            }
+        if method == 'POST' and route == '/api/v2/configuration/restart':
+            if not self.configuration_restarter:
+                raise RuntimeError('configuration restart is unavailable')
+            return 202, {
+                'accepted': True, 'restart': self.configuration_restarter()
+            }
         if method == 'GET' and route == '/api/v2/qualification':
             if not self.qualification_getter:
                 raise RuntimeError('qualification recorder is unavailable')

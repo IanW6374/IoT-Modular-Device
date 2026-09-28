@@ -201,6 +201,41 @@ class DeviceAPITests(unittest.TestCase):
                 self.cert,
             )
 
+    def test_configuration_scope_can_stage_and_apply_certificates(self):
+        staged = []
+        restarted = []
+        api = DeviceAPI(
+            self.broker, self.health, self.registry,
+            lambda: {'device_name': 'test'},
+            certificate_stager=lambda kind, payload:
+                staged.append((kind, payload)) or {'staged': True},
+            certificate_applier=lambda: {'restart': True},
+            network_confirmer=lambda: True,
+            configuration_restarter=lambda:
+                restarted.append(True) or {'message': 'restarting'},
+        )
+        self.registry.enrol(self.cert, 'fleet manager', ('configuration:write',))
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/certificates/mqtt-ca',
+            b'certificate-bytes', self.cert,
+        )
+        self.assertEqual(status, 202)
+        self.assertEqual(staged, [('mqtt-ca', b'certificate-bytes')])
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/certificates/apply', b'{}', self.cert,
+        )
+        self.assertTrue(payload['certificates']['restart'])
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/network/confirm', b'{}', self.cert,
+        )
+        self.assertTrue(payload['confirmed'])
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/restart', b'{}', self.cert,
+        )
+        self.assertEqual(status, 202)
+        self.assertEqual(restarted, [True])
+        self.assertEqual(payload['restart']['message'], 'restarting')
+
     def test_configuration_profile_rejects_secrets_and_unknown_settings(self):
         with self.assertRaisesRegex(ValueError, 'unsupported.*wifi_password'):
             configuration_profiles.normalize_profile({

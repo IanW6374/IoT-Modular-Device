@@ -8,12 +8,15 @@ class Credentials:
     def __init__(self):
         self.previewed = None
         self.updated = None
+        self.network_trial = False
 
     def preview_operational_settings(self, values):
         self.previewed = dict(values)
 
-    def update_operational_settings(self, values):
+    def update_operational_settings(self, values, network_trial=False):
         self.updated = dict(values)
+        self.network_trial = network_trial
+        return {'network_trial_pending': network_trial}
 
 
 class Timezone:
@@ -65,7 +68,7 @@ class ConfigurationProfileTests(unittest.TestCase):
         self.assertEqual(health.events[0][0][0], 'configuration_profile_applied')
 
     def test_profile_format_keeps_secrets_separate_from_settings(self):
-        for field in ('wifi_password', 'mqtt_password', 'api_clients', 'device_name'):
+        for field in ('wifi_password', 'mqtt_password', 'api_clients'):
             with self.subTest(field=field), self.assertRaisesRegex(
                 ValueError, 'unsupported configuration profile setting'
             ):
@@ -81,6 +84,53 @@ class ConfigurationProfileTests(unittest.TestCase):
             },
         })
         self.assertEqual(normalized['secrets']['mqtt_password'], 'broker-secret')
+
+    def test_profile_can_select_one_setting_and_network_values(self):
+        normalized = configuration_profiles.normalize_profile({
+            'name': 'Network',
+            'settings': {
+                'wifi_ssid': 'Production WiFi',
+                'wifi_dhcp': False,
+                'wifi_ip_address': '192.168.1.50',
+                'wifi_subnet_mask': '255.255.255.0',
+                'wifi_gateway': '192.168.1.1',
+                'wifi_dns_server': '192.168.1.1',
+            },
+        })
+        self.assertEqual(normalized['settings']['wifi_ssid'], 'Production WiFi')
+        self.assertFalse(normalized['settings']['wifi_dhcp'])
+        self.assertEqual(
+            configuration_profiles.normalize_profile({
+                'name': 'Syslog only',
+                'settings': {'syslog_enabled': True},
+            })['settings'],
+            {'syslog_enabled': True},
+        )
+
+    def test_network_profile_starts_a_rollback_trial(self):
+        credentials = Credentials()
+        service = ConfigurationProfileService(
+            credentials, Timezone(), Health(), lambda _reason: None
+        )
+
+        result = service.apply({
+            'name': 'Wi-Fi', 'settings': {'wifi_ssid': 'Production WiFi'},
+        }, 'Management')
+
+        self.assertTrue(credentials.network_trial)
+        self.assertTrue(result['network_trial_pending'])
+
+    def test_profile_matches_device_runtime_limits(self):
+        with self.assertRaisesRegex(ValueError, 'log_buffer_lines'):
+            configuration_profiles.normalize_profile({
+                'name': 'Too many logs',
+                'settings': {'log_buffer_lines': 501},
+            })
+        with self.assertRaisesRegex(ValueError, 'syslog_transport'):
+            configuration_profiles.normalize_profile({
+                'name': 'TCP syslog',
+                'settings': {'syslog_transport': 'tcp'},
+            })
 
     def test_profile_rejects_invalid_update_schedule(self):
         with self.assertRaisesRegex(ValueError, 'release_check_time'):

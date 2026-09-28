@@ -78,4 +78,5 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.80 managed schedule projection](v3.0.0-alpha.80.md)
 - [v3.0.0-alpha.81 history presentation](v3.0.0-alpha.81.md)
 - [v3.0.0-alpha.83 unified API caller enrolment](v3.0.0-alpha.83.md)
+- [v3.0.0-alpha.84 selective managed profiles](v3.0.0-alpha.84.md)
 - [v3.0.0-alpha.82 managed deployment test](v3.0.0-alpha.82.md)

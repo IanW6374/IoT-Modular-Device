@@ -45,6 +45,7 @@ import certificate_manager
 import certificate_status
 import certificate_lifecycle
 import certificate_portal_actions
+import certificate_upload
 import configuration_manager
 import api_security
 import portal_auth
@@ -1512,51 +1513,29 @@ def update_module_settings(payload):
 
 
 
-async def upload_certificate_file(kind, reader, length, client_scopes=''):
-    paths = {
+def certificate_upload_paths():
+    return {
         'trust-ca': mqtt_ca_cert_path,
         'mqtt-ca': getattr(__import__('device_config'), 'MQTT_CA_PATH', mqtt_ca_cert_path),
         'release-ca': getattr(__import__('device_config'), 'RELEASE_CA_PATH', release_ca_cert_path),
-        'management-suite-key': fleet_management.FLEET_VERIFICATION_KEY_PATH,
-        'api-client-ca': 'certs/api-client-ca-stage.der',
-        'api-client-cert': 'certs/api-client-enrol.der',
-        'fleet-client-cert': 'certs/fleet-client-enrol.der',
-        'qualification-client-cert': 'certs/qualification-client-enrol.der',
-        'iot-ca-enrollment': 'certs/.iot-ca-enrollment.manual',
         'syslog-ca': device_settings.syslog_ca_path,
         'portal-cert': web_portal_cert_path,
         'portal-key': web_portal_key_path,
         'api-server-cert': api_server_cert_path,
         'api-server-key': api_server_key_path,
     }
-    path = paths.get(kind)
-    if not path:
-        raise ValueError('unknown certificate type')
-    payload = bytearray()
-    while len(payload) < length:
-        chunk = await reader.read(min(1024, length - len(payload)))
-        if not chunk:
-            raise ValueError('certificate upload ended early')
-        payload.extend(chunk)
-    if b'-----BEGIN' in payload and kind != 'portal-cert':
-        raise ValueError('only the portal certificate chain may use PEM')
-    if kind in ('api-client-ca', 'api-client-cert', 'fleet-client-cert',
-                'qualification-client-cert'):
-        certificate_manager.decode_certificate(bytes(payload))
-        fingerprint = api_security.certificate_fingerprint(payload)[:24]
-        path = (
-            'certs/.api-ca-stage-' if kind == 'api-client-ca' else
-            ('certs/.fleet-client-stage-' if kind == 'fleet-client-cert' else
-             ('certs/.qualification-client-stage-'
-              if kind == 'qualification-client-cert' else
-              'certs/.api-client-stage-'))
-        ) + fingerprint + '.der'
-    client_scopes = api_security.normalize_client_scopes(client_scopes or api_security.CLIENT_SCOPE_PRESETS[kind]) if kind in api_security.CLIENT_SCOPE_PRESETS else ''
-    temporary = path + '.manual'
-    with open(temporary, 'wb') as stream:
-        stream.write(payload)
-    if kind in ('api-client-cert', 'fleet-client-cert', 'qualification-client-cert'):
-        api_security.stage_client_scopes(path, kind, client_scopes)
+
+
+def stage_certificate_payload(kind, payload, client_scopes=''):
+    return certificate_upload.stage(
+        kind, payload, certificate_upload_paths(), client_scopes
+    )
+
+
+async def upload_certificate_file(kind, reader, length, client_scopes=''):
+    return await certificate_upload.read_and_stage(
+        kind, reader, length, certificate_upload_paths(), client_scopes
+    )
 
 async def _close_listener(server):
     if server is None:
@@ -1753,6 +1732,10 @@ device_inventory = DeviceInventory({
     'portal_transport': lambda: 'https' if web_portal_https else 'http',
     'support_builder': support_bundle.build_support_bundle, 'health': lambda: event_service.health,
     'modules': module_summaries, 'product_version': lambda: component_versions.PRODUCT_VERSION,
+    'network_trial_pending': credential_store.network_trial_pending,
+    'network_trial_confirmation_ready': (
+        credential_store.network_trial_confirmation_ready
+    ),
     'fleet': lambda: fleet_service, 'logs': get_log_buffer,
     'qualification': qualification_service.status,
     'qualification_observation': lambda: qualification_service.observation(
@@ -1781,6 +1764,10 @@ async def start_module_api():
         qualification_getter=qualification_service.status,
         qualification_event=qualification_controls.record,
         qualification_scenario=qualification_controls.scenario,
+        certificate_stager=stage_certificate_payload,
+        certificate_applier=validate_uploaded_certificates,
+        network_confirmer=confirm_network_settings,
+        configuration_restarter=request_pending_restart,
     )
     try:
         migrated = certificate_manager.ensure_server_identity(

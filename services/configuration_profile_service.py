@@ -19,7 +19,17 @@ class ConfigurationProfileService:
                 values['timezone_name']
             )
         self.credentials.preview_operational_settings(values)
-        self.credentials.update_operational_settings(values)
+        network_keys = {
+            'wifi_ssid', 'wifi_password', 'wifi_dhcp', 'wifi_ip_address',
+            'wifi_subnet_mask', 'wifi_gateway', 'wifi_dns_server',
+        }
+        network_trial = bool(network_keys.intersection(values))
+        updated = (
+            self.credentials.update_operational_settings(values, True)
+            if network_trial else
+            self.credentials.update_operational_settings(values)
+        )
+        updated = updated or {}
         fields = sorted(
             list(normalized['settings']) + list(normalized.get('secrets', {}))
         )
@@ -32,4 +42,7 @@ class ConfigurationProfileService:
         return {
             'name': normalized['name'], 'applied_settings': fields,
             'restart_required': True,
+            'network_trial_pending': bool(
+                updated.get('network_trial_pending', False)
+            ),
         }

@@ -69,6 +69,12 @@ class DeviceInventory:
     def configuration(self):
         return {
             'device_name': self._value('device_name', ''),
+            'network_trial_pending': bool(
+                self._value('network_trial_pending', False)
+            ),
+            'network_trial_confirmation_ready': bool(
+                self._value('network_trial_confirmation_ready', False)
+            ),
             'module_settings_file': self._value('module_settings_file', ''),
             'release_channel': self._value('release_channel', 'stable'),
             'automatic_updates': {

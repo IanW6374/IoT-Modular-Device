@@ -1041,7 +1041,9 @@ class SetupWizardTests(unittest.TestCase):
             'wifi_password': 'replacement-password',
         }, network_trial=True)
         self.assertTrue(result['network_trial_pending'])
+        self.assertFalse(credential_store.network_trial_confirmation_ready())
         self.assertEqual(credential_store.prepare_network_trial_boot(), 'trial')
+        self.assertTrue(credential_store.network_trial_confirmation_ready())
         self.assertTrue(credential_store.confirm_network_trial())
         self.assertFalse(credential_store.network_trial_pending())
         self.assertEqual(
