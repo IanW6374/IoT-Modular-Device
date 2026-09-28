@@ -2166,7 +2166,8 @@ async def fleet_policy_monitor():
             if action == 'activate-update' and not fleet_service.within_maintenance_window(): continue
             try:
                 if action == 'check-update':
-                    await check_release_once(False, policy_channel, target_sequence, target_type)
+                    result = await check_release_once(False, policy_channel, target_sequence, target_type)
+                    if str(result).startswith('No newer compatible release'): raise RuntimeError(str(result))
                 elif action == 'download-update':
                     await download_release_once()
                 elif action == 'activate-update':
@@ -2193,6 +2194,7 @@ async def fleet_policy_monitor():
                     severity='error', component='fleet',
                     correlation_id=identifier
                 )
+                break
             else:
                 fleet_service.complete_command(identifier, 'complete', action)
                 runtime_health.record_event(
@@ -2201,7 +2203,6 @@ async def fleet_policy_monitor():
                     correlation_id=identifier
                 )
         await asyncio.sleep(30)
-
 
 async def portal_update_upload(reader, content_length, params):
     if not web_portal_updates_enabled:
@@ -2362,8 +2363,7 @@ async def _check_release_once(channel=None, target_sequence=0, target_type=''):
         return 'Release available'
     return await download_release_once()
 
-
-async def check_release_once(automatic=False, channel=None, target_sequence=0):
+async def check_release_once(automatic=False, channel=None, target_sequence=0, target_type=''):
     global release_check_status, release_last_checked
     global release_automatic_check_status, release_automatic_last_checked
     release_check_status = 'Checking'
@@ -2375,7 +2375,7 @@ async def check_release_once(automatic=False, channel=None, target_sequence=0):
         {'log': 'Checking ' + request_url, 'force': True}, 'INFO'
     )
     try:
-        result = await _check_release_once(channel, target_sequence)
+        result = await _check_release_once(channel, target_sequence, target_type)
     except Exception as exc:
         release_last_checked = wall_time_text()
         detail = str(exc).strip() or exc.__class__.__name__

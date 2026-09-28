@@ -71,3 +71,4 @@ without turning informal observations into fabricated measurements.
 - [v3.0.0-alpha.73 fleet policy format-2 core compatibility](v3.0.0-alpha.73.md)
 - [v3.0.0-alpha.74 manual universal activation regression](v3.0.0-alpha.74.md)
 - [v3.0.0-alpha.75 managed application deployment test](v3.0.0-alpha.75.md)
+- [v3.0.0-alpha.76 managed deployment executor regression](v3.0.0-alpha.76.md)

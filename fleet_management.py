@@ -163,6 +163,7 @@ class FleetService:
             'policy': None,
             'consecutive_failures': 0,
             'rollout_paused': False,
+            'command_chain_failed': False,
             'completed_commands': [],
             'last_result': {},
         }
@@ -209,6 +210,7 @@ class FleetService:
         self.state['policy_sequence'] = sequence
         self.state['policy'] = dict(policy)
         self.state['rollout_paused'] = False
+        self.state['command_chain_failed'] = False
         self._save()
         return self.snapshot()
 
@@ -225,6 +227,8 @@ class FleetService:
         return weekday in window['weekdays'] and start <= minute < start + duration
 
     def pending_commands(self):
+        if self.state.get('rollout_paused') or self.state.get('command_chain_failed'):
+            return []
         completed = set(self.state.get('completed_commands', ()))
         policy = self.state.get('policy') or {}
         return [
@@ -247,6 +251,9 @@ class FleetService:
         completed = self.state.setdefault('completed_commands', [])
         completed.append(identifier)
         self.state['completed_commands'] = completed[-64:]
+        self.state['command_chain_failed'] = str(result) not in (
+            'complete', 'confirmed', 'healthy'
+        )
         self.record_result(result, detail)
         return self.snapshot()
 

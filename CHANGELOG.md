@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.76 - 2026-09-28
+
+- Pass the Management Suite's requested release type through the public release
+  check wrapper, allowing typed application, core and universal fleet commands
+  to select their intended artifact.
+- Stop an ordered fleet command chain after a failed prerequisite, preventing
+  download or activation from running when no update was staged.
+
 ## 3.0.0-alpha.75 - 2026-09-28
 
 - Add a signed application-only dummy release for testing immediate deployment

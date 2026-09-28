@@ -61,6 +61,21 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertNotIn('release_update.for_release_sequence', source)
         self.assertIn("item.get('release_sequence', 0)", source)
 
+    def test_fleet_update_chain_is_typed_and_stops_after_failure(self):
+        source = Path('iotmd_runtime.py').read_text()
+        self.assertIn(
+            "async def check_release_once(automatic=False, channel=None, "
+            "target_sequence=0, target_type=''):",
+            source,
+        )
+        self.assertIn(
+            'await _check_release_once(channel, target_sequence, target_type)',
+            source,
+        )
+        monitor = source[source.index('async def fleet_policy_monitor():'):
+                         source.index('async def portal_update_upload(')]
+        self.assertIn('break', monitor)
+
     def test_manual_universal_activation_has_an_explicit_context(self):
         portal_source = Path('web_portal.py').read_text()
         runtime_source = Path('iotmd_runtime.py').read_text()

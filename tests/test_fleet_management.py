@@ -133,8 +133,26 @@ class FleetManagementTests(unittest.TestCase):
         self.assertFalse(service.snapshot()['rollout_paused'])
         service.record_result('failed', 'two')
         self.assertTrue(service.snapshot()['rollout_paused'])
+        self.assertEqual(service.pending_commands(), [])
         service.record_result('healthy')
         self.assertFalse(service.snapshot()['rollout_paused'])
+
+    def test_failed_command_stops_the_remaining_ordered_chain(self):
+        policy = self.policy()
+        policy['commands'].append({
+            'id': 'command-2', 'action': 'download-update',
+            'release_sequence': 0,
+        })
+        policy['signature'] = update_security.sign_manifest(
+            'fleet-policy', policy, self.private_key
+        )
+        service = self.service()
+        service.apply_policy(policy)
+
+        service.complete_command('command-1', 'failed', 'check failed')
+
+        self.assertTrue(service.snapshot()['command_chain_failed'])
+        self.assertEqual(service.pending_commands(), [])
 
 
 if __name__ == '__main__':
