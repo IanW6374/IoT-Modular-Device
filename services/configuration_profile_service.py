@@ -13,13 +13,16 @@ class ConfigurationProfileService:
     def apply(self, profile, actor='Management Suite'):
         normalized = configuration_profiles.normalize_profile(profile)
         values = dict(normalized['settings'])
+        values.update(normalized.get('secrets', {}))
         if 'timezone_name' in values:
             values['timezone_offset_minutes'] = self.timezone.offset_minutes(
                 values['timezone_name']
             )
         self.credentials.preview_operational_settings(values)
         self.credentials.update_operational_settings(values)
-        fields = sorted(normalized['settings'])
+        fields = sorted(
+            list(normalized['settings']) + list(normalized.get('secrets', {}))
+        )
         self.health.record_event(
             'configuration_profile_applied', normalized['name'], {
                 'actor': str(actor)[:64], 'fields': ','.join(fields),

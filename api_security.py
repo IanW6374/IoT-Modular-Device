@@ -47,6 +47,35 @@ CLIENT_STAGE_SCOPES = (
         'read', 'qualification:write', 'qualification:execute'
     )),
 )
+CLIENT_SCOPE_PRESETS = {
+    'api-client-cert': ('read', 'write'),
+    'fleet-client-cert': ('fleet:read', 'fleet:write', 'configuration:write'),
+    'qualification-client-cert': (
+        'read', 'qualification:write', 'qualification:execute'
+    ),
+}
+
+
+def normalize_client_scopes(scopes):
+    """Return a validated, deterministic set of API client scopes."""
+    if isinstance(scopes, str):
+        scopes = scopes.split(',')
+    result = tuple(sorted(set(
+        str(scope).strip() for scope in (scopes or ()) if str(scope).strip()
+    )))
+    if not result:
+        raise ValueError('API client must retain at least one scope')
+    if any(scope not in ALLOWED_SCOPES for scope in result):
+        raise ValueError('API client scopes contain an unsupported value')
+    return result
+
+
+def stage_client_scopes(certificate_path, kind, scopes=''):
+    """Persist the selected permissions next to a staged client identity."""
+    selected = normalize_client_scopes(scopes or CLIENT_SCOPE_PRESETS[kind])
+    with open(certificate_path[:-len('.der')] + '.scopes.manual', 'w') as stream:
+        stream.write(','.join(selected))
+    return selected
 
 
 def staged_clients(directory, names, decoder):
@@ -61,6 +90,12 @@ def staged_clients(directory, names, decoder):
         path = directory + '/' + name
         with open(path, 'rb') as stream:
             payload = stream.read()
+        scope_path = path[:-len('.der.manual')] + '.scopes.manual'
+        try:
+            with open(scope_path, 'r') as stream:
+                scopes = normalize_client_scopes(stream.read())
+        except OSError:
+            pass
         decoder(payload)
         result.append((path, payload, scopes))
     return result
@@ -71,6 +106,10 @@ def enrol_staged_clients(registry, stages):
         registry.enrol(payload, scopes=scopes)
         try:
             os.remove(path)
+        except OSError:
+            pass
+        try:
+            os.remove(path[:-len('.der.manual')] + '.scopes.manual')
         except OSError:
             pass
 

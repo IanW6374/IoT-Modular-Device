@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.83 - 2026-09-28
+
+- Replace separate Standard, Management Suite and Qualification API caller
+  certificate types with one API caller enrolment and explicit permission
+  presets.
+- Add a custom multi-select permission preset and persist its selected scopes
+  with the staged certificate before atomic enrolment.
+- Retain the existing per-client scope editor so one enrolled certificate can
+  change roles without duplicate trust records.
+- Allow Management profiles to apply automatic-update preferences and
+  separately validated Wi-Fi and MQTT secrets over the mutual-TLS API.
+
 ## 3.0.0-alpha.82 - 2026-09-28
 
 - Add a signed application-only dummy release for testing Management Suite

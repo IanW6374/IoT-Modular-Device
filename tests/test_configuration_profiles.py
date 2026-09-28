@@ -45,16 +45,26 @@ class ConfigurationProfileTests(unittest.TestCase):
                 'timezone_name': 'Europe/London',
                 'ntp_servers': ['pool.ntp.org'],
                 'ha_discovery': True,
+                'release_channel': 'alpha',
+                'release_check_schedule': 'weekly',
+                'release_check_time': '03:30',
+                'release_check_weekday': 6,
+                'release_auto_download': True,
+                'release_auto_activate': False,
             },
+            'secrets': {'mqtt_password': 'broker-secret'},
         }, 'Home Assistant')
         self.assertEqual(credentials.previewed, credentials.updated)
         self.assertEqual(credentials.updated['timezone_offset_minutes'], 60)
+        self.assertEqual(credentials.updated['release_channel'], 'alpha')
+        self.assertEqual(credentials.updated['release_check_time'], '03:30')
+        self.assertEqual(credentials.updated['mqtt_password'], 'broker-secret')
         self.assertEqual(result['name'], 'Production')
         self.assertTrue(result['restart_required'])
         self.assertEqual(restart_reasons, ['Configuration profile applied'])
         self.assertEqual(health.events[0][0][0], 'configuration_profile_applied')
 
-    def test_profile_format_excludes_secrets_and_network_identity(self):
+    def test_profile_format_keeps_secrets_separate_from_settings(self):
         for field in ('wifi_password', 'mqtt_password', 'api_clients', 'device_name'):
             with self.subTest(field=field), self.assertRaisesRegex(
                 ValueError, 'unsupported configuration profile setting'
@@ -62,6 +72,26 @@ class ConfigurationProfileTests(unittest.TestCase):
                 configuration_profiles.normalize_profile({
                     'name': 'Unsafe', 'settings': {field: 'secret'},
                 })
+
+        normalized = configuration_profiles.normalize_profile({
+            'name': 'Secure', 'settings': {'release_channel': 'beta'},
+            'secrets': {
+                'wifi_password': 'correct horse battery staple',
+                'mqtt_password': 'broker-secret',
+            },
+        })
+        self.assertEqual(normalized['secrets']['mqtt_password'], 'broker-secret')
+
+    def test_profile_rejects_invalid_update_schedule(self):
+        with self.assertRaisesRegex(ValueError, 'release_check_time'):
+            configuration_profiles.normalize_profile({
+                'name': 'Invalid',
+                'settings': {
+                    'release_channel': 'alpha',
+                    'release_check_schedule': 'weekly',
+                    'release_check_time': '25:00',
+                },
+            })
 
 
 if __name__ == '__main__':

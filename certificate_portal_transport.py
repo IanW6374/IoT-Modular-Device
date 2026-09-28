@@ -87,7 +87,10 @@ async def handle(method, route, path, writer, reader, headers, form, csrf,
         length = int(headers.get('content-length', '0') or 0)
         if length <= 0 or length > 16384:
             raise ValueError('certificate file size is invalid')
-        await upload(headers.get('x-certificate-kind', ''), reader, length)
+        await upload(
+            headers.get('x-certificate-kind', ''), reader, length,
+            headers.get('x-api-scopes', '')
+        )
         await send_response(writer, '200 OK', 'Certificate file stored', 'text/plain')
         return True
     if method == 'POST' and route == '/validate-certificates':

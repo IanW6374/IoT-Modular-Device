@@ -1512,7 +1512,7 @@ def update_module_settings(payload):
 
 
 
-async def upload_certificate_file(kind, reader, length):
+async def upload_certificate_file(kind, reader, length, client_scopes=''):
     paths = {
         'trust-ca': mqtt_ca_cert_path,
         'mqtt-ca': getattr(__import__('device_config'), 'MQTT_CA_PATH', mqtt_ca_cert_path),
@@ -1551,10 +1551,12 @@ async def upload_certificate_file(kind, reader, length):
               if kind == 'qualification-client-cert' else
               'certs/.api-client-stage-'))
         ) + fingerprint + '.der'
+    client_scopes = api_security.normalize_client_scopes(client_scopes or api_security.CLIENT_SCOPE_PRESETS[kind]) if kind in api_security.CLIENT_SCOPE_PRESETS else ''
     temporary = path + '.manual'
     with open(temporary, 'wb') as stream:
         stream.write(payload)
-
+    if kind in ('api-client-cert', 'fleet-client-cert', 'qualification-client-cert'):
+        api_security.stage_client_scopes(path, kind, client_scopes)
 
 async def _close_listener(server):
     if server is None:
@@ -1562,8 +1564,6 @@ async def _close_listener(server):
     server.close()
     if hasattr(server, 'wait_closed'):
         await server.wait_closed()
-
-
 async def reload_portal_listener(delay_s=1):
     """Load a replaced portal identity without rebooting the device."""
     global web_portal_server

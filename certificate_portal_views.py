@@ -76,12 +76,29 @@ def _remove_form(csrf, kind, fingerprint='', return_to='/certificate-authorities
             '<div class="actions"><span></span><button class="danger compact" type="submit">Remove trust</button></div></form>')
 
 
-def _upload_widget(csrf, choices, return_label):
+def _upload_widget(csrf, choices, return_label, api_scope_presets=False):
     options = ''.join('<option value="' + value + '">' + label + '</option>' for value, label, _help in choices)
     descriptions = ','.join('"' + value + '":["' + label + '","' + help_text + '"]'
                             for value, label, help_text in choices)
+    scope_fields = ''
+    if api_scope_presets:
+        scope_fields = (
+            '<div id="api-client-permissions"><label class="field">Permission preset'
+            '<select id="api-scope-preset"><option value="read,write">Standard API caller</option>'
+            '<option value="fleet:read,fleet:write,configuration:write">Management Suite</option>'
+            '<option value="read,qualification:write,qualification:execute">Qualification automation</option>'
+            '<option value="custom">Custom</option></select></label>'
+            '<label id="api-custom-scopes-field" class="field" hidden>Custom API scopes'
+            '<select id="api-custom-scopes" multiple size="7">'
+            '<option value="read">Read device state</option><option value="write">Run device commands</option>'
+            '<option value="fleet:read">Read fleet state</option><option value="fleet:write">Apply fleet commands</option>'
+            '<option value="configuration:write">Apply configuration profiles</option>'
+            '<option value="qualification:write">Record qualification evidence</option>'
+            '<option value="qualification:execute">Run qualification scenarios</option>'
+            '</select><small>Select one or more permissions.</small></label></div>'
+        )
     body = ('<label class="field">Certificate or trust type<select id="certificate-type">' + options +
-            '</select></label><label id="certificate-primary-label" class="field">File'
+            '</select></label>' + scope_fields + '<label id="certificate-primary-label" class="field">File'
             '<input id="certificate-primary" type="file" required></label>'
             '<p id="certificate-help" class="muted"></p><div class="actions">'
             '<span id="certificate-result" class="portal-status"></span>'
@@ -90,20 +107,28 @@ def _upload_widget(csrf, choices, return_label):
     script = (
         'function bindCertificateUpload(){var csrf=' + repr(str(csrf)) +
         ',type=document.getElementById("certificate-type"),file=document.getElementById('
-        '"certificate-primary"),help=document.getElementById("certificate-help"),descriptions={' +
+        '"certificate-primary"),help=document.getElementById("certificate-help"),preset='
+        'document.getElementById("api-scope-preset"),custom=document.getElementById("api-custom-scopes"),'
+        'customField=document.getElementById("api-custom-scopes-field"),permissions='
+        'document.getElementById("api-client-permissions"),descriptions={' +
         descriptions + '};if(!type||!file||!help)return;function configure(){help.textContent='
-        'descriptions[type.value][1];file.multiple=type.value==="api-client-ca"||type.value==="api-client-cert"||'
-        'type.value==="fleet-client-cert"||type.value==="qualification-client-cert";file.accept=type.value==='
+        'descriptions[type.value][1];file.multiple=type.value==="api-client-ca"||type.value==="api-client-cert";'
+        'if(permissions)permissions.hidden=type.value!=="api-client-cert";if(customField)customField.hidden=!preset||'
+        'preset.value!=="custom";file.accept=type.value==='
         '"management-suite-key"?".bin,.hex,application/octet-stream":(type.value==="portal-cert"?'
         '".der,.pem,application/pkix-cert,application/x-pem-file":".der,application/pkix-cert,application/octet-stream");}'
-        'type.onchange=configure;configure();function upload(f,k){return fetch("/certificate-upload",{method:"POST",'
+        'type.onchange=configure;if(preset)preset.onchange=configure;configure();function selectedScopes(){if(!preset)'
+        'return "";if(preset.value!=="custom")return preset.value;return Array.from(custom.selectedOptions).map('
+        'function(option){return option.value;}).join(",");}function upload(f,k,scopes){return fetch("/certificate-upload",{method:"POST",'
         'credentials:"same-origin",headers:{"Content-Type":"application/octet-stream","X-CSRF-Token":csrf,'
-        '"X-Certificate-Kind":k},body:f});}var button=document.getElementById("certificate-upload");if(!button)return;'
+        '"X-Certificate-Kind":k,"X-API-Scopes":scopes},body:f});}var button=document.getElementById("certificate-upload");if(!button)return;'
         'button.onclick=async function(){var out=document.getElementById("certificate-result"),box='
-        'document.getElementById("certificate-progress"),label=box.querySelector(".status-text");if(!portalRequire(file,'
+        'document.getElementById("certificate-progress"),label=box.querySelector(".status-text"),scopes='
+        'type.value==="api-client-cert"?selectedScopes():"";if(type.value==="api-client-cert"&&!scopes){portalStatus(out,'
+        '"error","Select at least one API scope");return;}if(!portalRequire(file,'
         '"Select at least one file"))return;this.disabled=true;box.hidden=false;box.classList.remove("complete","failed");'
         'try{for(var i=0;i<file.files.length;i++){label.textContent="Uploading "+(i+1)+" of "+file.files.length;'
-        'var response=await upload(file.files[i],type.value);if(response.status===401){location.replace('
+        'var response=await upload(file.files[i],type.value,scopes);if(response.status===401){location.replace('
         '"/login?reason=expired");return;}if(!response.ok)throw new Error(await response.text());}label.textContent='
         '"Validating…";var done=await fetch("/validate-certificates",{method:"POST",credentials:"same-origin",headers:'
         '{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:"csrf="+'
@@ -290,10 +315,8 @@ def render_api_client_trust_page(csrf, message='', certificates=None):
         clients.append(_card(dict(details, installed=True), details.get('label', 'Device API caller'), action))
     upload, script = _upload_widget(csrf, (
         ('api-client-ca', 'Device API client issuer CA', 'Trusts certificates presented by approved Device API callers.'),
-        ('api-client-cert', 'Device API caller certificate', 'Enrolls a client identity with Device API read/write scopes.'),
-        ('fleet-client-cert', 'Management Suite Device API caller certificate', 'Enrolls the Management Suite identity with fleet scopes.'),
-        ('qualification-client-cert', 'Qualification automation certificate', 'Enrolls a client with qualification evidence and scenario scopes.'),
-    ), '/api-client-trust')
+        ('api-client-cert', 'API caller certificate', 'Enrolls one client identity with the selected permission preset.'),
+    ), '/api-client-trust', api_scope_presets=True)
     body = (portal_ui.page_heading('Maintenance', 'API client trust',
             'Manage who may authenticate to the mutual-TLS Device API.') + '<div id="certificate-workspace">' + _notice(message) +
             '<div id="api-client-workspace"><section class="card"><div class="section-title"><h2>Trusted client issuers</h2></div><div class="module-grid">' +

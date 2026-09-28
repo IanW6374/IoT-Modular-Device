@@ -339,6 +339,35 @@ class DeviceAPITests(unittest.TestCase):
 
         self.assertEqual(self.registry.list_clients()[0]['scopes'], ['read'])
 
+    def test_staged_client_uses_selected_permission_preset(self):
+        directory = Path(self.temp.name) / 'staged'
+        directory.mkdir()
+        certificate_path = directory / ('.api-client-stage-' + ('a' * 24) + '.der')
+        staged_path = Path(str(certificate_path) + '.manual')
+        staged_path.write_bytes(self.cert)
+
+        api_security.stage_client_scopes(
+            str(certificate_path), 'api-client-cert',
+            'fleet:read,fleet:write,configuration:write'
+        )
+        stages = api_security.staged_clients(
+            str(directory), [item.name for item in directory.iterdir()],
+            certificate_manager.decode_certificate
+        )
+
+        self.assertEqual(len(stages), 1)
+        self.assertEqual(stages[0][2], (
+            'configuration:write', 'fleet:read', 'fleet:write'
+        ))
+
+    def test_custom_client_scope_selection_rejects_unknown_permissions(self):
+        certificate_path = str(Path(self.temp.name) / 'client.der')
+
+        with self.assertRaisesRegex(ValueError, 'unsupported'):
+            api_security.stage_client_scopes(
+                certificate_path, 'api-client-cert', 'read,administrator'
+            )
+
     def test_v1_registry_is_rejected_by_clean_seed_runtime(self):
         path = Path(self.temp.name) / 'legacy-clients.json'
         fingerprint = api_security.certificate_fingerprint(self.cert)
