@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.80 - 2026-09-28
+
+- Report the configured automatic-update cadence, local activation time,
+  weekday and download/activation choices in the authenticated device
+  configuration inventory.
+- Allow IoT-MD Management Suite 2.3.0 to stage an update immediately while
+  deriving the signed activation window from each target device's own update
+  schedule.
+
 ## 3.0.0-alpha.79 - 2026-09-28
 
 - Add a signed application-only dummy release for verifying that Management

@@ -86,6 +86,23 @@ class DeviceAPITests(unittest.TestCase):
             value['qualification_observation']['storage_free_bytes'], 1024
         )
 
+    def test_configuration_reports_automatic_update_schedule(self):
+        inventory = DeviceInventory({
+            'release_check_schedule': 'weekly',
+            'release_check_time': '02:30',
+            'release_check_weekday': 6,
+            'release_auto_download': True,
+            'release_auto_activate': True,
+        })
+
+        schedule = inventory.configuration()['automatic_updates']
+
+        self.assertEqual(schedule['schedule'], 'weekly')
+        self.assertEqual(schedule['time'], '02:30')
+        self.assertEqual(schedule['weekday'], 6)
+        self.assertTrue(schedule['download'])
+        self.assertTrue(schedule['activate'])
+
     def test_v1_namespace_is_not_exposed_by_clean_seed_runtime(self):
         self.registry.enrol(self.cert, 'reader', ('read',))
         status, body = self.api.dispatch(

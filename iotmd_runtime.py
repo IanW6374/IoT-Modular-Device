@@ -1748,7 +1748,7 @@ device_inventory = DeviceInventory({
     'usb_ncm': usb_network.snapshot, 'features': runtime_features.snapshot,
     'release_sequence': app_update.running_release_sequence,
     'firmware_release_sequence': firmware_update.running_release_sequence,
-    'module_settings_file': lambda: moduleSettingsFile, 'release_channel': lambda: release_channel,
+    'module_settings_file': lambda: moduleSettingsFile, 'release_channel': lambda: release_channel, 'release_check_schedule': lambda: release_check_schedule, 'release_check_time': lambda: release_check_time, 'release_check_weekday': lambda: release_check_weekday, 'release_auto_download': lambda: release_auto_download, 'release_auto_activate': lambda: release_auto_activate,
     'portal_enabled': lambda: web_portal_enabled, 'portal_port': lambda: web_portal_port,
     'portal_transport': lambda: 'https' if web_portal_https else 'http',
     'support_builder': support_bundle.build_support_bundle, 'health': lambda: event_service.health,

@@ -71,6 +71,13 @@ class DeviceInventory:
             'device_name': self._value('device_name', ''),
             'module_settings_file': self._value('module_settings_file', ''),
             'release_channel': self._value('release_channel', 'stable'),
+            'automatic_updates': {
+                'schedule': self._value('release_check_schedule', 'disabled'),
+                'time': self._value('release_check_time', '03:00'),
+                'weekday': self._value('release_check_weekday', 0),
+                'download': bool(self._value('release_auto_download', False)),
+                'activate': bool(self._value('release_auto_activate', False)),
+            },
             'device_api': {
                 'enabled': self._value('api_enabled', False),
                 'port': self._value('api_port', 8444),
