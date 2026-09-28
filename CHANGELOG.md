@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.82 - 2026-09-28
+
+- Add a signed application-only dummy release for testing Management Suite
+  2.3.1 targeting, staging, scheduled activation and deployment history after
+  the portal presentation changes in Alpha 81.
+
 ## 3.0.0-alpha.81 - 2026-09-28
 
 - Present update history and persistent health events as concise chronological
