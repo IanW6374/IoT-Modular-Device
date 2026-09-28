@@ -29,6 +29,7 @@ CORE_FILES = (
     'certificate_status.py',
     'certificate_enrollment_service.py',
     'certificate_portal_actions.py',
+    'certificate_upload.py',
     'certificate_portal_transport.py',
     'certificate_portal_views.py',
     'certificate_trust.py',
