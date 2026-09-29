@@ -201,6 +201,39 @@ class DeviceAPITests(unittest.TestCase):
                 self.cert,
             )
 
+    def test_configuration_scope_manages_complete_backup_restore(self):
+        calls = []
+        api = DeviceAPI(
+            self.broker, self.health, self.registry,
+            lambda: {'device_name': 'test'},
+            configuration_backup=lambda password:
+                calls.append(('backup', password)) or {'format': 'encrypted'},
+            configuration_restore_preview=lambda request:
+                calls.append(('preview', request)) or {'token': 'restore-token'},
+            configuration_restore_apply=lambda token:
+                calls.append(('apply', token)) or 'restart required',
+        )
+        self.registry.enrol(self.cert, 'fleet manager', ('configuration:write',))
+
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/backups',
+            b'{"password":"long-enough-backup-password"}', self.cert,
+        )
+        self.assertEqual((status, payload['backup']['format']), (201, 'encrypted'))
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/backups/preview',
+            b'{"backup":{"format":"encrypted"},"password":"secret"}',
+            self.cert,
+        )
+        self.assertEqual((status, payload['preview']['token']), (200, 'restore-token'))
+        status, payload = api.dispatch(
+            'POST', '/api/v2/configuration/backups/apply',
+            b'{"token":"restore-token"}', self.cert,
+        )
+        self.assertEqual((status, payload['restore']), (202, 'restart required'))
+        self.assertEqual(calls[0], ('backup', 'long-enough-backup-password'))
+        self.assertEqual(calls[-1], ('apply', 'restore-token'))
+
     def test_configuration_scope_can_stage_and_apply_certificates(self):
         staged = []
         restarted = []

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: IoT Modular Device API
-  version: 2.5.0
+  version: 2.6.0
   description: Mutual-TLS JSON API exposed by an IoT-MD device.
 servers:
   - url: https://{device}:8444
@@ -51,6 +51,26 @@ paths:
             schema: {$ref: '#/components/schemas/ConfigurationProfile'}
       responses:
         '202': {description: Profile accepted; device restart required}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v2/configuration/backups:
+    post:
+      summary: Create a complete password-encrypted device backup
+      responses:
+        '201': {description: Authenticated encrypted backup envelope}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v2/configuration/backups/preview:
+    post:
+      summary: Validate an encrypted backup and preview selected restore sections
+      responses:
+        '200': {description: Restore token and redacted change preview}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v2/configuration/backups/apply:
+    post:
+      summary: Apply a previously previewed complete backup restore
+      responses:
+        '202': {description: Restore accepted; device restart required}
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v2/device/inventory:

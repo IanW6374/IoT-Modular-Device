@@ -1771,6 +1771,9 @@ async def start_module_api():
         certificate_applier=validate_uploaded_certificates,
         network_confirmer=confirm_network_settings,
         configuration_restarter=request_pending_restart,
+        configuration_backup=secure_configuration_backup,
+        configuration_restore_preview=preview_secure_configuration_import,
+        configuration_restore_apply=apply_secure_configuration_import,
     )
     try:
         migrated = certificate_manager.ensure_server_identity(

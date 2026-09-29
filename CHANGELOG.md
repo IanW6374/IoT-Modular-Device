@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.89 - 2026-09-29
+
+- Add Management Suite API operations for device-encrypted complete backup,
+  previewed selective restore and confirmed restore application.
+- Keep complete backup plaintext and recovery credentials inside the device
+  boundary; the API returns only the authenticated encrypted envelope.
+- Raise the bounded Device API request limit to accommodate a maximum complete
+  backup envelope during restore.
+
 ## 3.0.0-alpha.88 - 2026-09-29
 
 - Reconcile retained universal transport plans against the live application and

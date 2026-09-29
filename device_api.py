@@ -55,7 +55,9 @@ class DeviceAPI:
                  configuration_profile_applier=None, qualification_event=None,
                  qualification_scenario=None, certificate_stager=None,
                  certificate_applier=None, network_confirmer=None,
-                 configuration_restarter=None):
+                 configuration_restarter=None, configuration_backup=None,
+                 configuration_restore_preview=None,
+                 configuration_restore_apply=None):
         self.broker = broker
         self.health = health
         self.registry = registry
@@ -73,6 +75,9 @@ class DeviceAPI:
         self.certificate_applier = certificate_applier
         self.network_confirmer = network_confirmer
         self.configuration_restarter = configuration_restarter
+        self.configuration_backup = configuration_backup
+        self.configuration_restore_preview = configuration_restore_preview
+        self.configuration_restore_apply = configuration_restore_apply
 
     def connection_opened(self, identity, peer='unknown'):
         client = self.registry.identify(identity)
@@ -161,6 +166,32 @@ class DeviceAPI:
                 value, str(client.get('label', 'API client'))
             )
             return 202, {'accepted': True, 'profile': result}
+        if method == 'POST' and route == '/api/v2/configuration/backups':
+            if not self.configuration_backup:
+                raise RuntimeError('complete configuration backup is unavailable')
+            value = json.loads(body.decode() if isinstance(body, bytes) else body)
+            if not isinstance(value, dict):
+                raise ValueError('configuration backup request must be an object')
+            return 201, {
+                'backup': self.configuration_backup(value.get('password', ''))
+            }
+        if method == 'POST' and route == '/api/v2/configuration/backups/preview':
+            if not self.configuration_restore_preview:
+                raise RuntimeError('complete configuration restore is unavailable')
+            value = json.loads(body.decode() if isinstance(body, bytes) else body)
+            if not isinstance(value, dict):
+                raise ValueError('configuration restore request must be an object')
+            return 200, {'preview': self.configuration_restore_preview(value)}
+        if method == 'POST' and route == '/api/v2/configuration/backups/apply':
+            if not self.configuration_restore_apply:
+                raise RuntimeError('complete configuration restore is unavailable')
+            value = json.loads(body.decode() if isinstance(body, bytes) else body)
+            if not isinstance(value, dict):
+                raise ValueError('configuration restore request must be an object')
+            return 202, {
+                'accepted': True,
+                'restore': self.configuration_restore_apply(value.get('token', '')),
+            }
         certificate_prefix = '/api/v2/configuration/certificates/'
         if method == 'POST' and route == certificate_prefix + 'apply':
             if not self.certificate_applier:
