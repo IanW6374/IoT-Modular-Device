@@ -160,17 +160,40 @@ def _component_plan(manifest, name, running_sequence):
     }
 
 
+def _refresh_component_plan(plan, name, running_sequence):
+    """Reconcile a retained transport plan with live component state."""
+    component = plan[name]
+    offered = int(component.get('release_sequence', 0))
+    running = int(running_sequence)
+    if running > offered:
+        raise ValueError('universal update is older than an installed component')
+    if running == offered:
+        component.update({
+            'required': False, 'complete': True, 'upload_id': '',
+        })
+        return
+    state = (
+        firmware_update.update_status()
+        if name == 'firmware' else app_update.update_status()
+    )
+    ready = (
+        state.get('status') == 'ready' and
+        str(state.get('version', '')) == str(component.get('version', '')) and
+        int(state.get('release_sequence', 0)) == offered
+    )
+    component['required'] = True
+    component['complete'] = bool(ready)
+    if not ready:
+        # A completed resumable artifact is removed after its installer exits.
+        # Do not leave that failed upload identifier bound to a retry.
+        component['upload_id'] = ''
+
+
 def prepare(manifest):
     """Create a persistent plan from a verified outer universal manifest."""
     validate_manifest(manifest)
     identifier = _plan_identifier(manifest)
     existing = _load_plan()
-    if (
-        existing and str(existing.get('id', '')) == identifier and
-        str(existing.get('manifest', {}).get('signature', '')) ==
-        str(manifest.get('signature', ''))
-    ):
-        return status(identifier)
     # A paired rollback may complete before the universal coordinator gets an
     # opportunity to remove its state file.  Reconcile that terminal state so
     # a remote administrator can immediately retry without USB intervention.
@@ -188,6 +211,23 @@ def prepare(manifest):
         raise ValueError(
             'universal update is older than an installed component'
         )
+    if (
+        existing and str(existing.get('id', '')) == identifier and
+        str(existing.get('manifest', {}).get('signature', '')) ==
+        str(manifest.get('signature', ''))
+    ):
+        _refresh_component_plan(
+            existing, 'application', application_sequence
+        )
+        _refresh_component_plan(existing, 'firmware', firmware_sequence)
+        if (
+            not existing['application'].get('required') and
+            not existing['firmware'].get('required')
+        ):
+            _remove(PLAN_PATH)
+            raise ValueError('universal update is not newer than the installed release')
+        _write_plan(existing)
+        return status(identifier)
     application = _component_plan(
         manifest, 'application', application_sequence
     )

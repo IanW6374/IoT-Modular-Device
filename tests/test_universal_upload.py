@@ -228,6 +228,56 @@ class UniversalUploadTests(unittest.TestCase):
         self.assertTrue(resumed['firmware']['complete'])
         self.assertFalse(resumed['application']['complete'])
 
+    def test_retry_skips_component_installed_after_partial_universal_failure(self):
+        manifest = self.manifest()
+        with (
+            patch.object(app_update, 'running_release_sequence', return_value=2400),
+            patch.object(firmware_update, 'running_release_sequence', return_value=2400),
+            patch.object(app_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(firmware_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(universal_update, 'update_status', return_value={'status': 'idle'}),
+        ):
+            plan = universal_upload.prepare(manifest)
+        plan['firmware']['upload_id'] = 'old-firmware-upload'
+        plan['firmware']['complete'] = True
+        plan['application']['upload_id'] = 'failed-application-upload'
+        universal_upload._write_plan(plan)
+
+        with (
+            patch.object(app_update, 'running_release_sequence', return_value=2400),
+            patch.object(firmware_update, 'running_release_sequence', return_value=2401),
+            patch.object(app_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(firmware_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(universal_update, 'update_status', return_value={'status': 'idle'}),
+        ):
+            retried = universal_upload.prepare(manifest)
+
+        self.assertFalse(retried['firmware']['required'])
+        self.assertTrue(retried['firmware']['complete'])
+        self.assertTrue(retried['application']['required'])
+        self.assertFalse(retried['application']['complete'])
+        stored = json.loads(Path(universal_upload.PLAN_PATH).read_text())
+        self.assertEqual(stored['firmware']['upload_id'], '')
+        self.assertEqual(stored['application']['upload_id'], '')
+
+    def test_retry_rejects_universal_older_than_either_installed_component(self):
+        manifest = self.manifest()
+        with (
+            patch.object(app_update, 'running_release_sequence', return_value=2400),
+            patch.object(firmware_update, 'running_release_sequence', return_value=2400),
+            patch.object(app_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(firmware_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(universal_update, 'update_status', return_value={'status': 'idle'}),
+        ):
+            universal_upload.prepare(manifest)
+        with (
+            patch.object(app_update, 'running_release_sequence', return_value=2402),
+            patch.object(firmware_update, 'running_release_sequence', return_value=2401),
+            patch.object(universal_update, 'update_status', return_value={'status': 'idle'}),
+            self.assertRaisesRegex(ValueError, 'older than an installed component'),
+        ):
+            universal_upload.prepare(manifest)
+
     def test_discard_records_incomplete_transport(self):
         manifest = self.manifest()
         with (

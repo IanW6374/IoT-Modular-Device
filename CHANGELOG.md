@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.88 - 2026-09-29
+
+- Reconcile retained universal transport plans against the live application and
+  core release sequences before every retry.
+- Treat an equal installed component as satisfied and upload only the missing
+  half of the signed pair, while continuing to reject genuinely older releases.
+- Release failed upload identifiers so a rejected component can be retried
+  without first receiving a false same-sequence firmware error.
+
 ## 3.0.0-alpha.87 - 2026-09-29
 
 - Surface interrupted universal transport state on the main Updates page and
