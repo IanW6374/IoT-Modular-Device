@@ -228,6 +228,26 @@ class UniversalUploadTests(unittest.TestCase):
         self.assertTrue(resumed['firmware']['complete'])
         self.assertFalse(resumed['application']['complete'])
 
+    def test_discard_records_incomplete_transport(self):
+        manifest = self.manifest()
+        with (
+            patch.object(app_update, 'running_release_sequence', return_value=2400),
+            patch.object(firmware_update, 'running_release_sequence', return_value=2400),
+            patch.object(app_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(firmware_update, 'update_status', return_value={'status': 'idle'}),
+            patch.object(universal_update, 'update_status', return_value={'status': 'idle'}),
+        ):
+            universal_upload.prepare(manifest)
+        with patch.object(
+            universal_upload.update_support, 'record_update_event'
+        ) as record:
+            self.assertTrue(universal_upload.discard())
+        self.assertFalse(Path(universal_upload.PLAN_PATH).exists())
+        record.assert_called_once_with(
+            'universal', 'discarded', '2.2.1',
+            detail='incomplete sequential component transport'
+        )
+
     def test_tampered_outer_manifest_is_rejected_before_any_upload(self):
         manifest = self.manifest()
         manifest['application']['size'] += 1

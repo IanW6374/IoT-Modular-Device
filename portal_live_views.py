@@ -128,6 +128,7 @@ def staged_version_text(status):
     application = str(status.get('update_version', '') or '')
     firmware = display_release_version(status.get('firmware_update_version', ''))
     universal = str(status.get('universal_update_version', '') or '')
+    universal_transport = str(status.get('universal_upload_version', '') or '')
     application_ready = status.get('update_status') == 'ready' and application
     firmware_ready = status.get('firmware_update_status') == 'ready' and firmware
     universal_ready = (
@@ -135,6 +136,8 @@ def staged_version_text(status):
     )
     if universal_ready:
         return 'Universal — ' + universal
+    if _upgrade_recovery_pending(status) and universal_transport:
+        return 'Universal — ' + universal_transport
     if application_ready and firmware_ready:
         return (
             'Application — ' + application +
@@ -1453,6 +1456,13 @@ def _upgrade_ready(status):
     )
 
 
+def _upgrade_recovery_pending(status):
+    return bool(
+        status.get('universal_upload_status', 'idle') != 'idle' and
+        status.get('universal_update_status', 'idle') != 'ready'
+    )
+
+
 def _upgrade_check_badge(status, identifier=''):
     check = str(status.get('release_check_status') or 'Not checked')
     if check == 'Not checked':
@@ -1510,8 +1520,12 @@ def _upgrade_method_choices(status, source=''):
         ('manual', 'Manual', 'Choose a signed update file from this browser.'),
     ]
     ready = _upgrade_ready(status)
-    if ready:
-        choices.append(('staged', 'Staged', staged_version_text(status)))
+    recovery_pending = _upgrade_recovery_pending(status)
+    if ready or recovery_pending:
+        choices.append((
+            'staged', 'Incomplete' if recovery_pending else 'Staged',
+            staged_version_text(status)
+        ))
     if status.get('previous_slot'):
         choices.append(('rollback', 'Rollback', 'Previous application' + (
             ': ' + str(status.get('previous_slot_version'))
@@ -1519,7 +1533,7 @@ def _upgrade_method_choices(status, source=''):
         )))
     items = []
     for key, title, description in choices:
-        disabled = ready and key in ('automatic', 'manual')
+        disabled = (ready or recovery_pending) and key in ('automatic', 'manual')
         attributes = (
             ' aria-disabled="true"' if disabled else
             ' href="/updates?source=' + key + '"'
@@ -1531,7 +1545,7 @@ def _upgrade_method_choices(status, source=''):
             '<' + tag + ' class="upgrade-method-choice"' + attributes + '><strong>' +
             title + '</strong>' + (_upgrade_check_badge(status, 'upgrade-check-result') if key == 'automatic' else '') +
             '<small>' + html_escape(
-                'Discard the staged update to choose a new release.' if disabled else description
+                'Discard the pending update to choose a new release.' if disabled else description
             ) + '</small></' + tag + '>'
         )
     return '<nav class="upgrade-method-choices" aria-label="Update method">' + ''.join(items) + '</nav>'
@@ -1796,6 +1810,29 @@ def _staged_update_workspace(token, status):
     )
 
 
+def _interrupted_update_workspace(token, status):
+    selected_release = (
+        '<div class="selected-release-summary"><span>Interrupted release</span><strong>' +
+        html_escape(staged_version_text(status)) + '</strong>'
+        '<small>Verification did not complete. Discard the retained upload state before retrying.</small></div>'
+    )
+    return (
+        '<section class="card"><div class="section-title"><h2>Incomplete update</h2></div>'
+        '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
+        _upgrade_step_list(
+            ('Update method selected', 'Release selected', 'Verification interrupted'),
+            active=2, completed=2, step_controls={1: selected_release}
+        ) + '</aside><div class="upgrade-operation"><p class="muted">'
+        'A rejected or interrupted universal update left recoverable staging data on this device.'
+        '</p><div class="actions manual-upgrade-buttons"><form data-portal-async '
+        'data-portal-refresh-target="#upgrade-page-content" data-portal-refresh-url="/updates" '
+        'data-portal-status="Discarding incomplete update…" action="/discard-update" method="post">'
+        '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
+        '<button class="danger" type="submit" data-busy-label="Discarding…">Discard</button>'
+        '</form></div></div></div></section>'
+    )
+
+
 def _rollback_upgrade_workspace(token, status):
     retained = str(status.get('previous_slot_version') or 'Previous application')
     selection = (
@@ -1822,9 +1859,13 @@ def render_updates_page(token, status=None, settings=None, message='', error=Fal
 def render_update_install_page(token, status=None, message='', error=False, source=''):
     status = status or {}
     activation_ready = _upgrade_ready(status)
+    recovery_pending = _upgrade_recovery_pending(status)
     source = str(source)
     script = ''
-    if source == 'rollback' and status.get('previous_slot'):
+    if recovery_pending:
+        source = 'staged'
+        workspace = _interrupted_update_workspace(token, status)
+    elif source == 'rollback' and status.get('previous_slot'):
         workspace = _rollback_upgrade_workspace(token, status)
     elif activation_ready:
         source = 'staged'

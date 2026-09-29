@@ -365,9 +365,16 @@ def finalize(identifier):
 
 
 def discard():
-    existed = bool(_load_plan())
+    plan = _load_plan()
+    existed = bool(plan)
     _remove(PLAN_PATH)
     _remove(PLAN_PATH + '.tmp')
+    if existed:
+        update_support.record_update_event(
+            'universal', 'discarded',
+            str(plan.get('manifest', {}).get('version', '')),
+            detail='incomplete sequential component transport'
+        )
     return existed
 
 

@@ -2953,6 +2953,25 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('upgrade-stage-percent', final_step)
         self.assertNotIn('action="/activate-update"', universal)
         self.assertNotIn('action="/activate-firmware"', universal)
+        interrupted = web_portal.render_update_install_page('csrf', {
+            'release_checks_enabled': True,
+            'update_status': 'idle',
+            'firmware_update_supported': True,
+            'firmware_update_status': 'ready',
+            'firmware_update_version': '3.0.0-alpha.86',
+            'universal_update_status': 'idle',
+            'universal_upload_status': 'uploading',
+            'universal_upload_version': '3.0.0-alpha.86',
+        })
+        self.assertIn('<h2>Incomplete update</h2>', interrupted)
+        self.assertIn('<strong>Universal — 3.0.0-alpha.86</strong>', interrupted)
+        self.assertIn('Verification interrupted', interrupted)
+        self.assertIn('action="/discard-update"', interrupted)
+        self.assertIn('>Discard</button>', interrupted)
+        self.assertNotIn('action="/activate-firmware"', interrupted)
+        self.assertNotIn('Restart and install</button>', interrupted)
+        self.assertIn('<strong>Incomplete</strong>', interrupted)
+        self.assertIn('aria-disabled="true"', interrupted)
         self.assertNotIn('Upload and verify', ready)
         self.assertNotIn('Application uploaded and verified. Ready for activation.', ready)
         self.assertNotIn('id="update-ready"', ready)

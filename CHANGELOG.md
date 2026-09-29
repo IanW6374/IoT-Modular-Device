@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.87 - 2026-09-29
+
+- Surface interrupted universal transport state on the main Updates page and
+  provide a persistent Discard action after verification is rejected.
+- Prevent an already-staged inner core from being offered for independent
+  activation while its universal application component is incomplete.
+- Record incomplete universal transport cleanup in update history.
+
 ## 3.0.0-alpha.86 - 2026-09-29
 
 - Correct the Core API 11 to 12 bootstrap by publishing a firmware-first

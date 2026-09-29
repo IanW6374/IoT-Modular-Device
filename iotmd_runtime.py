@@ -956,6 +956,9 @@ def portal_status():
     universal = universal_update.update_status()
     status['universal_update_status'] = universal.get('status', 'idle')
     status['universal_update_version'] = universal.get('version', '')
+    universal_transport = universal_upload.status()
+    status['universal_upload_status'] = universal_transport.get('status', 'idle')
+    status['universal_upload_version'] = universal_transport.get('version', '')
     status['firmware_running_version'] = firmware_update.running_version(
         hardware_platform.runtime_version()
     )
@@ -1802,6 +1805,7 @@ async def start_module_api():
 def system_info_payload():
     update = app_update.update_status()
     firmware = firmware_update.update_status()
+    universal_transport = universal_upload.status()
     storage = update_support.storage_status()
     history = update_support.update_history()
     last_event = history[-1] if history else {}
@@ -1815,6 +1819,8 @@ def system_info_payload():
         ),
         'application_update_status': update.get('status', 'idle'),
         'firmware_update_status': firmware.get('status', 'idle'),
+        'universal_upload_status': universal_transport.get('status', 'idle'),
+        'universal_upload_version': universal_transport.get('version', ''),
         'staged_application_version': update.get('version', ''),
         'staged_firmware_version': firmware.get('version', ''),
         'recovery_api': update_security.installed_recovery_api(),
