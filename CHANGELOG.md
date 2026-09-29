@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.85 - 2026-09-29
+
+- Add network-trial confirmation readiness to the frozen credential store and
+  advance the core API boundary to 12.
+- Publish a matched universal update so the expanded profile application never
+  starts on the Alpha 78 core that caused Alpha 84 to roll back.
+
 ## 3.0.0-alpha.84 - 2026-09-28
 
 - Expand managed profiles to the device, Wi-Fi, logging, Home Assistant, MQTT,

@@ -772,7 +772,7 @@ def load_signing_key(path):
 def build_bundle(
     output, version, files, content_overrides=None, signing_key=b'',
     release_sequence=1,
-    minimum_core_api=8, minimum_config_api=3, maximum_config_api=3,
+    minimum_core_api=12, minimum_config_api=3, maximum_config_api=3,
     components=None
 ):
     output.parent.mkdir(parents=True, exist_ok=True)
