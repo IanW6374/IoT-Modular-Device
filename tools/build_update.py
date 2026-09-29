@@ -839,6 +839,14 @@ def main():
         '--release-sequence', required=True, type=int,
         help='Fleet-wide monotonically increasing signed release number'
     )
+    parser.add_argument(
+        '--minimum-core-api', type=int, default=12,
+        help=(
+            'signed application compatibility floor (default: 12); lower this '
+            'only for an unpublished inner application in a firmware-first '
+            'paired universal migration'
+        )
+    )
     parser.add_argument('--include-protected', action='store_true', help='Include explicitly selected certificates')
     parser.add_argument('--protected-only', action='store_true', help='Exclude application files and build only certificate maintenance content')
     parser.add_argument(
@@ -881,6 +889,8 @@ def main():
         parser.error('application releases cannot embed certificates')
     if args.release_sequence <= 0:
         parser.error('--release-sequence must be positive')
+    if args.minimum_core_api <= 0:
+        parser.error('--minimum-core-api must be positive')
 
     root = Path(__file__).resolve().parents[1]
     include_protected = args.include_protected or args.protected_only or bool(args.certificate)
@@ -932,6 +942,7 @@ def main():
         content_overrides,
         signing_key,
         release_sequence=args.release_sequence,
+        minimum_core_api=args.minimum_core_api,
         components=application_components(root) if not args.protected_only else {
             'runtime': 1, 'modules': {}
         }

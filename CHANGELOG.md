@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.86 - 2026-09-29
+
+- Correct the Core API 11 to 12 bootstrap by publishing a firmware-first
+  universal package whose private inner application can be staged by the old
+  core while the separately published application remains Core-12-only.
+- Keep the matched core and application under the paired activation and
+  rollback transaction; the new application cannot start before the Core API
+  12 firmware is selected on the same reboot.
+
 ## 3.0.0-alpha.85 - 2026-09-29
 
 - Add network-trial confirmation readiness to the frozen credential store and
