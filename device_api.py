@@ -24,6 +24,22 @@ from portal_http import is_http_timeout_error
 API_VERSION = 2
 API_KEEP_ALIVE_REQUESTS = 32
 API_KEEP_ALIVE_TIMEOUT_SECONDS = 30
+CONFIGURATION_BACKUP_BODY_BYTES = 384 * 1024
+
+
+def request_body_limit(path, configured_maximum):
+    """Return the bounded body limit for one API route.
+
+    Complete encrypted backup envelopes can contain the maximum 128 KiB
+    plaintext backup as hex-encoded authenticated ciphertext. Keep that
+    exceptional allowance local to restore preview; ordinary commands retain
+    the device's configured (and usually much smaller) request limit.
+    """
+    route = str(path).split('?', 1)[0]
+    configured_maximum = int(configured_maximum)
+    if route == '/api/v2/configuration/backups/preview':
+        return max(configured_maximum, CONFIGURATION_BACKUP_BODY_BYTES)
+    return configured_maximum
 
 
 def make_mtls_context(cert_path, key_path, client_ca_path):
@@ -504,7 +520,10 @@ async def _start_http_device_api(settings, api):
                     await _write_response(writer, 405, {'error': 'method not allowed'})
                     return
                 length = int(headers.get('content-length', '0') or 0)
-                body = await http_support.read_exact_body(reader, length, maximum) if length else b''
+                body_maximum = request_body_limit(path, maximum)
+                body = await http_support.read_exact_body(
+                    reader, length, body_maximum
+                ) if length else b''
                 if identity is None:
                     # On the MicroPython TLS stream, inspecting the peer
                     # certificate between header and body reads can disturb

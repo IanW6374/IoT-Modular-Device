@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.90 - 2026-10-01
+
+- Allow a complete encrypted backup envelope on the restore-preview API even
+  when the retained native core supplies an older, smaller general request
+  limit.
+- Keep the larger 384 KiB bound exclusive to restore preview so ordinary API
+  commands retain their configured lower body limit.
+
 ## 3.0.0-alpha.89 - 2026-09-29
 
 - Add Management Suite API operations for device-encrypted complete backup,

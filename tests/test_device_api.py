@@ -234,6 +234,29 @@ class DeviceAPITests(unittest.TestCase):
         self.assertEqual(calls[0], ('backup', 'long-enough-backup-password'))
         self.assertEqual(calls[-1], ('apply', 'restore-token'))
 
+    def test_only_backup_preview_receives_large_envelope_body_limit(self):
+        configured = 8192
+
+        self.assertEqual(
+            device_api.request_body_limit(
+                '/api/v2/configuration/backups/preview', configured
+            ),
+            384 * 1024,
+        )
+        self.assertEqual(
+            device_api.request_body_limit(
+                '/api/v2/configuration/backups/preview?source=management',
+                configured,
+            ),
+            384 * 1024,
+        )
+        self.assertEqual(
+            device_api.request_body_limit(
+                '/api/v2/configuration/profile', configured
+            ),
+            configured,
+        )
+
     def test_configuration_scope_can_stage_and_apply_certificates(self):
         staged = []
         restarted = []
