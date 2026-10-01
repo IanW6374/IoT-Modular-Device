@@ -514,14 +514,14 @@ class Style():
 
 # Function:  Log Output       
 def logOutput(mode, action, data, logtype):
-    logtype = event_sinks.normalise_legacy_log_level(logtype)
+    logtype = event_sinks.normalise_log_level(logtype)
     utc_time = time.localtime()
     current_time = timezone_rules.localtime(name=timezone_name)
     
     timestamp = "{:04}{:02}{:02} {:02}{:02}{:02}".format(current_time[0], current_time[1], current_time[2], current_time[3], current_time[4], current_time[5])
     
     is_audit = data.get('audit') is True
-    if is_audit or data.get('force') or event_sinks.should_emit_legacy_log(logtype, loglevel):
+    if is_audit or data.get('force') or event_sinks.should_emit_log(logtype, loglevel):
         
         log = timestamp + '  ' + mode + ': ' + action + ' - ' + data['log']
         
@@ -577,7 +577,7 @@ def record_upgrade_failure(kind, phase, exc, version=''):
     return detail
 
 
-event_service.add_sink(event_sinks.LegacyLogSink(logOutput))
+event_service.add_sink(event_sinks.RuntimeLogSink(logOutput))
 
 
 def publish_logtype(msg):

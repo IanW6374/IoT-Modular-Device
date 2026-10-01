@@ -1,10 +1,12 @@
-# IoT-MD v3 greenfield alpha
+# IoT-MD V3 platform
 
-This directory is the isolated starting point for the v3 architecture rewrite.
-Stable v2.5 maintenance continues from `main`; v3 development continues on
-`alpha/v3-platform-rewrite` until its own promotion gates pass.
+This directory owns the native/runtime boundary, contracts and qualification
+assets for the active V3 product line. The application image is V3-only; retired
+V2 migration, shadow and cutover prototypes remain here solely as historical
+source and host-test evidence and are excluded from device bundles.
 
-Version `3.0.0-alpha.61` adds permissioned, validated configuration profiles
+The following milestone summary is retained as architecture history. Alpha 61
+added permissioned, validated configuration profiles
 for the Management Suite. It retains Alpha 60's normalized ESP32 MicroPython
 runtime epoch for fleet-policy validity, Alpha 59's portable Device API error responses, Alpha
 54's discard-and-retry upgrade state and
@@ -38,13 +40,11 @@ confirmation precedes the durable application pointer; failures retain their
 exact phase; and a newer signed pair can replace a stale trial journal. Alpha
 11's interrupted-cutover reconciliation, durable migration, independent v3
 driver translation and executable product bootstrap remain. These are
-implemented mechanisms, not completed qualification claims; compatibility
-remains active until release-bound HIL and shadow evidence is complete.
+implemented mechanisms, not completed qualification claims; at that milestone
+the compatibility path remained active pending release-bound HIL evidence.
 
-The rewrite keeps the proven product requirements while establishing the
-native ESP-IDF platform and MicroPython application boundary before porting
-features. Existing v2 code is reference behavior, not a source tree to move
-wholesale.
+The platform keeps the proven product requirements while enforcing the native
+ESP-IDF platform and MicroPython application boundary.
 
 ## Directory ownership
 
@@ -67,8 +67,7 @@ wholesale.
 4. A failed platform/runtime trial rolls back the pair.
 5. Hardware capability, firmware inclusion, runtime integration and signed
    product policy are reported separately.
-6. No v2 configuration is mutated until a v3 trial is confirmed. Migration is
-   previewable, transactional and reversible.
+6. Configuration restore is previewable, transactional and reversible.
 7. Every alpha milestone has host, hardware-in-the-loop and recovery gates.
 
 Read the [target architecture](../docs/V3_ARCHITECTURE.md),

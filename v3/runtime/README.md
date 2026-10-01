@@ -1,5 +1,10 @@
 # MicroPython application runtime
 
+Production V3 bundles import native platform, encrypted storage and release
+qualification adapters directly. Transition-era migration, shadow and cutover
+modules are retained as historical design evidence but are not shipped to
+devices.
+
 The runtime owns product behavior:
 
 - configuration validation, migration and policy;

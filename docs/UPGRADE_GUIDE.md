@@ -1,50 +1,18 @@
 # IoT-MD upgrade and recovery guide
 
-## V3 alpha qualification
+## V3 qualification baseline
 
-V3 alpha packages are recovery-device test releases, not stable fleet
-upgrades. They retain the v2.5 compatibility product runtime while the new
-native/runtime boundaries are qualified. Use the release-specific test note,
-including its monotonically increasing sequence and open HIL gates, before
-installing one.
+All managed devices now use the V3 product runtime. Application bundles no
+longer ship the retired V2 transition, shadow, migration or cutover modules.
+The stable `/api/v2` path remains the Device API contract version and is not a
+reference to the removed product generation.
 
-Alpha 18 makes startup retry diagnostics fail-safe and retains bounded prior
-release qualification summaries without changing the rollback-compatible
-current ledger. Alpha 17 added the Alpha release channel and refined the
-file-specific upgrade workflow. Alpha 16 uses the Alpha 13 universal update
-path and makes a rejected file a
-terminal validation result: the working state stops, the rejected selection is
-cleared, and another file can be chosen without pressing Cancel. It also fixes
-the compact live-route dependency used by module calibration without changing
-signed staging or activation semantics. Alpha 15 hid the file selector after
-staging began, made Cancel return to selection, and retained one progress area
-beside the file-specific vertical workflow. Alpha 14 introduced that preview and
-**Upload and stage** action. Alpha 13 requires a universal install because it
-upgrades activating transaction state
-written by older frozen coordinators before invoking the native ABI. It retains
-Alpha 12's direct frozen pair preparation, native-first confirmation,
-failure persistence and stale-journal handling while retaining platform ABI 6
-and runtime configuration version 4. Alpha 11 added mixed-pair rollback restoration,
-durable migration staging, interrupted-cutover reconciliation and the product
-bootstrap. Alpha 10 added the encrypted paired journal, frozen reconciliation
-and remaining-gate composition, shadow, migration and driver bridges. Alpha 9 added
-physical resource construction/recovery plus production transport and identity
-bridges.
-These mechanisms are visible under **Maintenance > Release qualification**, but
-remain explicitly unqualified until the Alpha 9 HIL and interoperability matrix
-passes. Alpha 7's guarded OTA trial controls, native recovery state and bounded
-job/event boundary also remain unqualified pending their HIL matrix. Alpha 6
-added the release-bound 15-gate evidence record and remains on
-the compatibility runtime until native paired rollback and every recorded gate
-pass. Alpha 5 can preview an already
-authenticated/decrypted v2 complete backup and
-stage its credentials, module settings and certificate/trust material into an
-isolated v3 namespace. Preview does not mutate the backup or confirmed v2 state.
-Staged handles are activated only after a healthy v3 trial and discarded after
-an unhealthy trial. Until the native atomic-activation and representative-device
-rollback gate passes, use the existing v2 restore workflow for production data.
+Use the release-specific qualification note, monotonically increasing release
+sequence and open hardware gates before installing an alpha. Historical V2 to
+V3 migration notes remain in the repository only as release evidence; they are
+not active update paths.
 
-The ordinary artifact remains one `.iotuni` paired release. Alpha component
+The ordinary artifact is one `.iotuni` paired release. Alpha component
 artifacts are published for factory and recovery diagnosis, and installation
 of an older release sequence may require USB recovery or a newer signed build.
 

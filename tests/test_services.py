@@ -8,7 +8,7 @@ from services.network_service import NetworkService, connect_with_retries
 from services.portal_service import PortalService
 from services.update_service import UpdateService
 from services.event_sinks import (
-    LegacyLogSink, normalise_legacy_log_level, should_emit_legacy_log,
+    RuntimeLogSink, normalise_log_level, should_emit_log,
 )
 from services.certificate_renewal_service import CertificateRenewalService
 from services.mqtt_startup_service import MQTTStartupService
@@ -97,15 +97,15 @@ class ServiceBoundaryTests(unittest.TestCase):
         self.assertEqual(state.values['mqtt'], 'online')
         self.assertEqual(configured, [True])
 
-    def test_legacy_logging_accepts_warning_without_changing_user_levels(self):
-        self.assertEqual(normalise_legacy_log_level('warning'), 'WARNING')
-        self.assertTrue(should_emit_legacy_log('WARNING', 'INFO'))
-        self.assertFalse(should_emit_legacy_log('WARNING', 'ERROR'))
-        self.assertEqual(normalise_legacy_log_level('unexpected'), 'INFO')
+    def test_logging_accepts_warning_without_changing_user_levels(self):
+        self.assertEqual(normalise_log_level('warning'), 'WARNING')
+        self.assertTrue(should_emit_log('WARNING', 'INFO'))
+        self.assertFalse(should_emit_log('WARNING', 'ERROR'))
+        self.assertEqual(normalise_log_level('unexpected'), 'INFO')
 
     def test_structured_event_log_sink_maps_severity(self):
         entries = []
-        LegacyLogSink(lambda *args: entries.append(args)).write({
+        RuntimeLogSink(lambda *args: entries.append(args)).write({
             'component': 'update', 'kind': 'verified',
             'message': 'ready', 'severity': 'warning',
         })

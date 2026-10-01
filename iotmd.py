@@ -1,4 +1,4 @@
-"""Compact application entry retained for recovery-core compatibility.
+"""Compact V3 application entry for bounded trial startup.
 
 The substantial runtime is shipped as ``iotmd_runtime.mpy`` in production
 bundles. Keeping this source entry deliberately small avoids the large

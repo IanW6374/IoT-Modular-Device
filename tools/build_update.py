@@ -87,36 +87,13 @@ CORE_FILES = (
     'application/lifecycle.py',
     'application/boot_health.py',
 )
-V3_ALPHA_FILES = (
+V3_DEVICE_FILES = (
     'v3/__init__.py',
     'v3/runtime/__init__.py',
     'v3/runtime/iotmd_next/__init__.py',
-    'v3/runtime/iotmd_next/bootstrap.py',
-    'v3/runtime/iotmd_next/configuration.py',
-    'v3/runtime/iotmd_next/connectivity.py',
-    'v3/runtime/iotmd_next/cutover.py',
-    'v3/runtime/iotmd_next/drivers.py',
-    'v3/runtime/iotmd_next/fleet.py',
-    'v3/runtime/iotmd_next/identity.py',
-    'v3/runtime/iotmd_next/integration.py',
-    'v3/runtime/iotmd_next/kernel.py',
-    'v3/runtime/iotmd_next/migration.py',
-    'v3/runtime/iotmd_next/native_pair.py',
-    'v3/runtime/iotmd_next/paired_update.py',
     'v3/runtime/iotmd_next/platform.py',
-    'v3/runtime/iotmd_next/presentation.py',
-    'v3/runtime/iotmd_next/product_transports.py',
-    'v3/runtime/iotmd_next/production_adapters.py',
-    'v3/runtime/iotmd_next/production_drivers.py',
-    'v3/runtime/iotmd_next/production_identity.py',
-    'v3/runtime/iotmd_next/production_migration.py',
     'v3/runtime/iotmd_next/qualification.py',
-    'v3/runtime/iotmd_next/reference_sensor.py',
-    'v3/runtime/iotmd_next/resources.py',
-    'v3/runtime/iotmd_next/shadow.py',
     'v3/runtime/iotmd_next/storage.py',
-    'v3/runtime/iotmd_next/supervisor.py',
-    'v3/runtime/iotmd_next/transport_contracts.py',
 )
 CORE_DEVICE_MODULES = (
     'device_modules/__init__.py',
@@ -721,12 +698,11 @@ def collect_files(
             if not path.is_file():
                 raise ValueError('required runtime file not found: ' + name)
             paths.append((name, path))
-        # Alpha branches carry the next-generation runtime beside the proven
-        # product runtime.  Treat it as an atomic package when the v3 contract
-        # root exists, while keeping the generic/v2 bundle builder reusable by
-        # synthetic roots and maintenance tooling that deliberately omit v3.
+        # V3 devices ship only native qualification adapters used by the
+        # product runtime. Historical migration, shadow and cutover prototypes
+        # remain in source control for audit, but are no longer device payload.
         if (root / 'v3').is_dir():
-            for name in V3_ALPHA_FILES:
+            for name in V3_DEVICE_FILES:
                 path = root / name
                 if not path.is_file():
                     raise ValueError('required v3 alpha runtime file not found: ' + name)

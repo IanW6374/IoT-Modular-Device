@@ -1,4 +1,4 @@
-"""Lazy bridge from the compatibility runtime to v3 qualification evidence."""
+"""Lazy bridge from the V3 product runtime to native qualification evidence."""
 
 
 DEVICE_OBSERVED_GATES = frozenset((
@@ -240,10 +240,6 @@ class AlphaQualificationService:
             return []
         try:
             capabilities = self.platform.capabilities()
-            from v3.runtime.iotmd_next.production_drivers import (
-                validate_complete_driver_catalog,
-            )
-            catalog = validate_complete_driver_catalog()
             mechanisms = (
                 ('Native paired updates', bool(
                     capabilities['updates']['native_pair_journal'] and
@@ -256,11 +252,6 @@ class AlphaQualificationService:
                 ('Physical resource management', bool(
                     capabilities['resources']['physical'] and
                     capabilities['resources']['recovery'])),
-                ('Production transport adapters', True),
-                ('Production identity integration', True),
-                ('Fleet and migration integration', True),
-                ('Production driver migration', catalog['variants'] == 13),
-                ('Live cutover integration', True),
             )
             return [
                 {'name': name, 'implemented': implemented,
@@ -287,8 +278,6 @@ class AlphaQualificationService:
             return bool(capabilities['jobs']['qualified'])
         if index == 4:
             return bool(capabilities['resources']['qualified'])
-        # Gates 5–9 are qualified by the release-bound evidence ledger, not
-        # the presence of Python classes or successful host tests.
         return False
 
     def _native_update_status(self):

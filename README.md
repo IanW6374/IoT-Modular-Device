@@ -1,6 +1,6 @@
 # IoT Modular Device (IoT-MD)
 
-IoT-MD v2 is production firmware for secure, modular ESP32-S3 devices. One
+IoT-MD v3 is production firmware for secure, modular ESP32-S3 devices. One
 device can host multiple sensors, switches and energy interfaces while exposing
 a web portal, configurable MQTT messaging and a versioned HTTPS API. Home
 Assistant is an optional built-in integration rather than a transport
@@ -38,9 +38,6 @@ configurations are in [`examples/`](examples/).
 ## Hardware and software
 
 - ESP32-S3-DevKitC-1-N8R8 with 8 MB flash, 8 MB octal PSRAM and Wi-Fi.
-- Experimental USB NCM application support in v2.5, capability-gated and
-  unavailable on the current ESP32-S3 core; it is never required for setup,
-  recovery or normal operation.
 - MicroPython 1.29.0 built with ESP-IDF 5.5.5 (from v3 Alpha34).
 - Python 3.12 or newer for host tooling.
 - ESP-IDF and the pinned MicroPython checkout for core builds.

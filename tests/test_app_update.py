@@ -856,17 +856,13 @@ class AppUpdateTests(unittest.TestCase):
         self.assertIn('app_settings.json', names)
         self.assertIn('v3/runtime/iotmd_next/platform.py', names)
         self.assertIn('v3/runtime/iotmd_next/storage.py', names)
-        self.assertIn('v3/runtime/iotmd_next/paired_update.py', names)
-        self.assertIn('v3/runtime/iotmd_next/native_pair.py', names)
-        self.assertIn('v3/runtime/iotmd_next/configuration.py', names)
-        self.assertIn('v3/runtime/iotmd_next/integration.py', names)
-        self.assertIn('v3/runtime/iotmd_next/kernel.py', names)
-        self.assertIn('v3/runtime/iotmd_next/production_drivers.py', names)
-        self.assertIn('v3/runtime/iotmd_next/production_migration.py', names)
-        self.assertIn('v3/runtime/iotmd_next/reference_sensor.py', names)
-        self.assertIn('v3/runtime/iotmd_next/resources.py', names)
-        self.assertIn('v3/runtime/iotmd_next/shadow.py', names)
-        self.assertIn('v3/runtime/iotmd_next/supervisor.py', names)
+        self.assertIn('v3/runtime/iotmd_next/qualification.py', names)
+        for retired in (
+            'paired_update.py', 'native_pair.py', 'configuration.py',
+            'integration.py', 'kernel.py', 'production_migration.py',
+            'shadow.py', 'supervisor.py', 'cutover.py', 'migration.py',
+        ):
+            self.assertNotIn('v3/runtime/iotmd_next/' + retired, names)
         self.assertNotIn('device_settings.json', names)
         self.assertNotIn('module_settings.json', names)
         generated = generated_driver_index(root).decode()
