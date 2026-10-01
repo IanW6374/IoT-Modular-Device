@@ -1191,7 +1191,7 @@ def update_upload_script():
         '"upgrade-stage-action";if(state==="active")li.setAttribute("aria-current","step");else li.removeAttribute('
         '"aria-current");return;}li.className=state;li.style.setProperty("--step-progress",percent+"%");var value='
         'li.querySelector(".upgrade-stage-percent");ring.setAttribute('
-        '"aria-valuenow",String(percent));value.textContent=percent+"%";if(state==="active")li.setAttribute('
+        '"aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",state==="complete"?"Complete":percent+"%");value.textContent=state==="complete"?"✓":percent+"%";if(state==="active")li.setAttribute('
         '"aria-current","step");else li.removeAttribute("aria-current");}'
         'function milestone(item,index,active){var li=document.createElement("li"),name=document.createElement('
         '"span"),ring=document.createElement("span"),value=document.createElement("span");name.className='
@@ -1437,8 +1437,10 @@ def _upgrade_step_list(steps, active=0, completed=0, identifier='',
             '<span class="upgrade-stage-name">' + html_escape(label) + '</span>'
             '<span class="upgrade-stage-ring" role="progressbar" aria-label="' +
             html_escape(label) + ' progress" aria-valuemin="0" aria-valuemax="100" '
-            'aria-valuenow="' + str(percent) + '"><span class="upgrade-stage-percent">' +
-            str(percent) + '%</span></span>' +
+            'aria-valuenow="' + str(percent) + '" aria-valuetext="' +
+            ('Complete' if state == 'complete' else str(percent) + '%') +
+            '"><span class="upgrade-stage-percent">' +
+            ('✓' if state == 'complete' else str(percent) + '%') + '</span></span>' +
             ('<div class="upgrade-stage-step-control">' + step_controls[index] + '</div>'
              if index in step_controls else '') + '</li>'
         )
@@ -1683,7 +1685,7 @@ def automatic_upgrade_selection_script():
         'li.appendChild(control);automaticSteps.appendChild(li);return;}ring.className='
         '"upgrade-stage-ring";ring.setAttribute("role","progressbar");ring.setAttribute("aria-label",label+" progress");'
         'ring.setAttribute("aria-valuemin","0");ring.setAttribute("aria-valuemax","100");ring.setAttribute('
-        '"aria-valuenow",String(percent));value.className="upgrade-stage-percent";value.textContent=percent+"%";'
+        '"aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",complete?"Complete":percent+"%");value.className="upgrade-stage-percent";value.textContent=complete?"✓":percent+"%";'
         'ring.appendChild(value);li.appendChild(name);li.appendChild(ring);if(index===1&&automaticControl){var control='
         'document.createElement("div");control.className="upgrade-stage-step-control";control.appendChild('
         'automaticControl);li.appendChild(control);}automaticSteps.appendChild(li);});}'
@@ -1704,8 +1706,8 @@ def automatic_upgrade_download_script():
         'Math.min(100,Math.round(Number(percent)||0)));var ring=x.querySelector(".upgrade-stage-ring");if(!ring){'
         'x.className=(state?state+" ":"")+"upgrade-stage-action";if(state==="active")x.setAttribute('
         '"aria-current","step");else x.removeAttribute("aria-current");return;}x.className=state;x.style.setProperty('
-        '"--step-progress",percent+"%");ring.setAttribute("aria-valuenow",String(percent));x.querySelector('
-        '".upgrade-stage-percent").textContent=percent+"%";if(state==="active")x.setAttribute('
+        '"--step-progress",percent+"%");ring.setAttribute("aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",state==="complete"?"Complete":percent+"%");x.querySelector('
+        '".upgrade-stage-percent").textContent=state==="complete"?"✓":percent+"%";if(state==="active")x.setAttribute('
         '"aria-current","step");else x.removeAttribute("aria-current");}var position=1;function stage(message,percent){'
         'var m=String(message||"").toLowerCase().replace(/_/g," "),n=2;if(m.indexOf("writing")>=0)n=4;else if('
         'm.indexOf("verif")>=0&&(m.indexOf("core")>=0||m.indexOf("firmware")>=0))n=5;else if('
@@ -1932,8 +1934,8 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         'var ring=x.querySelector(".upgrade-stage-ring");if(!ring){x.className=(state?state+" ":"")+'
         '"upgrade-stage-action";if(state==="active")x.setAttribute("aria-current","step");else x.removeAttribute('
         '"aria-current");return;}x.className=state;x.style.setProperty("--step-progress",percent+"%");'
-        'ring.setAttribute("aria-valuenow",String(percent));x.querySelector('
-        '".upgrade-stage-percent").textContent=percent+"%";if(state==="active")x.setAttribute('
+        'ring.setAttribute("aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",state==="complete"?"Complete":percent+"%");x.querySelector('
+        '".upgrade-stage-percent").textContent=state==="complete"?"✓":percent+"%";if(state==="active")x.setAttribute('
         '"aria-current","step");else x.removeAttribute("aria-current");}'
         'var stagePosition=2;function stage(message,percent){var m=String(message||"").toLowerCase().replace(/_/g," "),n=2;'
         'if(m.indexOf("writing")>=0)n=4;else if(m.indexOf("verif")>=0&&'

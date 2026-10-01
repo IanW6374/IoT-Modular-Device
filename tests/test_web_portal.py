@@ -2410,6 +2410,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('--upgrade-step-count', manual_update)
         self.assertIn('Manual update selected', manual_update)
         self.assertIn('<li class="complete">', manual_update)
+        self.assertIn('state==="complete"?"✓":percent+"%"', manual_update)
         self.assertNotIn('Step "+(index+1)+" of "+flow.length', manual_update)
         self.assertNotIn('overallLabel', manual_update)
         self.assertIn('id="update-file-guidance"', manual_update)
@@ -2435,6 +2436,11 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('fileSelection.classList.toggle("has-selection",!!selected)', manual_update)
         self.assertIn('function showStaged()', manual_update)
         self.assertIn('current.replaceWith(fresh)', manual_update)
+        self.assertIn(
+            'var openDetails=Array.from(current.querySelectorAll("details"))',
+            portal_ui.PORTAL_JS,
+        )
+        self.assertIn('item.open=true', portal_ui.PORTAL_JS)
         self.assertIn('history.replaceState(null,"","/updates?source=staged")', manual_update)
         self.assertNotIn('setTimeout(function(){location.replace("/updates?source=staged")', manual_update)
         select_step = manual_update.split('Select signed file', 1)[1].split('</li>', 1)[0]
@@ -2853,6 +2859,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Automatic update selected', task)
         self.assertIn('Select version', task)
         self.assertIn('function setStep(x,state,percent)', task)
+        self.assertIn('state==="complete"?"✓":percent+"%"', task)
         self.assertIn('fetch("/task-status?id="', task)
         self.assertIn('function showReady()', task)
         self.assertIn("history.replaceState(null,\"\",'/updates?source=staged')", task)
