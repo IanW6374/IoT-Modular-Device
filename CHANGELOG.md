@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.94 - 2026-10-02
+
+- Publish a genuine application-generation advance for managed deployment
+  testing; Alpha 93 changed the product label but retained runtime generation
+  190 and was therefore correctly filtered as not newer.
+- Advance runtime generation to 191 with release sequence 2799 so Alpha 94 can
+  exercise check, stage, activation and trial confirmation end to end.
+
 ## 3.0.0-alpha.90 - 2026-10-01
 
 - Allow a complete encrypted backup envelope on the restore-preview API even
