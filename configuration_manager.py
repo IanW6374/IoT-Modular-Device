@@ -29,6 +29,7 @@ SECURE_KDF_ITERATIONS = 120000
 SECURE_SALT_BYTES = 16
 SECURE_NONCE_BYTES = 12
 SECURE_TAG_BYTES = 16
+SECURE_KEY_BYTES = 32
 IMPORTABLE_SETTINGS = (
     'device_name', 'wifi_ssid', 'wifi_dhcp', 'wifi_ip_address',
     'wifi_subnet_mask', 'wifi_gateway', 'wifi_dns_server',
@@ -140,11 +141,24 @@ def _password_bytes(password):
     return password.encode()
 
 
+def backup_key_material(request):
+    """Decode optional Management-derived backup key material."""
+    if not isinstance(request, dict):
+        return str(request or ''), None, None
+    try:
+        salt = binascii.unhexlify(request['salt']) if request.get('salt') else None
+        key = binascii.unhexlify(request['derived_key']) if request.get('derived_key') else None
+    except Exception:
+        raise ValueError('encrypted backup key material is invalid')
+    return str(request.get('password', '') or ''), salt, key
+
+
 def export_secure_configuration(credentials, module_settings, files, password,
-                                metadata=None, random_bytes=None):
+                                metadata=None, random_bytes=None,
+                                derived_key=None, salt=None):
     """Return a password-encrypted, authenticated full-device backup envelope."""
     random_bytes = random_bytes or os.urandom
-    salt = bytes(random_bytes(SECURE_SALT_BYTES))
+    salt = bytes(random_bytes(SECURE_SALT_BYTES) if salt is None else salt)
     nonce = bytes(random_bytes(SECURE_NONCE_BYTES))
     if len(salt) != SECURE_SALT_BYTES or len(nonce) != SECURE_NONCE_BYTES:
         raise RuntimeError('cryptographic random source returned an invalid result')
@@ -165,9 +179,14 @@ def export_secure_configuration(credentials, module_settings, files, password,
     if len(plaintext) > MAX_IMPORT_BYTES:
         raise ValueError('complete configuration exceeds the backup size limit')
     crypto = _secure_crypto()
-    key = crypto.pbkdf2_sha256(
-        _password_bytes(password), salt, SECURE_KDF_ITERATIONS
-    )
+    if derived_key is None:
+        key = crypto.pbkdf2_sha256(
+            _password_bytes(password), salt, SECURE_KDF_ITERATIONS
+        )
+    else:
+        key = bytes(derived_key)
+        if len(key) != SECURE_KEY_BYTES:
+            raise ValueError('encrypted backup derived key is invalid')
     encrypted = crypto.aes_gcm_encrypt(key, nonce, plaintext, SECURE_FORMAT.encode())
     if len(encrypted) < SECURE_TAG_BYTES:
         raise RuntimeError('encrypted backup result is invalid')
@@ -184,7 +203,7 @@ def export_secure_configuration(credentials, module_settings, files, password,
     }
 
 
-def parse_secure_import(payload, password):
+def parse_secure_import(payload, password, derived_key=None):
     """Authenticate and decrypt a full-device backup without exposing secrets."""
     if isinstance(payload, bytes):
         if len(payload) > MAX_IMPORT_BYTES * 3:
@@ -214,7 +233,12 @@ def parse_secure_import(payload, password):
     ):
         raise ValueError('encrypted backup parameters are invalid')
     crypto = _secure_crypto()
-    key = crypto.pbkdf2_sha256(_password_bytes(password), salt, iterations)
+    if derived_key is None:
+        key = crypto.pbkdf2_sha256(_password_bytes(password), salt, iterations)
+    else:
+        key = bytes(derived_key)
+        if len(key) != SECURE_KEY_BYTES:
+            raise ValueError('encrypted backup derived key is invalid')
     try:
         plaintext = crypto.aes_gcm_decrypt(
             key, nonce, ciphertext + tag, SECURE_FORMAT.encode()

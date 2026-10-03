@@ -231,7 +231,9 @@ class DeviceAPITests(unittest.TestCase):
             b'{"token":"restore-token"}', self.cert,
         )
         self.assertEqual((status, payload['restore']), (202, 'restart required'))
-        self.assertEqual(calls[0], ('backup', 'long-enough-backup-password'))
+        self.assertEqual(calls[0], (
+            'backup', {'password': 'long-enough-backup-password'}
+        ))
         self.assertEqual(calls[-1], ('apply', 'restore-token'))
 
     def test_only_backup_preview_receives_large_envelope_body_limit(self):

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.95 - 2026-10-03
+
+- Keep the web portal and Device API responsive while Management creates or
+  previews an encrypted backup by deriving its PBKDF2 key on the Management
+  host and transferring only the one-time derived key over mutual TLS.
+- Preserve the existing encrypted-backup envelope format and password-based
+  local workflow so previously created recovery points remain compatible.
+- Treat a client closing after a long API operation as a normal disconnect
+  instead of emitting a secondary TLS response failure.
+- Advance runtime generation to 192 with release sequence 2800.
+
 ## 3.0.0-alpha.94 - 2026-10-02
 
 - Publish a genuine application-generation advance for managed deployment

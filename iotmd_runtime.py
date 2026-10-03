@@ -1062,7 +1062,8 @@ def _complete_backup_files():
     return result
 
 
-def secure_configuration_backup(password):
+def secure_configuration_backup(request):
+    password, salt, derived_key = configuration_manager.backup_key_material(request)
     try:
         with open(moduleSettingsFile, 'r') as stream:
             modules = json.load(stream)
@@ -1078,7 +1079,7 @@ def secure_configuration_backup(password):
             'firmware_version': firmware_update.running_version(
                 hardware_platform.runtime_version()
             ),
-        }
+        }, derived_key=derived_key, salt=salt
     )
 
 
@@ -1133,8 +1134,9 @@ def preview_secure_configuration_import(request):
     global pending_secure_configuration_import
     if not isinstance(request, dict):
         raise ValueError('encrypted backup request is invalid')
+    password, _salt, derived_key = configuration_manager.backup_key_material(request)
     content = configuration_manager.parse_secure_import(
-        request.get('backup'), request.get('password', '')
+        request.get('backup'), password, derived_key=derived_key
     )
     sections = configuration_manager.validate_restore_sections(
         request.get('sections')

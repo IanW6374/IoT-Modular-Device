@@ -1,4 +1,5 @@
 import json
+import hashlib
 import unittest
 
 import configuration_manager
@@ -89,6 +90,26 @@ class ConfigurationManagerTests(unittest.TestCase):
             configuration_manager.parse_secure_import(
                 backup, 'Wrong-Backup-47!River'
             )
+
+    def test_management_can_supply_a_prederived_backup_key(self):
+        password = 'Backup-Cedar-47!River'
+        salt = bytes(range(configuration_manager.SECURE_SALT_BYTES))
+        key = hashlib.pbkdf2_hmac(
+            'sha256', password.encode(), salt,
+            configuration_manager.SECURE_KDF_ITERATIONS, dklen=32,
+        )
+        backup = configuration_manager.export_secure_configuration(
+            {'schema': 5, 'wifi': {'password': 'very-secret'}},
+            {'devices': []}, {}, '', random_bytes=lambda count: bytes(range(count)),
+            derived_key=key, salt=salt,
+        )
+
+        restored = configuration_manager.parse_secure_import(
+            backup, '', derived_key=key
+        )
+
+        self.assertEqual(backup['salt'], salt.hex())
+        self.assertEqual(restored['credentials']['wifi']['password'], 'very-secret')
 
     def test_null_format_version_has_a_clear_validation_error(self):
         with self.assertRaisesRegex(ValueError, 'unsupported configuration backup format'):

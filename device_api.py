@@ -18,7 +18,7 @@ except ImportError:
 import http_support
 from api_security import APIAuthorizationError
 from api_contracts import APIRequest, APIResponse
-from portal_http import is_http_timeout_error
+from portal_http import is_client_disconnect_error, is_http_timeout_error
 
 
 API_VERSION = 2
@@ -189,7 +189,7 @@ class DeviceAPI:
             if not isinstance(value, dict):
                 raise ValueError('configuration backup request must be an object')
             return 201, {
-                'backup': self.configuration_backup(value.get('password', ''))
+                'backup': self.configuration_backup(value)
             }
         if method == 'POST' and route == '/api/v2/configuration/backups/preview':
             if not self.configuration_restore_preview:
@@ -564,7 +564,7 @@ async def _start_http_device_api(settings, api):
                 api.health.increment('api_failures')
             await _write_response(writer, 503, {'error': str(exc)})
         except Exception as exc:
-            if is_http_timeout_error(exc):
+            if is_http_timeout_error(exc) or is_client_disconnect_error(exc):
                 return
             if api.health:
                 api.health.increment('api_failures')
