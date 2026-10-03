@@ -188,6 +188,10 @@ class DeviceAPI:
             value = json.loads(body.decode() if isinstance(body, bytes) else body)
             if not isinstance(value, dict):
                 raise ValueError('configuration backup request must be an object')
+            if not value.get('derived_key'):
+                raise ValueError(
+                    'managed backup requires IoT-MD Management 2.7.3 or newer'
+                )
             return 201, {
                 'backup': self.configuration_backup(value)
             }
@@ -197,6 +201,10 @@ class DeviceAPI:
             value = json.loads(body.decode() if isinstance(body, bytes) else body)
             if not isinstance(value, dict):
                 raise ValueError('configuration restore request must be an object')
+            if not value.get('derived_key'):
+                raise ValueError(
+                    'managed backup preview requires IoT-MD Management 2.7.3 or newer'
+                )
             return 200, {'preview': self.configuration_restore_preview(value)}
         if method == 'POST' and route == '/api/v2/configuration/backups/apply':
             if not self.configuration_restore_apply:

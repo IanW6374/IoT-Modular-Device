@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.96 - 2026-10-03
+
+- Reject legacy password-only remote backup requests immediately with a clear
+  Management 2.7.3 requirement, preventing an older add-on's persisted retry
+  from blocking the device before the new application trial can confirm.
+- Retain password derivation for backups requested locally from the device
+  portal; only the mutually authenticated Management API requires a derived
+  key.
+- Advance runtime generation to 193 with release sequence 2801.
+
 ## 3.0.0-alpha.95 - 2026-10-03
 
 - Keep the web portal and Device API responsive while Management creates or

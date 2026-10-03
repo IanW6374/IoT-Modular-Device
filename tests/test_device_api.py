@@ -217,12 +217,14 @@ class DeviceAPITests(unittest.TestCase):
 
         status, payload = api.dispatch(
             'POST', '/api/v2/configuration/backups',
-            b'{"password":"long-enough-backup-password"}', self.cert,
+            b'{"salt":"00000000000000000000000000000000",'
+            b'"derived_key":"11111111111111111111111111111111"}', self.cert,
         )
         self.assertEqual((status, payload['backup']['format']), (201, 'encrypted'))
         status, payload = api.dispatch(
             'POST', '/api/v2/configuration/backups/preview',
-            b'{"backup":{"format":"encrypted"},"password":"secret"}',
+            b'{"backup":{"format":"encrypted"},'
+            b'"derived_key":"11111111111111111111111111111111"}',
             self.cert,
         )
         self.assertEqual((status, payload['preview']['token']), (200, 'restore-token'))
@@ -232,9 +234,28 @@ class DeviceAPITests(unittest.TestCase):
         )
         self.assertEqual((status, payload['restore']), (202, 'restart required'))
         self.assertEqual(calls[0], (
-            'backup', {'password': 'long-enough-backup-password'}
+            'backup', {
+                'salt': '00000000000000000000000000000000',
+                'derived_key': '11111111111111111111111111111111',
+            }
         ))
         self.assertEqual(calls[-1], ('apply', 'restore-token'))
+
+    def test_legacy_managed_backup_is_rejected_before_device_key_derivation(self):
+        backup = mock.Mock()
+        api = DeviceAPI(
+            self.broker, self.health, self.registry,
+            lambda: {'device_name': 'test'}, configuration_backup=backup,
+        )
+        self.registry.enrol(self.cert, 'fleet manager', ('configuration:write',))
+
+        with self.assertRaisesRegex(ValueError, 'Management 2.7.3'):
+            api.dispatch(
+                'POST', '/api/v2/configuration/backups',
+                b'{"password":"legacy-password"}', self.cert,
+            )
+
+        backup.assert_not_called()
 
     def test_only_backup_preview_receives_large_envelope_body_limit(self):
         configured = 8192
