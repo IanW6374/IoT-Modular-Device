@@ -127,7 +127,7 @@ def _begin_native_recovery_state():
             return str(state.get('reason') or 'Native recovery requested')[:240]
         if failures >= MAX_NORMAL_UNHEALTHY_BOOTS:
             reason = (
-                'Native boot did not reach its health marker after ' +
+                'Native boot unhealthy after ' +
                 str(failures) + ' boots'
             )
             platform.recovery_request(reason)
@@ -350,8 +350,7 @@ def _run_initial_setup():
     password = credential_store.bootstrap_key()
     if len(password) < credential_store.MIN_PASSWORD_LENGTH:
         raise RuntimeError(
-            'first boot requires a unique factory setup key in encrypted NVS; '
-            'refusing to start an unsecured setup access point'
+            'Encrypted NVS setup key is invalid; unsecured setup is disabled'
         )
     status_led = hardware_platform.status_output(
         device_config.STATUS_LED_PIN, device_config.STATUS_LED_TYPE
@@ -379,11 +378,11 @@ def _run_core_recovery(reason):
     password_verifier = config['recovery']['password_verifier']
     if len(str(password)) < credential_store.MIN_PASSWORD_LENGTH:
         raise RuntimeError(
-            'core recovery requested but encrypted recovery AP credentials are invalid; use USB recovery'
+            'Invalid encrypted recovery AP credentials; use USB recovery'
         )
     if not password_verifier:
         raise RuntimeError(
-            'core recovery requested but encrypted console credentials are invalid; use USB recovery'
+            'Invalid encrypted recovery console credentials; use USB recovery'
         )
     status_led = hardware_platform.status_output(38, 'neopixel')
     hardware_platform.set_status_led_state(status_led, 'recovery')
