@@ -101,7 +101,7 @@ def complete_usb_recovery_handoff():
         _remove_user_file(USB_RECOVERY_HANDOFF_PATH)
     # Browser waits passively for this marker before entering REPL: Ctrl-C
     # during validation would interrupt the core-owned transaction itself.
-    print('USB-RECOVERY-RESULT')
+    print('USB-RECOVERY-RESULT ' + json.dumps(result))
     return result['status'] == 'ready'
 
 
