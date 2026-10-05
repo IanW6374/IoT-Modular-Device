@@ -75,7 +75,8 @@ def complete_usb_recovery_handoff():
             raise ValueError('USB recovery application transfer is incomplete')
         state = app_update.stage_bundle(app_update.BUNDLE_PATH, False)
         staged = True
-        if not state.get('has_application') or 'app_settings.json' not in state.get('selected_paths', ()):
+        selected = state.get('selected_paths', ())
+        if not state.get('has_application') or 'app_settings.json' not in selected or 'iotmd.py' not in selected:
             raise ValueError('USB recovery requires a complete application')
         # Signed bundle validation succeeds before accepting the core trial.
         esp32.Partition.mark_app_valid_cancel_rollback()

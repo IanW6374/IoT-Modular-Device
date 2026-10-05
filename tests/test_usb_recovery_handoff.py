@@ -46,7 +46,7 @@ class USBRecoveryHandoffTests(unittest.TestCase):
     def test_verified_application_staged_before_core_confirmation(self):
         order = []
         self.app.stage_bundle.side_effect = lambda *args: (order.append('stage') or
-            {'has_application': True, 'selected_paths': ['app_settings.json'], 'version': 'alpha97'})
+            {'has_application': True, 'selected_paths': ['iotmd.py', 'app_settings.json'], 'version': 'alpha97'})
         self.partition.mark_app_valid_cancel_rollback.side_effect = lambda: order.append('confirm')
         self.assertTrue(self.run_handoff())
         self.assertEqual(order, ['stage', 'confirm'])
@@ -83,6 +83,12 @@ class USBRecoveryHandoffTests(unittest.TestCase):
 
     def test_incomplete_application_is_discarded(self):
         self.app.stage_bundle.return_value = {'has_application': True, 'selected_paths': ['iotmd.py']}
+        self.assertFalse(self.run_handoff())
+        self.app.discard_pending_update.assert_called_once()
+        self.partition.mark_app_valid_cancel_rollback.assert_not_called()
+
+    def test_settings_only_bundle_cannot_pass_as_complete_application(self):
+        self.app.stage_bundle.return_value = {'has_application': True, 'selected_paths': ['app_settings.json']}
         self.assertFalse(self.run_handoff())
         self.app.discard_pending_update.assert_called_once()
         self.partition.mark_app_valid_cancel_rollback.assert_not_called()
