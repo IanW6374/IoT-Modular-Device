@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.98 - 2026-10-05
+
+- Keep the suggested first-time setup mDNS hostname in sync with the device
+  name until the administrator edits the hostname. Preserve custom hostnames
+  when retrying a setup form.
+- Supervise application boot failures only after provisioning. Clear stale
+  setup recovery counters before committing first-time setup, so repeated
+  setup restarts cannot prevent the application, Wi-Fi and mDNS from starting.
+- Keep existing watchdog and failed-boot recovery protection for provisioned
+  devices; do not confirm application or firmware trials during setup.
+- Advance runtime generation to 195 with release sequence 2803. These setup
+  fixes are frozen-core changes and require the matching core update.
+
 ## 3.0.0-alpha.97 - 2026-10-05
 
 - Add a frozen-core USB recovery handoff: transfer the core and complete signed

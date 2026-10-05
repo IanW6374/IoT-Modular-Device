@@ -272,6 +272,30 @@ class RecoveryBootTests(unittest.TestCase):
         setup.assert_called_once_with()
         self.assertEqual(values['prepared'], 0)
 
+    def test_repeated_setup_boots_never_consume_product_failure_allowance(self):
+        values, app, firmware = self.fake_modules(
+            'raise AssertionError("application must not run")\n', app_status='ready'
+        )
+        credential_store._reset_memory_backend()
+        with patch.dict(sys.modules, {
+            'app_update': app, 'firmware_update': firmware,
+        }), patch.object(
+            recovery_boot, '_begin_native_recovery_state',
+            return_value='Native boot did not reach its health marker after 3 boots',
+        ) as native_begin, patch.object(
+            recovery_boot, '_prepare_boot_attempt'
+        ) as product_begin, patch.object(
+            recovery_boot, '_run_initial_setup'
+        ) as setup, patch.object(recovery_boot, '_run_core_recovery') as recovery:
+            for _ in range(6):
+                recovery_boot.run()
+
+        self.assertEqual(setup.call_count, 6)
+        native_begin.assert_not_called()
+        product_begin.assert_not_called()
+        recovery.assert_not_called()
+        self.assertEqual(values['prepared'], 0)
+
     def test_factory_reset_is_completed_before_first_boot_wizard(self):
         values, app, firmware = self.fake_modules(
             'raise AssertionError("application must not run")\n', app_status='idle'

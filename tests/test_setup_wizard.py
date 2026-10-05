@@ -1,5 +1,8 @@
 import json
 import asyncio
+import re
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -11,6 +14,7 @@ import setup_workflow
 import setup_wizard_views
 import web_portal_ui
 import wifi_recovery
+import recovery_boot
 
 
 class SetupWizardTests(unittest.TestCase):
@@ -208,6 +212,98 @@ class SetupWizardTests(unittest.TestCase):
         credential_store.mark_provisioned(config)
         self.assertTrue(credential_store.is_provisioned())
 
+    def test_setup_clears_stale_recovery_before_committing_provisioning(self):
+        config = credential_store.build_configuration(
+            self.fields(), 'Portal-Cedar-47!River', 'Console-Ash-82!Stone'
+        )
+        credential_store.save(config)
+        events = []
+        platform = mock.Mock()
+        platform.recovery_snapshot.return_value = {
+            'requested': False, 'boot_pending': False, 'failed_boots': 0,
+        }
+        with mock.patch.object(
+            recovery_boot, 'clear_recovery_request', side_effect=lambda: events.append('clear')
+        ), mock.patch.object(
+            recovery_boot, '_native_platform', return_value=platform
+        ), mock.patch.object(
+            recovery_boot, '_read_recovery_state', return_value={}
+        ), mock.patch.object(
+            credential_store, 'mark_provisioned', side_effect=lambda saved: events.append('provision')
+        ), mock.patch.object(
+            credential_store, 'erase_bootstrap_key', side_effect=lambda: events.append('erase-key')
+        ):
+            setup_workflow._complete_provisioning(config)
+        self.assertEqual(events, ['clear', 'provision', 'erase-key'])
+
+    def test_setup_does_not_commit_when_recovery_state_cannot_be_cleared(self):
+        platform = mock.Mock()
+        for native, saved in (
+            ({'requested': True}, {}), ({'boot_pending': True}, {}),
+            ({'failed_boots': 3}, {}), ({}, {'mode': 'recovery'}),
+        ):
+            with self.subTest(native=native, saved=saved), mock.patch.object(
+                recovery_boot, 'clear_recovery_request', return_value=False
+            ), mock.patch.object(
+                recovery_boot, '_native_platform', return_value=platform
+            ), mock.patch.object(
+                recovery_boot, '_read_recovery_state', return_value=saved
+            ), mock.patch.object(credential_store, 'mark_provisioned') as provision, \
+                    mock.patch.object(credential_store, 'erase_bootstrap_key') as erase:
+                platform.recovery_snapshot.return_value = native
+                with self.assertRaisesRegex(RuntimeError, 'retry setup'):
+                    setup_workflow._complete_provisioning({})
+                provision.assert_not_called()
+                erase.assert_not_called()
+
+    def test_both_setup_install_routes_complete_provisioning_after_validation(self):
+        source = Path(setup_wizard.__file__).read_text()
+        install_start = source.index("method == 'POST' and path == '/install'")
+        upload_start = source.index("method == 'POST' and path == '/upload'", install_start)
+        install = source[install_start:upload_start]
+        upload = source[upload_start:]
+        self.assertLess(
+            install.index('_prepare_available_application()'),
+            install.index('_complete_provisioning(config)'),
+        )
+        self.assertLess(
+            upload.index('await app_update.receive_bundle('),
+            upload.index('_complete_provisioning(config)'),
+        )
+        self.assertEqual(source.count('_complete_provisioning(config)'), 2)
+        self.assertNotIn('credential_store.mark_provisioned(config)', source)
+
+    @unittest.skipUnless(shutil.which('node'), 'Node.js is required for setup JavaScript regression tests')
+    def test_hostname_auto_fill_and_manual_override_execute_correctly(self):
+        cases = (
+            (None, 'iot-md-003', None, 'iot-md-003.local'),
+            (None, 'Boiler & Controller', None, 'boiler-controller.local'),
+            (None, '', None, ''),
+            (None, 'a' * 62 + '--suffix', None, 'a' * 62 + '.local'),
+            (None, 'iot-md-003', 'custom.local', 'custom.local'),
+            ({'device_name': 'iot-md-003', 'certificate_hostname': 'iot-md-003.local'},
+             'iot-md-004', None, 'iot-md-004.local'),
+            ({'device_name': 'iot-md-003', 'certificate_hostname': 'boiler.local'},
+             'iot-md-004', None, 'boiler.local'),
+        )
+        for values, new_name, override, expected in cases:
+            with self.subTest(values=values, new_name=new_name, override=override):
+                html = setup_wizard._page('csrf', values=values)
+                script = html[html.index('var deviceName='):html.index('var wifiInput=')]
+                initial_name = re.search(r'id="device-name"[^>]*value="([^"]*)"', html).group(1)
+                initial_hostname = re.search(r'id="mdns-hostname"[^>]*value="([^"]*)"', html).group(1)
+                harness = '''const values=%s; const fields={};
+for(const [id,value] of Object.entries(values)) fields[id]={value,addEventListener(event,handler){this[event]=handler;}};
+const document={getElementById(id){return fields[id];}};
+%s
+const override=%s; if(override!==null){fields['mdns-hostname'].value=override;fields['mdns-hostname'].input();}
+fields['device-name'].value=%s;fields['device-name'].input();
+console.log(fields['mdns-hostname'].value);
+''' % (json.dumps({'device-name': initial_name, 'mdns-hostname': initial_hostname}),
+       script, json.dumps(override), json.dumps(new_name))
+                result = subprocess.run([shutil.which('node'), '-e', harness],
+                                        check=True, capture_output=True, text=True)
+                self.assertEqual(result.stdout.strip(), expected)
 
     def test_setup_rejects_reused_or_mismatched_passwords(self):
         params = self.fields()
@@ -441,7 +537,7 @@ class SetupWizardTests(unittest.TestCase):
         self.assertIn('<option value="https" selected>', html)
         self.assertNotIn('name="wifi_dhcp" type="checkbox" value="true" checked', html)
         self.assertNotIn('id="wifi-static-settings" class="grid" hidden', html)
-        self.assertIn('mdnsEdited=!!mdns.value', html)
+        self.assertIn('mdns.value!==suggestedHostname()', html)
         for secret in (
             'not-rendered-wifi-secret', 'not-rendered-portal-secret',
             'not-rendered-recovery-secret',

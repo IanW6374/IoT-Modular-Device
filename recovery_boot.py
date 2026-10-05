@@ -473,9 +473,13 @@ def run():
         _run_initial_setup()
         return
 
-    # An explicit factory reset wins. Otherwise advance the native recovery
-    # record before importing or executing any replaceable product code.
-    native_recovery_reason = _begin_native_recovery_state()
+    # Only provisioned boots are expected to reach product health. Setup may
+    # legitimately span many resets; counting those boots would latch native
+    # recovery before the first application ever gets a chance to start.
+    # Keep native supervision ahead of all replaceable product code.
+    native_recovery_reason = (
+        _begin_native_recovery_state() if credential_store.is_provisioned() else ''
+    )
     if native_recovery_reason:
         if credential_store.is_provisioned():
             _run_core_recovery(native_recovery_reason)

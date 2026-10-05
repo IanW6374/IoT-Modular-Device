@@ -14,7 +14,7 @@ from setup_workflow import (
 
 HTTPS_PORT = 8443
 HTTP_PORT = 8080
-SETUP_ASSET_VERSION = '14'
+SETUP_ASSET_VERSION = '15'
 SELF_SIGNED_READY_MESSAGE = (
     'A self-signed certificate is ready. Choose a certificate installation method.'
 )
@@ -179,9 +179,11 @@ def _page(csrf, message='', invalid_fields=(), values=None):
         '</section><button type="submit">Save and continue</button></form>'
         '<script>document.getElementById("browser-time").value=new Date().toISOString();'
         'var deviceName=document.getElementById("device-name"),mdns=document.getElementById('
-        '"mdns-hostname"),mdnsEdited=!!mdns.value;function hostnameFromDevice(){var label=deviceName.value'
-        '.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,63);'
-        'if(!mdnsEdited)mdns.value=label?label+".local":"";}mdns.addEventListener("input",'
+        '"mdns-hostname");function suggestedHostname(){var label=deviceName.value'
+        '.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").slice(0,63).replace(/^-+|-+$/g,"");'
+        'return label?label+".local":"";}var mdnsEdited=!!mdns.value&&'
+        'mdns.value!==suggestedHostname();function hostnameFromDevice(){'
+        'if(!mdnsEdited)mdns.value=suggestedHostname();}mdns.addEventListener("input",'
         'function(){mdnsEdited=true;});deviceName.addEventListener("input",hostnameFromDevice);'
         'var wifiInput=document.getElementById("wifi-ssid-input"),wifiSelect=document.getElementById('
         '"wifi-ssid-select"),wifiManual=document.getElementById("wifi-ssid-manual"),wifiDetected='

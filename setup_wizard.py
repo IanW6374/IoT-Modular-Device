@@ -34,6 +34,7 @@ from setup_wizard_views import (
 from setup_workflow import (
     CERTIFICATE_PATHS, DEFAULT_ACME_DIRECTORY_URL,
     _configure_device, _connect_station, _download_application, _form_values,
+    _complete_provisioning,
     _enroll_acme_certificate,
     _file_exists, _preloaded_application_available,
     _install_manual_certificates,
@@ -360,8 +361,7 @@ async def serve(ap_name, ap_password, reset_device, port=SETUP_PORT):
                         ('Location', '/upload'),
                     ))
                 else:
-                    credential_store.mark_provisioned(config)
-                    credential_store.erase_bootstrap_key()
+                    _complete_provisioning(config)
                     await send(
                         writer, '200 OK',
                         _portal_handoff_page(
@@ -391,8 +391,7 @@ async def serve(ap_name, ap_password, reset_device, port=SETUP_PORT):
                 )
                 upload_progress.update({'phase': 'complete', 'percent': 100})
                 state = _prepare_setup_application(state)
-                credential_store.mark_provisioned(config)
-                credential_store.erase_bootstrap_key()
+                _complete_provisioning(config)
                 portal_url = _portal_url(config)
                 await send(
                     writer, '200 OK',
