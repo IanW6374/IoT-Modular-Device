@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.97 - 2026-10-05
+
+- Add a frozen-core USB recovery handoff: transfer the core and complete signed
+  application before one reset, then validate and stage the application under
+  the new core before first-run setup. Reject incomplete transfers, wrong core
+  versions, wrong OTA slots and provisioned-device handoffs.
+- Keep interrupted handoffs recoverable without replaying configuration erasure
+  or executing unvalidated product code. Preserve secure boot and encryption.
+- Advance runtime generation to 194 with release sequence 2802.
+
 ## 3.0.0-alpha.96 - 2026-10-03
 
 - Reject legacy password-only remote backup requests immediately with a clear

@@ -21,6 +21,87 @@ RECOVERY_STATE_PATH = '.recovery-state.json'
 MAX_TRIAL_UNHEALTHY_BOOTS = 2
 MAX_NORMAL_UNHEALTHY_BOOTS = 3
 _trial_timer = None
+USB_RECOVERY_HANDOFF_VERSION = 1
+USB_RECOVERY_HANDOFF_PATH = '.usb-recovery.json'
+USB_RECOVERY_RESULT_PATH = '.usb-recovery-result.json'
+
+
+def complete_usb_recovery_handoff():
+    """Validate a locally transferred application under the newly booted core.
+
+    The marker is committed last by the USB writer. Interrupted uploads are
+    never staged. A failed handoff remains available for explicit USB retry;
+    it never installs product code or erases configuration during boot.
+    """
+    try:
+        os.stat(USB_RECOVERY_HANDOFF_PATH)
+    except OSError:
+        return False
+    import app_update
+    import credential_store
+    import core_metadata
+    import esp32
+    try:
+        import uhashlib as hashlib
+        import ubinascii as binascii
+    except ImportError:
+        import hashlib
+        import binascii
+    staged = False
+    try:
+        with open(USB_RECOVERY_HANDOFF_PATH, 'r') as stream:
+            marker = json.load(stream)
+        if marker.get('format_version') != USB_RECOVERY_HANDOFF_VERSION:
+            raise ValueError('unsupported USB recovery handoff')
+        if credential_store.is_provisioned():
+            raise ValueError('USB recovery requires an unprovisioned device')
+        if marker.get('core_version') != core_metadata.CORE_FIRMWARE_VERSION:
+            raise ValueError('USB recovery core version mismatch')
+        if marker.get('partition') != esp32.Partition(esp32.Partition.RUNNING).info()[4]:
+            raise ValueError('USB recovery core partition mismatch')
+        digest = hashlib.sha256()
+        size = 0
+        import machine
+        watchdog = machine.WDT(0)
+        with open(app_update.BUNDLE_PATH, 'rb') as stream:
+            while True:
+                chunk = stream.read(4096)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size += len(chunk)
+                watchdog.feed()
+        if size != marker.get('application_size') or binascii.hexlify(digest.digest()).decode() != marker.get('application_sha256'):
+            raise ValueError('USB recovery application transfer is incomplete')
+        state = app_update.stage_bundle(app_update.BUNDLE_PATH, False)
+        staged = True
+        if not state.get('has_application') or 'app_settings.json' not in state.get('selected_paths', ()):
+            raise ValueError('USB recovery requires a complete application')
+        # Signed bundle validation succeeds before accepting the core trial.
+        esp32.Partition.mark_app_valid_cancel_rollback()
+        clear_recovery_request()
+        result = {'status': 'ready', 'core_version': core_metadata.CORE_FIRMWARE_VERSION,
+                  'application_version': state.get('version', ''),
+                  'application_sha256': marker['application_sha256']}
+    except Exception:
+        if staged:
+            try:
+                app_update.discard_pending_update()
+            except Exception:
+                pass
+        # Do not persist exception text: configuration/key content may appear
+        # in errors. Keep the marker and bundle for explicit, non-erasing retry.
+        result = {'status': 'failed', 'reason': 'USB recovery handoff validation failed'}
+    temp = USB_RECOVERY_RESULT_PATH + '.tmp'
+    with open(temp, 'w') as stream:
+        json.dump(result, stream)
+    _replace(temp, USB_RECOVERY_RESULT_PATH)
+    if result['status'] == 'ready':
+        _remove_user_file(USB_RECOVERY_HANDOFF_PATH)
+    # Browser waits passively for this marker before entering REPL: Ctrl-C
+    # during validation would interrupt the core-owned transaction itself.
+    print('USB-RECOVERY-RESULT')
+    return result['status'] == 'ready'
 
 
 def _native_platform():
@@ -380,6 +461,10 @@ def run():
 
     status_led = hardware_platform.status_output(38, 'neopixel')
     hardware_platform.set_status_led_state(status_led, 'boot')
+
+    # Process the committed USB transaction before initial setup or stale
+    # recovery counters can divert boot. No product code is executed here.
+    complete_usb_recovery_handoff()
 
     if _complete_factory_reset(
         app_update, certificate_manager, credential_store, firmware_update
