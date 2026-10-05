@@ -29,6 +29,7 @@ except ImportError:
 
 import web_portal_ui as portal_ui
 import http_support
+import tls_listener
 import timezone_rules
 import portal_auth
 import portal_module_transport
@@ -64,6 +65,12 @@ def _is_certificate_request(method, route, path):
 async def _handle_certificate_request(*args):
     import certificate_portal_transport
     return await certificate_portal_transport.handle(*args)
+
+def _report_transport_error(log_output, peer, path, exc):
+    tls_listener.report_failure(
+        log_output, 'Portal',
+        'request' if path else 'tls-handshake/request-headers', exc, peer
+    )
 
 async def start_web_portal(portal):
     """Start the portal transport from one explicit application contract."""
@@ -1365,15 +1372,16 @@ async def start_web_portal(portal):
             ):
                 return
             try:
-                log_output('Local', 'Web portal', {'log': 'Request failed for ' + str(method) + ' ' + str(route) + ' - ' + str(exc)}, 'ERROR')
+                _report_transport_error(log_output, peer_address, path, exc)
             except Exception:
                 pass
             try:
                 request_keep_alive = False
-                await send_response(
-                    writer, '500 Internal Server Error',
-                    render_request_error_page(csrf_token)
-                )
+                if path and not isinstance(exc, (OSError, MemoryError)):
+                    await send_response(
+                        writer, '500 Internal Server Error',
+                        render_request_error_page(csrf_token)
+                    )
             except Exception:
                 pass
         finally:
@@ -1382,11 +1390,10 @@ async def start_web_portal(portal):
     ssl_context = None
     if settings.get('https', False):
         ssl_context = make_tls_context(settings.get('cert_path'), settings.get('key_path'))
-
-    return await asyncio.start_server(
+    return await tls_listener.start_server(
         handle_client,
         settings.get('host', '0.0.0.0'),
         settings.get('port', 8443 if settings.get('https', False) else 8080),
         backlog=4,
-        ssl=ssl_context
+        ssl=ssl_context, log_output=log_output, service='Portal'
     )

@@ -5,6 +5,7 @@
 #include "py/obj.h"
 #include "py/runtime.h"
 #include "esp_attr.h"
+#include "esp_heap_caps.h"
 
 #define IOTMD_BACKUP_MEMORY_BYTES (768)
 
@@ -41,10 +42,30 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(
     iotmd_platform_backup_memory_obj, 0, 1, iotmd_platform_backup_memory
 );
 
+static mp_obj_t iotmd_platform_transport_resources(void) {
+    mp_obj_t result = mp_obj_new_dict(4);
+    const uint32_t internal = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    const uint32_t dma = MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT;
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_internal_free),
+        mp_obj_new_int_from_uint(heap_caps_get_free_size(internal)));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_internal_largest),
+        mp_obj_new_int_from_uint(heap_caps_get_largest_free_block(internal)));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_dma_free),
+        mp_obj_new_int_from_uint(heap_caps_get_free_size(dma)));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_dma_largest),
+        mp_obj_new_int_from_uint(heap_caps_get_largest_free_block(dma)));
+    return result;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(
+    iotmd_platform_transport_resources_obj, iotmd_platform_transport_resources
+);
+
 static const mp_rom_map_elem_t iotmd_platform_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__iotmd_platform) },
     { MP_ROM_QSTR(MP_QSTR_backup_memory),
       MP_ROM_PTR(&iotmd_platform_backup_memory_obj) },
+    { MP_ROM_QSTR(MP_QSTR_transport_resources),
+      MP_ROM_PTR(&iotmd_platform_transport_resources_obj) },
 };
 static MP_DEFINE_CONST_DICT(
     iotmd_platform_module_globals,

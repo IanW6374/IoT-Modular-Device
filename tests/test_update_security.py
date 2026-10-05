@@ -542,7 +542,7 @@ class UpdateSecurityTests(unittest.TestCase):
 
     def test_core_shutdown_release_advances_core_api(self):
         self.assertEqual(recovery_boot.CORE_API_VERSION, 12)
-        self.assertEqual(update_security.CORE_API_VERSION, 12)
+        self.assertEqual(update_security.CORE_API_VERSION, 13)
 
     def test_signed_release_descriptor_detects_metadata_tampering(self):
         descriptor = {

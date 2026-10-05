@@ -591,6 +591,51 @@ class DeviceAPITests(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_transport_failure_closes_socket_without_http_reply_and_logs_safe_context(self):
+        for failure in (OSError(1), MemoryError('secret'), RuntimeError('secret')):
+            with self.subTest(failure=type(failure).__name__):
+                logs = []
+                self.api.log_output = lambda *args: logs.append(args)
+
+                class Reader:
+                    async def read(stream_self, size):
+                        raise failure
+                    def get_extra_info(stream_self, name):
+                        return ('192.0.2.1', 5)
+
+                class Writer:
+                    def __init__(stream_self):
+                        stream_self.payload = bytearray()
+                        stream_self.closed = False
+                    def write(stream_self, data):
+                        stream_self.payload.extend(data)
+                    async def drain(stream_self):
+                        pass
+                    def close(stream_self):
+                        stream_self.closed = True
+                    async def wait_closed(stream_self):
+                        pass
+
+                async def exercise():
+                    captured = {}
+                    async def capture(handler, *args, **kwargs):
+                        captured['handler'] = handler
+                        return object()
+                    with mock.patch.object(device_api, 'make_mtls_context', return_value=object()), \
+                            mock.patch.object(device_api.tls_listener, 'start_server', side_effect=capture):
+                        await device_api.start_device_api({
+                            'enabled': True, 'cert_path': 'server.der',
+                            'key_path': 'server-key.der', 'client_ca_path': 'ca.der',
+                        }, self.api)
+                    writer = Writer()
+                    await captured['handler'](Reader(), writer)
+                    self.assertTrue(writer.closed)
+                    self.assertEqual(writer.payload, b'')
+                    self.assertIn('stage=tls-handshake/request-headers', str(logs))
+                    self.assertIn('peer=192.0.2.1', str(logs))
+                    self.assertNotIn('secret', str(logs))
+                asyncio.run(exercise())
+
     def test_server_reads_split_tls_post_without_header_read_ahead(self):
         events = []
 

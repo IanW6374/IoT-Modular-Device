@@ -839,7 +839,7 @@ def local_display_status():
         'device_name': ha_devicename,
         'wifi_ip': wifi_ip_address(),
         'mqtt': mqtt_connection_status(),
-        'api': 'online' if device_api_server is not None else (
+        'api': 'online' if device_api_server is not None and device_api_server.is_serving() else (
             'enabled' if device_api_enabled else 'disabled'
         ),
         'config': moduleSettingsFile,
@@ -1727,7 +1727,8 @@ device_inventory = DeviceInventory({
     'boot': boot_tracker.snapshot, 'capabilities': hardware_platform.capabilities,
     'network_state': lambda: application_context.state.get('network', 'unknown'),
     'wifi_address': wifi_ip_address, 'mqtt_state': mqtt_connection_status,
-    'api_enabled': lambda: device_api_enabled, 'api_online': lambda: device_api_server is not None,
+    'api_enabled': lambda: device_api_enabled,
+    'api_online': lambda: device_api_server is not None and device_api_server.is_serving(),
     'api_port': lambda: device_api_port, 'syslog': remote_syslog.status,
     'usb_ncm': usb_network.snapshot, 'features': runtime_features.snapshot,
     'release_sequence': app_update.running_release_sequence,

@@ -13,9 +13,11 @@ from pathlib import Path
 try:
     from .build_firmware_update import build_firmware_bundle, load_signing_key
     from .release_provenance import git_source_revision, source_marker
+    from .micropython_patches import apply_core_patches, restore_core_patches
 except ImportError:  # Direct execution: python tools/build_micropython_firmware.py ...
     from build_firmware_update import build_firmware_bundle, load_signing_key
     from release_provenance import git_source_revision, source_marker
+    from micropython_patches import apply_core_patches, restore_core_patches
 from update_security import public_key_bytes
 
 
@@ -370,7 +372,12 @@ def main():
         str(core_metadata_dir),
     ]
     partition_target = port / 'partitions-IOTMD-8MiB-ota.csv'
+    applied_patches = []
     try:
+        applied_patches = apply_core_patches(micropython, [
+            project / 'firmware' / 'patches' / name
+            for name in lock.get('micropython_patches', ())
+        ])
         shutil.copy2(
             project / 'firmware' / 'partitions-8MiB-ota.csv', partition_target
         )
@@ -475,6 +482,7 @@ def main():
         print('image bytes', result['size'], 'of', lock['ota_partition_bytes'])
         print('source revision', source_revision)
     finally:
+        restore_core_patches(micropython, applied_patches)
         try:
             partition_target.unlink()
         except OSError:

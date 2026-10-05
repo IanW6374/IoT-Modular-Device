@@ -16,6 +16,7 @@ except ImportError:
     import ssl
 
 import http_support
+import tls_listener
 from api_security import APIAuthorizationError
 from api_contracts import APIRequest, APIResponse
 from portal_http import is_client_disconnect_error, is_http_timeout_error
@@ -508,6 +509,8 @@ async def _start_http_device_api(settings, api):
 
     async def handle(reader, writer):
         peer = _peer_address(reader, writer)
+        stage = 'tls-handshake/request-headers'
+        http_ready = False
         try:
             # MicroPython's TLS server defers the handshake until the first
             # stream read. Inspecting the certificate before that read resets
@@ -515,11 +518,14 @@ async def _start_http_device_api(settings, api):
             identity = None
             authenticated_client = None
             for request_number in range(API_KEEP_ALIVE_REQUESTS):
+                stage = ('tls-handshake/request-headers' if identity is None
+                         else 'request-headers')
                 line, headers = await http_support.read_request(
                     reader, API_KEEP_ALIVE_TIMEOUT_SECONDS
                 )
                 if not line:
                     return
+                http_ready = True
                 parts = line.decode().strip().split()
                 if len(parts) != 3:
                     raise ValueError('invalid HTTP request line')
@@ -528,6 +534,7 @@ async def _start_http_device_api(settings, api):
                     await _write_response(writer, 405, {'error': 'method not allowed'})
                     return
                 length = int(headers.get('content-length', '0') or 0)
+                stage = 'request-body'
                 body_maximum = request_body_limit(path, maximum)
                 body = await http_support.read_exact_body(
                     reader, length, body_maximum
@@ -538,8 +545,10 @@ async def _start_http_device_api(settings, api):
                     # subsequent application-data reads. The SSL context has
                     # already required and verified a client certificate, so
                     # receive the bounded body before extracting its identity.
+                    stage = 'peer-certificate'
                     identity = _peer_certificate(reader)
                     authenticated_client = api.connection_opened(identity, peer)
+                stage = 'dispatch'
                 response = api.handle(APIRequest(
                     method, path, body, identity, authenticated_client,
                     transport='https', peer=peer
@@ -551,6 +560,7 @@ async def _start_http_device_api(settings, api):
                     connection != 'close' and
                     (version == 'HTTP/1.1' or connection == 'keep-alive')
                 )
+                stage = 'response-write'
                 await _write_response(writer, status, payload, keep_alive)
                 if not keep_alive:
                     return
@@ -570,15 +580,20 @@ async def _start_http_device_api(settings, api):
         except RuntimeError as exc:
             if api.health:
                 api.health.increment('api_failures')
-            await _write_response(writer, 503, {'error': str(exc)})
+            tls_listener.report_failure(api.log_output, 'API', stage, exc, peer)
+            if http_ready:
+                await _write_response(writer, 503, {'error': str(exc)})
         except Exception as exc:
             if is_http_timeout_error(exc) or is_client_disconnect_error(exc):
+                if is_http_timeout_error(exc) and not http_ready:
+                    tls_listener.report_failure(api.log_output, 'API', stage, exc, peer)
                 return
             if api.health:
                 api.health.increment('api_failures')
-            if api.log_output:
-                api.log_output('API', 'Error', {'log': str(exc)}, 'ERROR')
-            await _write_response(writer, 400, {'error': str(exc)})
+            tls_listener.report_failure(api.log_output, 'API', stage, exc, peer)
+            # No HTTP reply on an unestablished or failed TLS transport.
+            if http_ready and not isinstance(exc, (OSError, MemoryError)):
+                await _write_response(writer, 400, {'error': str(exc)})
         finally:
             await http_support.close_writer(writer)
 
@@ -586,9 +601,9 @@ async def _start_http_device_api(settings, api):
         settings['cert_path'], settings['key_path'], settings['client_ca_paths']
         if 'client_ca_paths' in settings else settings['client_ca_path']
     )
-    return await asyncio.start_server(
+    return await tls_listener.start_server(
         handle, settings.get('host', '0.0.0.0'), int(settings.get('port', 8444)),
-        backlog=2, ssl=context
+        backlog=2, ssl=context, log_output=api.log_output, service='API'
     )
 
 

@@ -54,7 +54,7 @@ RECOVERY_FILES = (
     'credential_store.py', 'credential_schema.py',
     'setup_wizard.py', 'setup_wizard_views.py', 'setup_workflow.py',
     'factory_config.py',
-    'device_config.py', 'portal_ui.py', 'http_support.py',
+    'device_config.py', 'portal_ui.py', 'http_support.py', 'tls_listener.py',
     'release_update.py', 'certificate_manager.py', 'certificate_codec.py',
     'iot_ca_enrollment.py',
     'application_storage.py',

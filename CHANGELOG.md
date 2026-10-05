@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.99 - 2026-10-05
+
+- Close underlying TCP sockets immediately after fatal TLS handshakes,
+  including rejected client certificates; do not defer cleanup until GC.
+- Close failed accept loops and supervise Portal/API listeners with bounded
+  restart retries without resetting the device or replaying requests.
+- Report transport stage, peer, errno and internal/DMA heap figures through
+  device/syslog logging, without request bodies or credentials. Do not attempt
+  HTTP error responses on failed TLS transports.
+- Report API listener availability from the running accept task, not merely
+  the presence of a server object.
+- Advance runtime generation to 196, release sequence 2804 and Core API 13.
+  Install the universal update; the separately published application requires
+  the new core. The private paired application supports Core 12 staging only.
+
 ## 3.0.0-alpha.98 - 2026-10-05
 
 - Keep the suggested first-time setup mDNS hostname in sync with the device

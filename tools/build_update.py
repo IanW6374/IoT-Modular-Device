@@ -748,7 +748,7 @@ def load_signing_key(path):
 def build_bundle(
     output, version, files, content_overrides=None, signing_key=b'',
     release_sequence=1,
-    minimum_core_api=12, minimum_config_api=3, maximum_config_api=3,
+    minimum_core_api=13, minimum_config_api=3, maximum_config_api=3,
     components=None
 ):
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -816,9 +816,9 @@ def main():
         help='Fleet-wide monotonically increasing signed release number'
     )
     parser.add_argument(
-        '--minimum-core-api', type=int, default=12,
+        '--minimum-core-api', type=int, default=13,
         help=(
-            'signed application compatibility floor (default: 12); lower this '
+            'signed application compatibility floor (default: 13); lower this '
             'only for an unpublished inner application in a firmware-first '
             'paired universal migration'
         )
