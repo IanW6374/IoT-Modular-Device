@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import recovery_boot
 import credential_store
@@ -295,6 +295,21 @@ class RecoveryBootTests(unittest.TestCase):
         product_begin.assert_not_called()
         recovery.assert_not_called()
         self.assertEqual(values['prepared'], 0)
+
+    def test_strict_recovery_clear_does_not_hide_native_storage_failure(self):
+        native = SimpleNamespace(recovery_clear=Mock(side_effect=OSError(5)))
+        with patch.object(recovery_boot, '_native_platform', return_value=native):
+            with self.assertRaises(OSError):
+                recovery_boot.clear_recovery_request(strict=True)
+            # Existing best-effort callers retain their behaviour.
+            self.assertFalse(recovery_boot.clear_recovery_request())
+
+    def test_strict_recovery_clear_does_not_hide_filesystem_failure(self):
+        with patch.object(recovery_boot.os, 'remove', side_effect=OSError(5)), \
+                patch.object(recovery_boot, '_native_platform') as native:
+            with self.assertRaises(OSError):
+                recovery_boot.clear_recovery_request(strict=True)
+            native.assert_not_called()
 
     def test_factory_reset_is_completed_before_first_boot_wizard(self):
         values, app, firmware = self.fake_modules(

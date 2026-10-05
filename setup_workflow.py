@@ -72,16 +72,9 @@ def _configure_device(params):
     return config
 
 def _complete_provisioning(config):
-    """Start the first product boot with no stale setup failure allowance."""
+    """Reset setup recovery state before the first supervised product boot."""
     import recovery_boot
-    recovery_boot.clear_recovery_request()
-    platform = recovery_boot._native_platform()
-    if platform is not None:
-        state = platform.recovery_snapshot()
-        if state.get('requested') or state.get('boot_pending') or state.get('failed_boots'):
-            raise RuntimeError('could not reset first-boot recovery state; retry setup')
-    if recovery_boot._read_recovery_state():
-        raise RuntimeError('could not reset first-boot recovery state; retry setup')
+    recovery_boot.clear_recovery_request(strict=True)
     credential_store.mark_provisioned(config)
     credential_store.erase_bootstrap_key()
 

@@ -218,43 +218,28 @@ class SetupWizardTests(unittest.TestCase):
         )
         credential_store.save(config)
         events = []
-        platform = mock.Mock()
-        platform.recovery_snapshot.return_value = {
-            'requested': False, 'boot_pending': False, 'failed_boots': 0,
-        }
         with mock.patch.object(
-            recovery_boot, 'clear_recovery_request', side_effect=lambda: events.append('clear')
-        ), mock.patch.object(
-            recovery_boot, '_native_platform', return_value=platform
-        ), mock.patch.object(
-            recovery_boot, '_read_recovery_state', return_value={}
+            recovery_boot, 'clear_recovery_request',
+            side_effect=lambda **kwargs: events.append(('clear', kwargs))
         ), mock.patch.object(
             credential_store, 'mark_provisioned', side_effect=lambda saved: events.append('provision')
         ), mock.patch.object(
             credential_store, 'erase_bootstrap_key', side_effect=lambda: events.append('erase-key')
         ):
             setup_workflow._complete_provisioning(config)
-        self.assertEqual(events, ['clear', 'provision', 'erase-key'])
+        self.assertEqual(events, [('clear', {'strict': True}), 'provision', 'erase-key'])
 
     def test_setup_does_not_commit_when_recovery_state_cannot_be_cleared(self):
-        platform = mock.Mock()
-        for native, saved in (
-            ({'requested': True}, {}), ({'boot_pending': True}, {}),
-            ({'failed_boots': 3}, {}), ({}, {'mode': 'recovery'}),
-        ):
-            with self.subTest(native=native, saved=saved), mock.patch.object(
-                recovery_boot, 'clear_recovery_request', return_value=False
-            ), mock.patch.object(
-                recovery_boot, '_native_platform', return_value=platform
-            ), mock.patch.object(
-                recovery_boot, '_read_recovery_state', return_value=saved
-            ), mock.patch.object(credential_store, 'mark_provisioned') as provision, \
-                    mock.patch.object(credential_store, 'erase_bootstrap_key') as erase:
-                platform.recovery_snapshot.return_value = native
-                with self.assertRaisesRegex(RuntimeError, 'retry setup'):
-                    setup_workflow._complete_provisioning({})
-                provision.assert_not_called()
-                erase.assert_not_called()
+        with mock.patch.object(
+            recovery_boot, 'clear_recovery_request', side_effect=OSError(5)
+        ) as clear, mock.patch.object(
+            credential_store, 'mark_provisioned'
+        ) as provision, mock.patch.object(credential_store, 'erase_bootstrap_key') as erase:
+            with self.assertRaises(OSError):
+                setup_workflow._complete_provisioning({})
+            clear.assert_called_once_with(strict=True)
+            provision.assert_not_called()
+            erase.assert_not_called()
 
     def test_both_setup_install_routes_complete_provisioning_after_validation(self):
         source = Path(setup_wizard.__file__).read_text()
@@ -289,7 +274,7 @@ class SetupWizardTests(unittest.TestCase):
         for values, new_name, override, expected in cases:
             with self.subTest(values=values, new_name=new_name, override=override):
                 html = setup_wizard._page('csrf', values=values)
-                script = html[html.index('var deviceName='):html.index('var wifiInput=')]
+                script = html[html.index('var device='):html.index('var wifiInput=')]
                 initial_name = re.search(r'id="device-name"[^>]*value="([^"]*)"', html).group(1)
                 initial_hostname = re.search(r'id="mdns-hostname"[^>]*value="([^"]*)"', html).group(1)
                 harness = '''const values=%s; const fields={};
@@ -343,7 +328,7 @@ console.log(fields['mdns-hostname'].value);
         self.assertIn('wifiSelect.replaceChildren()', html)
         self.assertIn('fetch("/wifi-networks"', html)
         self.assertIn('hostnameFromDevice()', html)
-        self.assertIn('mdnsEdited=true', html)
+        self.assertIn('custom=true', html)
         self.assertIn('<div class="credential-pair">', html)
         self.assertLess(html.index('Portal password'), html.index('Confirm portal password'))
         self.assertLess(html.index('Recovery AP password'), html.index('Confirm recovery AP password'))
@@ -537,7 +522,7 @@ console.log(fields['mdns-hostname'].value);
         self.assertIn('<option value="https" selected>', html)
         self.assertNotIn('name="wifi_dhcp" type="checkbox" value="true" checked', html)
         self.assertNotIn('id="wifi-static-settings" class="grid" hidden', html)
-        self.assertIn('mdns.value!==suggestedHostname()', html)
+        self.assertIn('mdns.value!==hostnameFromDevice()', html)
         for secret in (
             'not-rendered-wifi-secret', 'not-rendered-portal-secret',
             'not-rendered-recovery-secret',

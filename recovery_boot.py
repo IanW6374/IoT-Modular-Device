@@ -198,19 +198,21 @@ def _write_recovery_state(state):
     _replace(temp, RECOVERY_STATE_PATH)
 
 
-def clear_recovery_request():
+def clear_recovery_request(strict=False):
     cleared = False
     try:
         os.remove(RECOVERY_STATE_PATH)
         cleared = True
-    except OSError:
-        pass
+    except OSError as exc:
+        if strict and exc.args[0] != 2:
+            raise
     platform = _native_platform()
     if platform is not None:
         try:
             cleared = bool(platform.recovery_clear()) or cleared
         except Exception:
-            pass
+            if strict:
+                raise
     return cleared
 
 
@@ -477,15 +479,10 @@ def run():
     # legitimately span many resets; counting those boots would latch native
     # recovery before the first application ever gets a chance to start.
     # Keep native supervision ahead of all replaceable product code.
-    native_recovery_reason = (
-        _begin_native_recovery_state() if credential_store.is_provisioned() else ''
-    )
+    provisioned = credential_store.is_provisioned()
+    native_recovery_reason = _begin_native_recovery_state() if provisioned else ''
     if native_recovery_reason:
-        if credential_store.is_provisioned():
-            _run_core_recovery(native_recovery_reason)
-        else:
-            print(native_recovery_reason)
-            _run_initial_setup()
+        _run_core_recovery(native_recovery_reason)
         return
 
     capability_failures = hardware_platform.required_capability_failures(
@@ -495,7 +492,7 @@ def run():
     if capability_failures:
         reason = 'Platform capability check failed: ' + '; '.join(capability_failures)
         request_recovery(reason)
-        if credential_store.is_provisioned():
+        if provisioned:
             _run_core_recovery(reason)
         else:
             print(reason)
@@ -534,7 +531,7 @@ def run():
         str(universal_update.update_status().get('status', 'idle'))
     ), durable=True)
 
-    if not credential_store.is_provisioned():
+    if not provisioned:
         boot.stage('configuration', reason='first-boot setup required')
         _run_initial_setup()
         return
