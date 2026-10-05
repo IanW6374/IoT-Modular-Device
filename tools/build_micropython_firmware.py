@@ -24,6 +24,20 @@ NVS_SIZE = 0x6000
 NVS_KEYS_OFFSET = 0x1A000
 NVS_KEYS_SIZE = 0x1000
 
+
+def generated_idf_lock_only(micropython, status, idf_version):
+    """Recognize only IDF's generated patch-version lockfile adjustment."""
+    relative = 'ports/esp32/lockfiles/dependencies.lock.esp32s3'
+    if status.strip() != 'M ' + relative:
+        return False
+    original = run(['git', 'show', 'HEAD:' + relative], micropython, True).stdout
+    current = (Path(micropython) / relative).read_text()
+    # The pinned upstream lock uses 5.5.2; IDF regenerates this single field.
+    needle = '\n    version: 5.5.2\n'
+    return original.count(needle) == 1 and current == original.replace(
+        needle, '\n    version: ' + idf_version.lstrip('v') + '\n', 1
+    )
+
 REQUIRED_PRODUCTION_SDKCONFIG = (
     'CONFIG_SECURE_BOOT_V2_ENABLED=y',
     'CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y',
@@ -278,9 +292,12 @@ def main():
                 'MicroPython commit mismatch: expected ' + lock['micropython_commit'] +
                 ', found ' + micropython_commit
             )
-        if run([
+        micropython_status = run([
             'git', 'status', '--porcelain', '--untracked-files=no'
-        ], micropython, True).stdout.strip():
+        ], micropython, True).stdout
+        if micropython_status.strip() and not generated_idf_lock_only(
+            micropython, micropython_status, lock['esp_idf']
+        ):
             raise SystemExit('MicroPython checkout has tracked local changes')
         idf_description = run(['idf.py', '--version'], capture=True).stdout.strip()
         if lock['esp_idf'].lstrip('v') not in idf_description:
