@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 
-INCLUDED_SUFFIXES = {'.py', '.c', '.h', '.json', '.yaml', '.yml'}
+INCLUDED_SUFFIXES = {'.py', '.c', '.h', '.json', '.yaml', '.yml', '.patch'}
 EXCLUDED_PARTS = {'.git', '__pycache__', 'releases'}
 
 

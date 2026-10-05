@@ -13,6 +13,9 @@
   HTTP error responses on failed TLS transports.
 - Report API listener availability from the running accept task, not merely
   the presence of a server object.
+- Exclude the unused ESP-NOW binding from the product core to retain the
+  universal staging budget after secure-boot padding. Wi-Fi/MQTT and all TLS
+  and hardware-security protections are unchanged.
 - Advance runtime generation to 196, release sequence 2804 and Core API 13.
   Install the universal update; the separately published application requires
   the new core. The private paired application supports Core 12 staging only.

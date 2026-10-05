@@ -6,6 +6,8 @@ This universal update hardens TLS socket cleanup and accept-loop supervision.
 It addresses verified code weaknesses observed while diagnosing IoT-MD-001's
 TLS handshake stalls; it does not claim to prove the cause of the original
 `EPERM` report. Existing certificate verification and API scopes are unchanged.
+The unused ESP-NOW gateway binding is excluded to keep the signed, padded
+core within the existing universal staging limit; normal Wi-Fi/MQTT remains.
 
 Install the **universal** bundle to update the core and application together.
 Its unpublished inner application permits staging on Core API 12; firmware

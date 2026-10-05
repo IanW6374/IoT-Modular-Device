@@ -122,6 +122,8 @@ def validate_native_module_registrations(moduledefs):
             'native MicroPython modules are not registered: ' +
             ', '.join(missing)
         )
+    if 'MP_QSTR_espnow' in text:
+        raise ValueError('production firmware registers unused ESP-NOW transport')
 
 
 def clear_module_registration_cache(build_directory):

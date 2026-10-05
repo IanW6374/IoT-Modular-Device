@@ -8,5 +8,9 @@
 // capability-gated and remains available for a future compatible core.
 #define MICROPY_PY_NETWORK_USBD_NCM         (0)
 #define MICROPY_PY_BLUETOOTH                (0)
+// IoT-MD uses Wi-Fi IP/MQTT, not the optional ESP-NOW gateway transport.
+// Exclude this unused binding to retain universal staging headroom, including
+// Secure Boot's 64 KiB image padding, without changing TLS/security policy.
+#define MICROPY_PY_ESPNOW                   (0)
 #define MICROPY_HW_I2C0_SCL                 (9)
 #define MICROPY_HW_I2C0_SDA                 (8)

@@ -127,6 +127,14 @@ class ReleaseProvenanceTests(unittest.TestCase):
                 registrations.replace('MP_QSTR__iotmd_platform_v3', '')
             )
 
+    def test_core_rejects_unused_espnow_registration(self):
+        registrations = '\n'.join((
+            'MP_QSTR__iotmd_crypto', 'MP_QSTR__iotmd_platform',
+            'MP_QSTR__iotmd_platform_v3', 'MP_QSTR_espnow',
+        ))
+        with self.assertRaisesRegex(ValueError, 'ESP-NOW'):
+            validate_native_module_registrations(registrations)
+
     def test_module_registration_cache_is_cleared_for_board_changes(self):
         build = Path('build')
         module_cache = build / 'genhdr' / 'module'
