@@ -38,10 +38,12 @@ class ConfigurationProfileService:
                 'actor': str(actor)[:64], 'fields': ','.join(fields),
             }, force=True, component='configuration'
         )
-        self.restart_required('Configuration profile applied')
+        needs_restart = bool(set(values) - {'device_description'})
+        if needs_restart:
+            self.restart_required('Configuration profile applied')
         return {
             'name': normalized['name'], 'applied_settings': fields,
-            'restart_required': True,
+            'restart_required': needs_restart,
             'network_trial_pending': bool(
                 updated.get('network_trial_pending', False)
             ),

@@ -34,6 +34,35 @@ class Health:
 
 
 class ConfigurationProfileTests(unittest.TestCase):
+    def test_description_only_profile_does_not_require_restart(self):
+        for description in ('Boiler controller', ''):
+            with self.subTest(description=description):
+                credentials, reasons = Credentials(), []
+                service = ConfigurationProfileService(credentials, Timezone(), Health(), reasons.append)
+                result = service.apply({'name': 'Description', 'settings': {
+                    'device_description': description,
+                }}, 'Management')
+                self.assertEqual(credentials.updated, {'device_description': description})
+                self.assertFalse(result['restart_required'])
+                self.assertFalse(credentials.network_trial)
+                self.assertEqual(reasons, [])
+
+    def test_mixed_description_profile_still_requires_restart(self):
+        reasons = []
+        service = ConfigurationProfileService(Credentials(), Timezone(), Health(), reasons.append)
+        result = service.apply({'name': 'Mixed', 'settings': {
+            'device_description': 'Boiler', 'loglevel': 'INFO',
+        }}, 'Management')
+        self.assertTrue(result['restart_required'])
+        self.assertEqual(reasons, ['Configuration profile applied'])
+
+    def test_portal_control_alignment_preserves_multi_selects(self):
+        from web_portal_ui import PORTAL_CSS
+        self.assertIn('align-content:start;grid-auto-rows:max-content', PORTAL_CSS)
+        self.assertIn('height:42px;min-height:42px', PORTAL_CSS)
+        self.assertIn('select:not([multiple]):not([size])', PORTAL_CSS)
+        self.assertIn('textarea,select[multiple],select[size]{height:auto}', PORTAL_CSS)
+
     def test_service_validates_applies_and_audits_profile(self):
         credentials = Credentials()
         health = Health()

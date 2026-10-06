@@ -426,6 +426,13 @@ PORTAL_CSS = (
     '.settings-save-controls>*{flex:1}.workflow-steps{grid-template-columns:1fr;gap:8px}'
     '.workflow-steps li{grid-template-columns:35px 1fr;justify-items:start;align-items:center;text-align:left}'
     '.workflow-steps li:not(:last-child):after{left:17px;right:auto;top:35px;bottom:-8px;width:2px;height:auto}}'
+    'label.field{align-content:start;grid-auto-rows:max-content;min-width:0}'
+    'input:not([type="checkbox"]):not([type="radio"]),'
+    'select:not([multiple]):not([size]){height:42px;min-height:42px;line-height:1.4}'
+    'textarea,select[multiple],select[size]{height:auto}'
+    '.check{min-height:42px;align-self:end}'
+    '.check input[type="checkbox"],.check input[type="radio"]{width:16px;height:16px;'
+    'min-height:16px;padding:0;margin:0;flex:0 0 16px}'
 )
 
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.101 - 2026-10-06
+
+- Align settings labels and use consistent 42 px single-line controls without
+  stretching inputs beside helper text. Preserve tall text areas and lists.
+- Allow configuration profiles to clear a device description. Description-only
+  metadata changes no longer mark the device as requiring a restart.
+
 ## 3.0.0-alpha.100 - 2026-10-06
 
 - Add an optional device description to first-run setup, editable device
