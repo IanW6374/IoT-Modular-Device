@@ -21,6 +21,7 @@ INTEGER_FIELDS = {
 }
 TEXT_FIELDS = {
     'device_name': 64,
+    'device_description': 256,
     'wifi_ssid': 32,
     'wifi_ip_address': 15,
     'wifi_subnet_mask': 15,

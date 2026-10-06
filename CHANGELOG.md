@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.100 - 2026-10-06
+
+- Add an optional device description to first-run setup, editable device
+  settings, configuration profiles/backups and API inventory. Existing saved
+  configurations default to an empty description.
+- Expose bounded core/application update phase telemetry to Management for
+  detailed universal milestones without counting byte transfer as successful
+  verification or an active trial as confirmed installation.
+- Keep fleet check/download/activation commands separate: targeted checks no
+  longer auto-download and managed staging never implicitly restarts the device.
+  Retain exact release type/sequence targeting and compatibility checks.
+- Advance runtime generation to 197, release sequence 2805 and Core API 14.
+  Install the universal update for the frozen first-run/configuration changes;
+  the standalone application requires Core API 14. The private paired
+  application allows Core API 12 staging only as part of the universal update.
+
 ## 3.0.0-alpha.99 - 2026-10-05
 
 - Close underlying TCP sockets immediately after fatal TLS handshakes,

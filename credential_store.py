@@ -305,6 +305,7 @@ def build_configuration(values, portal_password, recovery_password):
         'schema': SCHEMA_VERSION,
         'provisioned': False,
         'device_name': values.get('device_name', ''),
+        'device_description': values.get('device_description', ''),
         'wifi': {
             'ssid': values.get('wifi_ssid', ''),
             'password': values.get('wifi_password', ''),
@@ -461,6 +462,7 @@ def public_settings():
     syslog = config.get('syslog', {})
     return {
         'device_name': config['device_name'],
+        'device_description': config.get('device_description', ''),
         'wifi_ssid': config['wifi']['ssid'],
         'wifi_password_set': bool(config['wifi']['password']),
         'wifi_dhcp': config['wifi'].get('dhcp', True),
@@ -539,6 +541,8 @@ def public_settings():
 def _apply_operational_settings(config, values):
     if 'device_name' in values:
         config['device_name'] = values['device_name']
+    if 'device_description' in values:
+        config['device_description'] = values['device_description']
     if 'wifi_ssid' in values:
         config['wifi']['ssid'] = values['wifi_ssid']
     if 'wifi_password' in values:

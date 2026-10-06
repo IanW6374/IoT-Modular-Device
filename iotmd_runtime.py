@@ -29,6 +29,8 @@ import app_update
 import application_upload
 import firmware_update
 import universal_update
+import release_selection
+from update_telemetry import telemetry as update_telemetry
 import universal_upload
 import hardware_platform
 import boot_state
@@ -1359,6 +1361,7 @@ def update_portal_settings(params):
         portal_timeout_s = int(params.get('portal_session_timeout_s', 3600))
     values = {
         'device_name': str(params.get('device_name', '')).strip(),
+        'device_description': str(params.get('device_description', current_settings.get('device_description', ''))).strip(),
         'wifi_ssid': str(params.get('wifi_ssid', '')),
         'wifi_dhcp': str(params.get('wifi_dhcp', '')).lower() in (
             '1', 'true', 'on'
@@ -1719,6 +1722,7 @@ def validate_uploaded_certificates():
 
 device_inventory = DeviceInventory({
     'device_name': lambda: ha_devicename, 'device_id': lambda: hardware_deviceid,
+    'device_description': lambda: credential_store.public_settings().get('device_description', ''),
     'application_version': lambda: app_update.running_version(''),
     'firmware_version': lambda: firmware_update.running_version(''),
     'micropython_version': hardware_platform.runtime_version, 'uptime_s': uptime_seconds,
@@ -1733,6 +1737,7 @@ device_inventory = DeviceInventory({
     'usb_ncm': usb_network.snapshot, 'features': runtime_features.snapshot,
     'release_sequence': app_update.running_release_sequence,
     'firmware_release_sequence': firmware_update.running_release_sequence,
+    'update_progress': lambda: update_telemetry.snapshot(app_update, firmware_update, universal_update),
     'module_settings_file': lambda: moduleSettingsFile, 'release_channel': lambda: release_channel, 'release_check_schedule': lambda: release_check_schedule, 'release_check_time': lambda: release_check_time, 'release_check_weekday': lambda: release_check_weekday, 'release_auto_download': lambda: release_auto_download, 'release_auto_activate': lambda: release_auto_activate,
     'portal_enabled': lambda: web_portal_enabled, 'portal_port': lambda: web_portal_port,
     'portal_transport': lambda: 'https' if web_portal_https else 'http',
@@ -2168,7 +2173,7 @@ async def fleet_policy_monitor():
                     result = await check_release_once(False, policy_channel, target_sequence, target_type)
                     if str(result).startswith('No newer compatible release'): raise RuntimeError(str(result))
                 elif action == 'download-update':
-                    await download_release_once()
+                    await download_release_once(managed=True)
                 elif action == 'activate-update':
                     status = universal_update.update_status()
                     if status.get('status') == 'ready':
@@ -2303,16 +2308,7 @@ async def _check_release_once(channel=None, target_sequence=0, target_type=''):
         hardware_platform.runtime_version()
     )
     for releases in catalogs:
-        # Do not require a helper that may be absent from the already-loaded
-        # native-core copy of release_update during an application-only update.
-        sequence = int(target_sequence or 0)
-        if sequence:
-            releases = [
-                item for item in releases
-                if int(item.get('release_sequence', 0) or 0) == sequence
-            ]
-        if target_type:
-            releases = [item for item in releases if str(item.get('type', '')) == str(target_type)]
+        releases = release_selection.for_target(releases, target_sequence, target_type)
         applicable = []
         for candidate in releases:
             if candidate.get('type') == 'application' and not release_update.application_release_applicable(
@@ -2358,7 +2354,7 @@ async def _check_release_once(channel=None, target_sequence=0, target_type=''):
         {'log': 'Available ' + str(release.get('type')) + ' ' + str(release.get('version'))},
         'INFO'
     )
-    if not release_auto_download:
+    if not release_auto_download or target_sequence:
         return 'Release available'
     return await download_release_once()
 
@@ -2408,12 +2404,14 @@ async def check_release_once(automatic=False, channel=None, target_sequence=0, t
     return result
 
 
-async def download_release_once(progress_callback=None):
+async def download_release_once(progress_callback=None, managed=False):
     global release_available
     release = release_available
     if not release:
         raise ValueError('no checked release is available')
     progress_callback = portal_task_registry.begin_cancellable(progress_callback)
+    update_telemetry.begin(release)
+    report = update_telemetry.reporter(progress_callback)
     try:
         state = await release_update.stage_release(
             release, release_ca_cert_path,
@@ -2421,10 +2419,11 @@ async def download_release_once(progress_callback=None):
             web_portal_allow_protected_updates,
             web_portal_update_max_bytes,
             web_portal_firmware_update_max_bytes,
-            progress_callback, universal_update.receive_bundle,
+            report, universal_update.receive_bundle,
             max(web_portal_update_max_bytes, web_portal_firmware_update_max_bytes)
         )
     except Exception as exc:
+        update_telemetry.failed()
         record_upgrade_failure(
             release.get('type', 'release'), 'download or staging', exc,
             release.get('version', '')
@@ -2433,13 +2432,14 @@ async def download_release_once(progress_callback=None):
     finally:
         portal_task_registry.finish_cancellable(update_service.discard_staged)
     update_orchestrator.mark_staged(release)
+    update_telemetry.staged()
     logOutput(
         'Local', 'Release update',
         {'log': 'Downloaded and staged ' + str(state.get('version', ''))},
         'INFO'
     )
     release_available = {}
-    if release_auto_activate and fleet_activation_allowed():
+    if not managed and release_auto_activate and fleet_activation_allowed():
         if release.get('type') == 'firmware':
             firmware_update.activate_pending()
         elif release.get('type') == 'universal':

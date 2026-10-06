@@ -162,6 +162,23 @@ class SetupWizardTests(unittest.TestCase):
             'Portal-Cedar-47!River', credential_store.load()['portal']['password_verifier']
         ))
 
+    def test_optional_description_is_saved_validated_and_editable(self):
+        config = credential_store.build_configuration(
+            dict(self.fields(), device_description='Boiler controller'),
+            'Portal-Cedar-47!River', 'Console-Ash-82!Stone'
+        )
+        config['provisioned'] = True
+        credential_store.save(config)
+        self.assertEqual(credential_store.public_settings()['device_description'], 'Boiler controller')
+        credential_store.update_operational_settings({'device_description': 'Ground floor heating'})
+        self.assertEqual(credential_store.load()['device_description'], 'Ground floor heating')
+        with self.assertRaises(ValueError):
+            credential_store.update_operational_settings({'device_description': 'x' * 257})
+        self.assertEqual(credential_store.load()['device_description'], 'Ground floor heating')
+        config.pop('device_description')
+        credential_store.save(config)
+        self.assertEqual(credential_store.public_settings()['device_description'], '')
+
     def test_configuration_reclaims_inactive_slot_before_replacing_it(self):
         config = {'schema': credential_store.SCHEMA_VERSION, 'test': True}
 
@@ -315,6 +332,9 @@ console.log(fields['mdns-hostname'].value);
         self.assertGreater(html.index('<div class="setup-steps"'), html.index('</header>'))
         self.assertIn('.setup-main{width:auto;max-width:none;', setup_wizard.portal_ui.PORTAL_CSS)
         self.assertIn('id="device-name"', html)
+        self.assertIn('Description (optional)', html)
+        self.assertIn('name="device_description" maxlength="256" value=""', html)
+        self.assertNotIn('name="device_description" required', html)
         self.assertIn('id="mdns-hostname"', html)
         self.assertIn('name="device_name" required maxlength="64" value="iot-md-001"', html)
         self.assertIn('name="certificate_hostname" required maxlength="253"', html)
@@ -775,6 +795,25 @@ console.log(fields['mdns-hostname'].value);
         values = setup_wizard._form_values(params)
         self.assertEqual(values['certificate_mode'], 'self_signed')
         self.assertEqual(values['portal_transport'], 'auto')
+
+    def test_first_run_description_is_preserved_and_html_escaped(self):
+        params = self.fields()
+        params.update({
+            'device_description': '  Heating & hot water <controller>  ',
+            'wifi_dhcp': '1',
+            'portal_password': 'Portal-Cedar-47!River',
+            'portal_password_confirm': 'Portal-Cedar-47!River',
+            'recovery_password': 'Console-Ash-82!Stone',
+            'recovery_password_confirm': 'Console-Ash-82!Stone',
+        })
+        values = setup_wizard._form_values(params)
+        self.assertEqual(values['device_description'], 'Heating & hot water <controller>')
+        config = credential_store.build_configuration(
+            values, params['portal_password'], params['recovery_password']
+        )
+        self.assertEqual(config['device_description'], values['device_description'])
+        html = setup_wizard._page('csrf-token', values=values)
+        self.assertIn('Heating &amp; hot water &lt;controller&gt;', html)
 
     def test_network_configuration_defaults_to_dhcp_for_existing_values(self):
         config = credential_store.build_configuration(

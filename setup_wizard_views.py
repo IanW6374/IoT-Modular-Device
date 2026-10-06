@@ -106,6 +106,8 @@ def _page(csrf, message='', invalid_fields=(), values=None):
         application_status + '</div><div class="grid">'
         '<label class="field">Device name<input id="device-name" name="device_name" required maxlength="64" value="' +
         field_value('device_name', 'iot-md-001') + '"></label>'
+        '<label class="field">Description (optional)<input name="device_description" maxlength="256" value="' +
+        field_value('device_description') + '"></label>'
         + application_control +
         '<label class="field">Current UTC time<input id="browser-time" name="browser_time" required maxlength="32" '
         'placeholder="2026-07-23T05:30:00Z"></label>'

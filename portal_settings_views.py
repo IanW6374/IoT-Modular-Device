@@ -105,6 +105,7 @@ def render_operational_hidden_fields(settings, excluded=()):
     port = settings.get('portal_port')
     values = (
         ('device_name', settings.get('device_name', '')),
+        ('device_description', settings.get('device_description', '')),
         ('portal_username', settings.get('portal_username', 'admin')),
         ('portal_transport', settings.get('portal_transport', 'auto')),
         ('portal_port', '' if port is None else str(port)),
@@ -177,12 +178,14 @@ def render_settings_page(csrf, settings, message='', error=False):
         '<form data-portal-async data-portal-dirty action="/settings" method="post" autocomplete="off">'
         '<input type="hidden" name="csrf" value="' + html_escape(csrf) + '">' +
         render_operational_hidden_fields(settings, (
-            'device_name', 'wifi_dhcp', 'wifi_ip_address',
+            'device_name', 'device_description', 'wifi_dhcp', 'wifi_ip_address',
             'wifi_subnet_mask', 'wifi_gateway', 'wifi_dns_server'
         )) +
         '<section class="card"><div class="section-title"><h2>Device identity</h2></div>'
         '<label class="field">Device name<input name="device_name" required maxlength="64" value="' +
-        html_escape(settings.get('device_name', '')) + '"></label></section>'
+        html_escape(settings.get('device_name', '')) + '"></label>'
+        '<label class="field">Description (optional)<input name="device_description" maxlength="256" value="' +
+        html_escape(settings.get('device_description', '')) + '"></label></section>'
         '<section class="card"><div class="section-title"><h2>Wi-Fi network</h2>'
         '<button id="wifi-rescan" class="secondary compact" type="button">Scan again</button></div>'
         '<div class="grid"><label class="field">Network name (SSID)'

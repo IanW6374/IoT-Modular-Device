@@ -130,6 +130,7 @@ def validate(config, require_provisioned=False):
             raise ValueError(label + ' credentials must be an object')
 
     _text(config.get('device_name', ''), 'device name', 1, 64)
+    _text(config.get('device_description', ''), 'device description', 0, 256)
     _text(wifi.get('ssid', ''), 'Wi-Fi SSID', 1, 32)
     wifi_password = _text(wifi.get('password', ''), 'Wi-Fi password', 0, 64)
     if wifi_password and len(wifi_password) < 8:

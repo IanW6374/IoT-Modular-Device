@@ -59,7 +59,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
     def test_application_release_check_does_not_require_new_core_helper(self):
         source = Path('iotmd_runtime.py').read_text()
         self.assertNotIn('release_update.for_release_sequence', source)
-        self.assertIn("item.get('release_sequence', 0)", source)
+        self.assertIn('release_selection.for_target(releases, target_sequence, target_type)', source)
 
     def test_fleet_update_chain_is_typed_and_stops_after_failure(self):
         source = Path('iotmd_runtime.py').read_text()

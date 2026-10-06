@@ -31,7 +31,7 @@ SECURE_NONCE_BYTES = 12
 SECURE_TAG_BYTES = 16
 SECURE_KEY_BYTES = 32
 IMPORTABLE_SETTINGS = (
-    'device_name', 'wifi_ssid', 'wifi_dhcp', 'wifi_ip_address',
+    'device_name', 'device_description', 'wifi_ssid', 'wifi_dhcp', 'wifi_ip_address',
     'wifi_subnet_mask', 'wifi_gateway', 'wifi_dns_server',
     'mqtt_server', 'mqtt_port', 'mqtt_username',
     'portal_username', 'portal_transport', 'portal_port',

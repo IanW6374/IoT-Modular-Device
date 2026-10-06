@@ -311,6 +311,7 @@ def _form_values(params):
         raise ValueError('portal mDNS hostname must be a single label followed by .local')
     return {
         'device_name': params.get('device_name', ''),
+        'device_description': params.get('device_description', '').strip(),
         'wifi_ssid': params.get('wifi_ssid', ''),
         'wifi_password': params.get('wifi_password', ''),
         'wifi_dhcp': str(params.get('wifi_dhcp', '')).lower() in ('1', 'true', 'on'),

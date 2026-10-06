@@ -20,6 +20,8 @@ MAGIC = b'IOTA1\n'
 CORE_FILES = (
     'iotmd.py',
     'iotmd_runtime.py',
+    'update_telemetry.py',
+    'release_selection.py',
     'application_upload.py',
     'alpha_qualification.py',
     'qualification_control.py',
@@ -748,7 +750,7 @@ def load_signing_key(path):
 def build_bundle(
     output, version, files, content_overrides=None, signing_key=b'',
     release_sequence=1,
-    minimum_core_api=13, minimum_config_api=3, maximum_config_api=3,
+    minimum_core_api=14, minimum_config_api=3, maximum_config_api=3,
     components=None
 ):
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -816,9 +818,9 @@ def main():
         help='Fleet-wide monotonically increasing signed release number'
     )
     parser.add_argument(
-        '--minimum-core-api', type=int, default=13,
+        '--minimum-core-api', type=int, default=14,
         help=(
-            'signed application compatibility floor (default: 13); lower this '
+            'signed application compatibility floor (default: 14); lower this '
             'only for an unpublished inner application in a firmware-first '
             'paired universal migration'
         )

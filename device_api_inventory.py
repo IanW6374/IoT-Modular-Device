@@ -12,6 +12,7 @@ class DeviceInventory:
     def info(self):
         return {
             'device_name': self._value('device_name', ''),
+            'device_description': self._value('device_description', ''),
             'device_id': self._value('device_id', ''),
             'application_version': self._value('application_version', ''),
             'firmware_version': self._value('firmware_version', ''),
@@ -29,6 +30,7 @@ class DeviceInventory:
             'firmware_release_sequence': self._value(
                 'firmware_release_sequence', 0
             ),
+            'update_progress': self._value('update_progress', {}),
             'release_qualification': self.qualification(),
             'qualification_observation': self._value(
                 'qualification_observation', {}
@@ -69,6 +71,7 @@ class DeviceInventory:
     def configuration(self):
         return {
             'device_name': self._value('device_name', ''),
+            'device_description': self._value('device_description', ''),
             'network_trial_pending': bool(
                 self._value('network_trial_pending', False)
             ),
