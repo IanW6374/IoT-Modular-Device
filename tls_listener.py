@@ -7,6 +7,19 @@ except ImportError:
 
 import gc
 
+try:
+    import _iotmd_platform as _native_platform
+except ImportError:
+    _native_platform = None
+
+
+def _heartbeat():
+    # The native timer logs independently of this event loop. No timer or
+    # monitoring task is created in host tests without the ESP32 module.
+    heartbeat = getattr(_native_platform, 'transport_heartbeat', None)
+    if heartbeat:
+        heartbeat()
+
 
 def resource_snapshot():
     result = {}
@@ -75,6 +88,7 @@ class SupervisedServer:
 
     async def start(self):
         await self._open()
+        _heartbeat()
         self.monitor = asyncio.create_task(self._supervise())
         return self
 
@@ -107,6 +121,7 @@ class SupervisedServer:
         retry_seconds = self.check_seconds
         while not self.closed:
             await asyncio.sleep(retry_seconds)
+            _heartbeat()
             if self.closed or self.is_serving():
                 retry_seconds = self.check_seconds
                 continue

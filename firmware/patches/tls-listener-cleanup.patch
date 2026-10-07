@@ -81,11 +81,14 @@ diff --git a/extmod/modtls_mbedtls.c b/extmod/modtls_mbedtls.c
 index 13cd6e377..5287cdda3 100644
 --- a/extmod/modtls_mbedtls.c
 +++ b/extmod/modtls_mbedtls.c
-@@ -217,6 +217,19 @@ static inline void store_active_context(mp_obj_ssl_context_t *ssl_context) {
+@@ -217,6 +217,22 @@ static inline void store_active_context(mp_obj_ssl_context_t *ssl_context) {
      #endif
  }
  
 +static void ssl_close_failed_handshake(mp_obj_ssl_socket_t *sslsock) {
++    #if MICROPY_IOTMD_TRANSPORT_DIAGNOSTICS
++    iotmd_transport_tls_close(sslsock);
++    #endif
 +    // Detach before closing, so Stream.close()/finalisation remain idempotent.
 +    // Dropping this reference alone leaves the TCP fd alive until GC and can
 +    // exhaust internal TLS/lwIP resources even with plentiful PSRAM available.
@@ -101,7 +104,7 @@ index 13cd6e377..5287cdda3 100644
  static void ssl_check_async_handshake_failure(mp_obj_ssl_socket_t *sslsock, int *errcode) {
      if (
          #if MBEDTLS_VERSION_NUMBER >= 0x03000000
-@@ -245,14 +258,12 @@ static void ssl_check_async_handshake_failure(mp_obj_ssl_socket_t *sslsock, int
+@@ -245,14 +261,12 @@ static void ssl_check_async_handshake_failure(mp_obj_ssl_socket_t *sslsock, int
              // The length of the string written (not including the terminated nul byte),
              // or a negative err code.
              if (ret > 0) {

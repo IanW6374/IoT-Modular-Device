@@ -6,6 +6,7 @@
 #include "py/runtime.h"
 #include "esp_attr.h"
 #include "esp_heap_caps.h"
+#include "iotmd_transport_diagnostics.h"
 
 #define IOTMD_BACKUP_MEMORY_BYTES (768)
 
@@ -54,10 +55,45 @@ static mp_obj_t iotmd_platform_transport_resources(void) {
         mp_obj_new_int_from_uint(heap_caps_get_free_size(dma)));
     mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_dma_largest),
         mp_obj_new_int_from_uint(heap_caps_get_largest_free_block(dma)));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_internal_minimum),
+        mp_obj_new_int_from_uint(heap_caps_get_minimum_free_size(internal)));
+    iotmd_transport_snapshot_t state;
+    iotmd_transport_snapshot(&state);
+    #define TRANSPORT_FIELD(name) mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_##name), mp_obj_new_int_from_uint(state.name))
+    TRANSPORT_FIELD(sockets);
+    TRANSPORT_FIELD(listeners);
+    TRANSPORT_FIELD(socket_limit);
+    TRANSPORT_FIELD(socket_opens);
+    TRANSPORT_FIELD(socket_closes);
+    TRANSPORT_FIELD(accepts);
+    TRANSPORT_FIELD(accept_errors);
+    TRANSPORT_FIELD(last_accept_age_ms);
+    TRANSPORT_FIELD(tls_active);
+    TRANSPORT_FIELD(tls_pending);
+    TRANSPORT_FIELD(tls_opens);
+    TRANSPORT_FIELD(tls_closes);
+    TRANSPORT_FIELD(tls_errors);
+    TRANSPORT_FIELD(tls_wait_ms);
+    TRANSPORT_FIELD(tls_call_ms);
+    TRANSPORT_FIELD(tls_call_stage);
+    TRANSPORT_FIELD(tls_last_progress_age_ms);
+    TRANSPORT_FIELD(vm_heartbeat_age_ms);
+    TRANSPORT_FIELD(tracking_overflows);
+    #undef TRANSPORT_FIELD
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_tls_last_error),
+        mp_obj_new_int(state.tls_last_error));
     return result;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(
     iotmd_platform_transport_resources_obj, iotmd_platform_transport_resources
+);
+
+static mp_obj_t iotmd_platform_transport_heartbeat(void) {
+    iotmd_transport_heartbeat();
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(
+    iotmd_platform_transport_heartbeat_obj, iotmd_platform_transport_heartbeat
 );
 
 static const mp_rom_map_elem_t iotmd_platform_module_globals_table[] = {
@@ -66,6 +102,8 @@ static const mp_rom_map_elem_t iotmd_platform_module_globals_table[] = {
       MP_ROM_PTR(&iotmd_platform_backup_memory_obj) },
     { MP_ROM_QSTR(MP_QSTR_transport_resources),
       MP_ROM_PTR(&iotmd_platform_transport_resources_obj) },
+    { MP_ROM_QSTR(MP_QSTR_transport_heartbeat),
+      MP_ROM_PTR(&iotmd_platform_transport_heartbeat_obj) },
 };
 static MP_DEFINE_CONST_DICT(
     iotmd_platform_module_globals,

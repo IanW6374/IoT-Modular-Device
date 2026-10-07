@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.0.0-alpha.103 - 2026-10-07
+
+- Add bounded native transport diagnostics: socket/accept/TLS lifecycle
+  counters, pending handshakes, native TLS call duration, event-loop heartbeat
+  age and internal-memory low-water figures. An independent native timer emits
+  credential-free UART snapshots even when Python logging cannot progress.
+  Diagnostics do not reset listeners/devices or change TLS verification.
+
+- Replace required/optional text with a compact required-only icon, including
+  mandatory checkbox acknowledgements and changing conditional requirements.
+- Advance runtime generation to 200 and release sequence 2808. The universal
+  update installs the diagnostic core and matching application as a pair;
+  installing only the application does not enable the native diagnostics.
+
 ## 3.0.0-alpha.102 - 2026-10-07
 
 - Save device descriptions live from the portal without requesting a restart.

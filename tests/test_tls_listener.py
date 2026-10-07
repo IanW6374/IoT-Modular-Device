@@ -24,6 +24,23 @@ class FakeServer:
 
 
 class TLSListenerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_heartbeat_runs_without_reopening_healthy_listener(self):
+        server = FakeServer()
+        factory = mock.AsyncMock(return_value=server)
+        native = mock.Mock()
+        with mock.patch.object(tls_listener, '_native_platform', native):
+            listener = await tls_listener.SupervisedServer(
+                factory, None, 'API', .001
+            ).start()
+            for unused in range(20):
+                if native.transport_heartbeat.call_count >= 3:
+                    break
+                await asyncio.sleep(.001)
+            listener.close()
+            await listener.wait_closed()
+        self.assertGreaterEqual(native.transport_heartbeat.call_count, 3)
+        self.assertEqual(factory.await_count, 1)
+
     async def test_dead_accept_loop_restarts_and_reports_real_status(self):
         first, second = FakeServer(), FakeServer()
         calls, logs = [], []

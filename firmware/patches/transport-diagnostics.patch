@@ -1,0 +1,130 @@
+diff --git a/extmod/modtls_mbedtls.c b/extmod/modtls_mbedtls.c
+index 13cd6e3..fcd3316 100644
+--- a/extmod/modtls_mbedtls.c
++++ b/extmod/modtls_mbedtls.c
+@@ -40,4 +40,5 @@
+ #include "py/mphal.h"
+ #include "py/gc.h"
++#include "iotmd_transport_diagnostics.h"
+ #include "extmod/vfs.h"
+ 
+@@ -128,4 +129,14 @@ static const mp_obj_type_t ssl_context_type;
+ static const mp_obj_type_t ssl_socket_type;
+ 
++static void tls_diagnostic_result(mp_obj_ssl_socket_t *socket, int result) {
++    bool failed = result < 0 && result != MBEDTLS_ERR_SSL_WANT_READ &&
++        result != MBEDTLS_ERR_SSL_WANT_WRITE && result != MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY &&
++        result != MBEDTLS_ERR_SSL_CONN_EOF;
++    #if defined(MBEDTLS_SSL_PROTO_TLS1_3)
++    failed = failed && result != MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET;
++    #endif
++    iotmd_transport_tls_leave(socket, result, mbedtls_ssl_is_handshake_over(&socket->ssl), failed);
++}
++
+ static const MP_DEFINE_STR_OBJ(mbedtls_version_obj, MBEDTLS_VERSION_STRING_FULL);
+ 
+@@ -768,5 +779,9 @@ static mp_obj_t ssl_socket_make_new(mp_obj_ssl_context_t *ssl_context, mp_obj_t
+     mbedtls_ssl_init(&o->ssl);
+ 
++    iotmd_transport_tls_open(o);
++    iotmd_transport_tls_enter(o, IOTMD_TLS_SETUP);
++
+     ret = mbedtls_ssl_setup(&o->ssl, &ssl_context->conf);
++    tls_diagnostic_result(o, ret);
+     #if !MICROPY_MBEDTLS_CONFIG_BARE_METAL
+     if (ret != 0) {
+@@ -776,5 +791,7 @@ static mp_obj_t ssl_socket_make_new(mp_obj_ssl_context_t *ssl_context, mp_obj_t
+         // frees some platform-level heap.
+         gc_collect();
++        iotmd_transport_tls_enter(o, IOTMD_TLS_SETUP);
+         ret = mbedtls_ssl_setup(&o->ssl, &ssl_context->conf);
++        tls_diagnostic_result(o, ret);
+     }
+     #endif
+@@ -791,4 +808,5 @@ static mp_obj_t ssl_socket_make_new(mp_obj_ssl_context_t *ssl_context, mp_obj_t
+     } else if (ssl_context->authmode == MBEDTLS_SSL_VERIFY_REQUIRED && server_side == false) {
+ 
++        iotmd_transport_tls_close(o);
+         o->sock = MP_OBJ_NULL;
+         mbedtls_ssl_free(&o->ssl);
+@@ -817,5 +835,11 @@ static mp_obj_t ssl_socket_make_new(mp_obj_ssl_context_t *ssl_context, mp_obj_t
+ 
+     if (do_handshake_on_connect) {
+-        while ((ret = mbedtls_ssl_handshake(&o->ssl)) != 0) {
++        while (true) {
++            iotmd_transport_tls_enter(o, IOTMD_TLS_HANDSHAKE);
++            ret = mbedtls_ssl_handshake(&o->ssl);
++            tls_diagnostic_result(o, ret);
++            if (ret == 0) {
++                break;
++            }
+             if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+                 goto cleanup;
+@@ -828,4 +852,5 @@ static mp_obj_t ssl_socket_make_new(mp_obj_ssl_context_t *ssl_context, mp_obj_t
+ 
+ cleanup:
++    iotmd_transport_tls_close(o);
+     if (ret == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) {
+         flags = mbedtls_ssl_get_verify_result(&o->ssl);
+@@ -886,5 +911,7 @@ static mp_uint_t socket_read(mp_obj_t o_in, void *buf, mp_uint_t size, int *errc
+     store_active_context(o->ssl_context);
+ 
++    iotmd_transport_tls_enter(o, IOTMD_TLS_READ);
+     int ret = mbedtls_ssl_read(&o->ssl, buf, size);
++    tls_diagnostic_result(o, ret);
+     if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+         // end of stream
+@@ -930,5 +957,7 @@ static mp_uint_t socket_write(mp_obj_t o_in, const void *buf, mp_uint_t size, in
+     store_active_context(o->ssl_context);
+ 
++    iotmd_transport_tls_enter(o, IOTMD_TLS_WRITE);
+     int ret = mbedtls_ssl_write(&o->ssl, buf, size);
++    tls_diagnostic_result(o, ret);
+     if (ret >= 0) {
+         return ret;
+@@ -967,4 +996,5 @@ static mp_uint_t socket_ioctl(mp_obj_t o_in, mp_uint_t request, uintptr_t arg, i
+ 
+     if (request == MP_STREAM_CLOSE) {
++        iotmd_transport_tls_close(self);
+         // Clear the SSL context.
+         store_active_context(NULL);
+diff --git a/ports/esp32/modsocket.c b/ports/esp32/modsocket.c
+index f5fd964..06e3880 100644
+--- a/ports/esp32/modsocket.c
++++ b/ports/esp32/modsocket.c
+@@ -55,4 +55,5 @@
+ #include "lwip/igmp.h"
+ #include "esp_log.h"
++#include "iotmd_transport_diagnostics.h"
+ 
+ // See note at bottom of file about why this isn't MICROPY_PY_SOCKET
+@@ -307,4 +308,5 @@ static mp_obj_t socket_make_new(const mp_obj_type_t *type_in, size_t n_args, siz
+     _socket_settimeout(sock, UINT64_MAX);
+ 
++    iotmd_transport_socket_open(sock->fd);
+     return MP_OBJ_FROM_PTR(sock);
+ }
+@@ -339,4 +341,5 @@ static mp_obj_t socket_listen(size_t n_args, const mp_obj_t *args) {
+         mp_raise_OSError(errno);
+     }
++    iotmd_transport_socket_listen(self->fd);
+     return mp_const_none;
+ }
+@@ -354,4 +357,5 @@ static mp_obj_t socket_accept(const mp_obj_t arg0) {
+         new_fd = lwip_accept(self->fd, &addr, &addr_len);
+         MP_THREAD_GIL_ENTER();
++        iotmd_transport_accept(new_fd, new_fd < 0 && errno != EAGAIN);
+         if (new_fd >= 0) {
+             break;
+@@ -373,4 +377,5 @@ static mp_obj_t socket_accept(const mp_obj_t arg0) {
+     socket_obj_t *sock = mp_obj_malloc_with_finaliser(socket_obj_t, self->base.type);
+     sock->fd = new_fd;
++    iotmd_transport_socket_open(new_fd);
+     sock->domain = self->domain;
+     sock->type = self->type;
+@@ -879,4 +884,5 @@ static mp_uint_t socket_stream_ioctl(mp_obj_t self_in, mp_uint_t request, uintpt
+                 return MP_STREAM_ERROR;
+             }
++            iotmd_transport_socket_close(socket->fd);
+             socket->fd = -1;
+         }

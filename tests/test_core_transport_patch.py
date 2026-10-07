@@ -15,10 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / 'firmware/patches/tls-listener-cleanup.patch'
 
 
-def before_patch():
+def before_patch(patch=PATCH):
     """Reconstruct just the original context needed by git apply from hunks."""
     files, current, active = {}, None, False
-    for line in PATCH.read_text().splitlines():
+    for line in patch.read_text().splitlines():
         if line.startswith('diff --git '):
             current = line.split(' b/', 1)[1]
             files[current] = []

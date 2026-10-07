@@ -20,3 +20,14 @@ Diagnostics contain only service/stage, peer IP, exception class/errno, Python
 heap availability and native internal/DMA free/largest-block sizes. Native
 allocation details therefore reach the normal device/syslog logging path
 without exposing credentials, request payloads or certificates.
+
+`transport-diagnostics.patch` instruments the same pinned core's native socket
+and mbedTLS lifecycle. Together with the native fixed-size telemetry module it
+reports accept activity, MicroPython-owned socket counts, outstanding TLS
+handshakes and time spent inside TLS calls. The frozen listener supervisor
+updates a native heartbeat; an ESP timer reports independently of Python.
+
+The patches are diagnostic only and are applied/reversed together during the
+build. See [transport diagnostics](../../docs/TRANSPORT_DIAGNOSTICS.md) for the
+bounded logging policy, scope and interpretation. No trust, cipher, socket
+timeout, watchdog or activation policy is changed.
