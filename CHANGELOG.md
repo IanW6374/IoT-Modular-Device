@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.0-alpha.104 - 2026-10-07
+
+- Enable INFO/WARN output for only the native `IoT-MD-Transport` logging tag
+  before its timer starts. The global ERROR-only log threshold suppressed
+  Alpha 103's periodic snapshots; unrelated native logging stays unchanged.
+- Exercise the runtime log filter in native regression tests, verifying both
+  healthy and warning snapshots, bounded reporting and per-tag isolation.
+- Advance runtime generation to 201 and release sequence 2809. Install the
+  universal update for the corrected core and matching application. This fixes
+  diagnostic visibility, not the still-unconfirmed API/portal outage cause.
+
 ## 3.0.0-alpha.103 - 2026-10-07
 
 - Add bounded native transport diagnostics: socket/accept/TLS lifecycle

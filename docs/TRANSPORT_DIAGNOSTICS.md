@@ -12,6 +12,12 @@ port or send console interrupts to obtain normal snapshots: either can disturb
 the fault. A console interrupt stops application execution and an enabled
 watchdog can then reboot the board.
 
+Alpha 104 enables INFO/WARN output specifically for the `IoT-MD-Transport`
+native logging tag before the timer starts. The product-wide ERROR threshold
+remains unchanged. Alpha 103's counters work, but its periodic UART snapshots
+are suppressed by that default threshold; install the Alpha 104 core to receive
+them. No device console commands or application logging workaround are needed.
+
 The native `IoT-MD-Transport` logger emits one line per 60 seconds while a
 tracked listener is open. It reports every 30 seconds when the frozen monitor's
 heartbeat is at least 15 seconds old, a native TLS call lasts at least 10

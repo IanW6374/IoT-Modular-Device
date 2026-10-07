@@ -11,6 +11,7 @@
 
 #define SOCKET_RECORDS (CONFIG_LWIP_MAX_SOCKETS)
 #define TLS_RECORDS (CONFIG_LWIP_MAX_SOCKETS + 2)
+static const char transport_log_tag[] = "IoT-MD-Transport";
 
 typedef struct {
     bool used, listening;
@@ -220,7 +221,7 @@ static void report_timer(void *unused) {
     }
     last_report_ms = now;
     // Native UART only: no Python callback, socket, GC, or payload formatting.
-    ESP_LOG_LEVEL(warning ? ESP_LOG_WARN : ESP_LOG_INFO, "IoT-MD-Transport",
+    ESP_LOG_LEVEL(warning ? ESP_LOG_WARN : ESP_LOG_INFO, transport_log_tag,
         "vm_age_ms=%"PRIu32" sockets=%"PRIu32"/%"PRIu32
         " listeners=%"PRIu32" accepts=%"PRIu32" accept_age_ms=%"PRIu32
         " tls=%"PRIu32" pending=%"PRIu32" wait_ms=%"PRIu32
@@ -243,6 +244,9 @@ void iotmd_transport_heartbeat(void) {
     heartbeat_seen = true;
     portEXIT_CRITICAL(&lock);
     if (!timer) {
+        // The product's global ERROR threshold must remain unchanged. Enable
+        // only our bounded native snapshots before the timer can emit them.
+        esp_log_level_set(transport_log_tag, ESP_LOG_INFO);
         const esp_timer_create_args_t args = {
             .callback = report_timer, .name = "iotmd-transport",
             .skip_unhandled_events = true,

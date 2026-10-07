@@ -78,7 +78,7 @@ class NativeTransportDiagnosticsTests(unittest.TestCase):
                 for relative, source in originals.items():
                     self.assertEqual((root / relative).read_text(), source)
 
-    def test_counters_timers_closure_overflow_and_clock_wrap(self):
+    def test_counters_timers_log_filter_closure_overflow_and_clock_wrap(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'freertos').mkdir()
@@ -114,8 +114,10 @@ class NativeTransportDiagnosticsTests(unittest.TestCase):
                     unsigned heap_caps_get_minimum_free_size(uint32_t);
                 ''',
                 'esp_log.h': '''
+                    #define ESP_LOG_ERROR 1
                     #define ESP_LOG_WARN 2
                     #define ESP_LOG_INFO 3
+                    void esp_log_level_set(const char *, int);
                     void diagnostic_log(int, const char *, const char *, ...);
                     #define ESP_LOG_LEVEL(level, tag, ...) diagnostic_log(level, tag, __VA_ARGS__)
                 ''',
@@ -132,12 +134,15 @@ class NativeTransportDiagnosticsTests(unittest.TestCase):
                 #include "iotmd_transport_diagnostics.h"
                 static uint64_t clock_ms = 1000;
                 static void (*timer_callback)(void *);
-                static int reports, timer_creates;
+                static int reports, timer_creates, log_level_updates;
+                static int default_log_level = 1, diagnostic_log_level = 1;
+                static int warning_reports, healthy_reports;
                 static unsigned largest = 8192;
                 static char message[1024];
                 int64_t esp_timer_get_time(void) { return clock_ms * 1000; }
                 int esp_timer_create(const esp_timer_create_args_t *args, esp_timer_handle_t *out) {
                     assert(args->skip_unhandled_events);
+                    assert(diagnostic_log_level == 3); // Enabled before timer creation.
                     timer_callback = args->callback;
                     *out = (void *)1;
                     ++timer_creates;
@@ -151,12 +156,26 @@ class NativeTransportDiagnosticsTests(unittest.TestCase):
                 unsigned heap_caps_get_free_size(uint32_t caps) { return 43000; }
                 unsigned heap_caps_get_largest_free_block(uint32_t caps) { return largest; }
                 unsigned heap_caps_get_minimum_free_size(uint32_t caps) { return 40000; }
+                void esp_log_level_set(const char *tag, int level) {
+                    assert(strcmp(tag, "IoT-MD-Transport") == 0); // Never "*".
+                    assert(level == 3);
+                    diagnostic_log_level = level;
+                    ++log_level_updates;
+                }
                 void diagnostic_log(int level, const char *tag, const char *format, ...) {
+                    // Model IDF's runtime per-tag gate, including the product's
+                    // ERROR-only default that suppressed Alpha 103 telemetry.
+                    if (level > diagnostic_log_level) {
+                        return;
+                    }
                     va_list args;
                     va_start(args, format);
                     vsnprintf(message, sizeof(message), format, args);
                     va_end(args);
                     ++reports;
+                    warning_reports += level == 2;
+                    healthy_reports += level == 3;
+                    assert(default_log_level == 1); // Unrelated logs stay ERROR-only.
                     assert(strcmp(tag, "IoT-MD-Transport") == 0);
                     assert(strstr(message, "internal_largest="));
                 }
@@ -165,6 +184,7 @@ class NativeTransportDiagnosticsTests(unittest.TestCase):
                     iotmd_transport_heartbeat();
                     iotmd_transport_heartbeat();
                     assert(timer_creates == 1);
+                    assert(log_level_updates == 1 && default_log_level == 1);
                     clock_ms = 60000;
                     timer_callback(NULL);
                     assert(reports == 0); // Intentionally disabled listeners.
@@ -211,6 +231,11 @@ class NativeTransportDiagnosticsTests(unittest.TestCase):
                     assert(s.tls_active == 0 && s.tls_closes == 1);
                     assert(s.tls_errors == 1 && s.tls_last_error == -123);
                     assert(s.sockets == 1 && s.socket_closes == 1);
+                    clock_ms += 60000;
+                    iotmd_transport_heartbeat();
+                    timer_callback(NULL);
+                    assert(reports == 3 && healthy_reports == 1 && warning_reports == 2);
+                    assert(log_level_updates == 1); // Heartbeats do not reset log policy.
                     // File descriptor reuse must not double-count previous sockets.
                     iotmd_transport_socket_open(4);
                     iotmd_transport_snapshot(&s);
