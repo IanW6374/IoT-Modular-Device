@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 3.0.0-alpha.102 - 2026-10-07
+
+- Save device descriptions live from the portal without requesting a restart.
+  Compare normalized settings so unchanged form saves also avoid a restart;
+  network, service and credential changes retain their restart requirements.
+- Mark portal parameters consistently as required or optional.
 
 ## 3.0.0-alpha.101 - 2026-10-06
 

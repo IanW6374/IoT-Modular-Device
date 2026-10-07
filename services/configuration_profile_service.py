@@ -10,6 +10,22 @@ class ConfigurationProfileService:
         self.health = health
         self.restart_required = restart_required
 
+    def portal_settings_saved(self, current, updated, values, secrets_changed=False):
+        """Labels are live; compare normalized values before requesting restart."""
+        needs_restart = secrets_changed or any(
+            updated.get(key) != current.get(key)
+            for key in values if key != 'device_description' and key in updated
+        )
+        if needs_restart:
+            self.restart_required('System settings changed')
+        return {
+            'restart_required': needs_restart,
+            'message': (
+                'Settings saved securely. Restart the device when all changes are complete.'
+                if needs_restart else 'Settings saved. No restart is needed for this change.'
+            ),
+        }
+
     def apply(self, profile, actor='Management Suite'):
         normalized = configuration_profiles.normalize_profile(profile)
         values = dict(normalized['settings'])

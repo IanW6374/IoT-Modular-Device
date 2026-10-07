@@ -1457,9 +1457,9 @@ def update_portal_settings(params):
         values, network_trial=network_changed
     )
 
-    mark_restart_required('System settings changed')
-    login_url = _configured_portal_login_url(updated)
-    message = 'Settings saved securely. Restart the device when all changes are complete.'
+    result = configuration_profile_service.portal_settings_saved(current_settings, updated, values,
+        bool(wifi_password or clear_wifi or mqtt_password or clear_mqtt))
+    message = result['message']
     if updated.get('network_trial_pending'):
         message = (
             'Network settings saved. After restarting, sign in to the portal within ' +
@@ -1468,7 +1468,8 @@ def update_portal_settings(params):
         )
     return {
         'message': message,
-        'login_url': login_url,
+        'login_url': _configured_portal_login_url(updated),
+        'restart_required': result['restart_required'],
     }
 
 
