@@ -3015,8 +3015,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('automatic check', page)
         self.assertIn('class="history-timeline"', page)
         self.assertIn('id="activity-search"', page)
-        self.assertIn('class="history-marker bad"', page)
-        self.assertIn('class="history-marker good"', page)
+        self.assertIn('class="history-marker" data-tone="bad"', page)
+        self.assertIn('class="history-marker" data-tone="good"', page)
         self.assertIn('aria-label="Confirmed"', page)
         self.assertLess(
             page.index('Check failed:'),

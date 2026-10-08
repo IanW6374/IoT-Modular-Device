@@ -29,7 +29,7 @@ def render_update_activity_page(token, status):
         rows.append(
             '<article class="history-event" data-activity-tone="' + tone + '">'
             '<time class="history-time">' + html_escape(_health_time_text(entry.get('time'), status.get('timezone_name', 'UTC'))) +
-            '</time><span class="history-marker ' + tone + '" role="img" title="' + html_escape(label) +
+            '</time><span class="history-marker" data-tone="' + tone + '" role="img" title="' + html_escape(label) +
             '" aria-label="' + html_escape(label) + '"></span><div class="history-copy"><strong>' +
             html_escape(label + (' · ' + str(entry['kind']) if entry.get('kind') else '')) +
             '</strong><p>' + html_escape(details) + '</p></div></article>'

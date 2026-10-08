@@ -659,9 +659,9 @@ PORTAL_JS += r'''
 
 PORTAL_CSS += 'small.field-requirement{display:inline-block;margin-left:5px;color:var(--accent);font-size:.7rem;font-weight:800;line-height:1;vertical-align:middle}'
 PORTAL_CSS += (
-    '.history-event[hidden]{display:none}.history-marker.good{background:var(--good)}'
-    '.history-marker.warn{background:var(--warn)}.history-marker.bad{background:var(--bad)}'
-    '.history-marker.info{background:var(--accent)}'
+    '.history-event[hidden]{display:none}.history-marker[data-tone="good"]{background:var(--good)}'
+    '.history-marker[data-tone="warn"]{background:var(--warn)}.history-marker[data-tone="bad"]{background:var(--bad)}'
+    '.history-marker[data-tone="info"]{background:var(--accent)}'
 )
 
 CERTIFICATE_NAVIGATION = (

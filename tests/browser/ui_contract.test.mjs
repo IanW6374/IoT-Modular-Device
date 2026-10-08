@@ -30,12 +30,27 @@ print(render_update_activity_page('csrf', {'update_history': [
   for(const script of doc.querySelectorAll('script:not([src])'))dom.window.eval(script.textContent);
   const rows=[...doc.querySelectorAll('[data-activity-tone]')];
   assert.deepEqual(rows.map(row=>row.dataset.activityTone),['bad','good','warn']);
+  assert.equal(rows.every(row=>row.querySelector('.history-marker').className==='history-marker'),true);
   assert.equal(doc.querySelector('.history-copy script'),null);
   const search=doc.getElementById('activity-search');search.value='ALPHA.104 universal';search.dispatchEvent(new dom.window.Event('input'));
   assert.deepEqual(rows.map(row=>row.hidden),[true,false,true]);
   const tone=doc.getElementById('activity-tone');tone.value='bad';tone.dispatchEvent(new dom.window.Event('change'));
   assert.equal(doc.getElementById('activity-empty').hidden,false);
   search.value='';search.dispatchEvent(new dom.window.Event('input'));assert.deepEqual(rows.map(row=>row.hidden),[false,true,true]);
+  dom.window.close();
+});
+test('information activity dots stay small and do not inherit notification padding',()=>{
+  const html=python(`from portal_activity_views import render_update_activity_page
+print(render_update_activity_page('csrf', {'update_history': [{'time':300,'event':'confirmation_phase'}]}))`);
+  const dom=new JSDOM(html),marker=dom.window.document.querySelector('.history-marker');
+  const stylesheet=dom.window.document.createElement('style');
+  stylesheet.textContent=python('import web_portal_ui; print(web_portal_ui.PORTAL_CSS)');
+  dom.window.document.head.append(stylesheet);
+  assert.equal(marker.dataset.tone,'info');
+  assert.equal(marker.classList.contains('info'),false);
+  const style=dom.window.getComputedStyle(marker);
+  assert.equal(style.width,'10px');assert.equal(style.height,'10px');
+  assert.equal(['','0','0px'].includes(style.padding),true);
   dom.window.close();
 });
 test('staged application, core and universal updates share a primary install button outside the milestone rail',()=>{

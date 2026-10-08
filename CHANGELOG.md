@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.0-alpha.107 - 2026-10-08
+
+- Use scoped tone attributes for update activity markers so information dots
+  do not inherit general notification padding/borders. Keep every outcome dot
+  the same size and cover its computed styling in offline DOM tests.
+- Advance runtime generation to 203 and signed release sequence to 2812.
+
 ## 3.0.0-alpha.106 - 2026-10-08
 
 - Close native NVS namespace handles deterministically and fix ESP-IDF AES
