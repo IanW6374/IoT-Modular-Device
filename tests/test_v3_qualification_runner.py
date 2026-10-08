@@ -34,7 +34,6 @@ class V3QualificationRunnerTests(unittest.TestCase):
                 'required_watchdog_recoveries': 1,
                 'required_identity_transactions': 1,
                 'required_fleet_transactions': 1,
-                'required_migration_rollbacks': 1,
                 'required_driver_checks': 1,
             }
         )

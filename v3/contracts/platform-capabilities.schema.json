@@ -17,7 +17,7 @@
     "resources"
   ],
   "properties": {
-    "abi_version": {"const": 6},
+    "abi_version": {"const": 7},
     "board": {
       "type": "object",
       "required": ["target", "revision"],
@@ -33,7 +33,7 @@
       "properties": {
         "engine": {"const": "micropython"},
         "version": {"type": "string", "minLength": 1, "maxLength": 32},
-        "platform_abi": {"const": 6}
+        "platform_abi": {"const": 7}
       },
       "additionalProperties": false
     },
@@ -134,7 +134,7 @@
           "minItems": 1,
           "maxItems": 8,
           "uniqueItems": true,
-          "items": {"type": "string", "enum": ["adc", "gpio", "i2c", "spi", "uart"]}
+          "items": {"type": "string", "enum": ["adc", "gpio", "i2c", "spi", "uart", "pwm"]}
         }
       },
       "additionalProperties": false

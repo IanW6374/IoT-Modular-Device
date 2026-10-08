@@ -17,14 +17,14 @@ class QualificationHILTests(unittest.TestCase):
                 self.boot_reads = 0
                 self.events = []
             def get(self, path):
-                if path == '/api/v2/services':
+                if path == '/api/v3/services':
                     self.boot_reads += 1
                     if self.started and self.boot_reads == 2:
                         raise OSError('device is in recovery')
                     return {'services': {'boot': {
                         'boot_count': 12 if self.started else 10,
                     }}}
-                if path == '/api/v2/device':
+                if path == '/api/v3/device':
                     return {'device': {'qualification_observation': {
                         'health_state': 'healthy',
                     }}}

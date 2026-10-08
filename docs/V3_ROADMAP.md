@@ -3,6 +3,21 @@
 Milestones are capability gates, not calendar commitments. A milestone cannot
 advance because its version label exists; its listed evidence must pass.
 
+## Current scope (2026-10-08)
+
+This document retains the historical alpha milestone descriptions below; their
+version-specific status text is not the current production backlog. The active
+[requirements baseline](V3_REQUIREMENTS.md) retires v2 backup migration,
+compatibility/shadow cutover and USB networking. Do not reinstate those paths
+because an older milestone lists them. Native resource integration and Device
+API v3 are reviewed in [the current implementation review](V3_RESOURCE_API_REVIEW.md).
+Recovery, paired rollback and operational hardware qualification remain active.
+
+Alpha 108 implements production driver wiring to ABI 7 core-owned peripherals
+and durable Device API v3 mutation handling, paired with Management 3.0.0.
+Host checks and a native build do not close the driver/recovery/power-loss HIL
+gates. See the [Alpha 108 acceptance checklist](qualification/v3.0.0-alpha.108.md).
+
 ## Alpha 0 — architecture and contracts
 
 - Approve requirements, native/runtime ownership and security invariants.

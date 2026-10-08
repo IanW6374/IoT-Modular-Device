@@ -13,7 +13,7 @@ near-field obstructions and allow for the sensor's minimum range and beam width.
 ## State and integrations
 
 The state/API payload is `{"distance":123.4}`. The configured MQTT state topic
-and `GET /api/v2/modules/{uuid}/state` carry the same transport-neutral value.
+and `GET /api/v3/modules/{uuid}/state` carry the same transport-neutral value.
 Home Assistant discovery creates one distance sensor when enabled. This is a
 read-only module.
 

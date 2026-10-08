@@ -1762,11 +1762,9 @@ async def start_module_api():
     if not device_api_enabled:
         return None
     if not ntp_synced and time.localtime()[0] < 2024:
-        logOutput(
-            'API', 'Start',
-            {'log': 'Waiting for a valid clock before enabling mTLS'}, 'ERROR'
-        )
+        logOutput('API', 'Start', {'log': 'Waiting for a valid clock before enabling mTLS'}, 'ERROR')
         return None
+    from api_operations import open_native_journal
     api = DeviceAPI(
         module_broker, runtime_health, api_client_registry,
         device_api_info, logOutput, fleet_service, device_support_bundle,
@@ -1783,6 +1781,7 @@ async def start_module_api():
         configuration_backup=secure_configuration_backup,
         configuration_restore_preview=preview_secure_configuration_import,
         configuration_restore_apply=apply_secure_configuration_import,
+        operations=open_native_journal(logOutput),
     )
     try:
         migrated = certificate_manager.ensure_server_identity(
@@ -3329,7 +3328,7 @@ except RuntimeError as exc:
     
 logOutput ('Local', 'Device', {'log':'Imported module settings file: ' + moduleSettingsFile}, 'INFO')
 
-deviceTypes = configure_for_devices(moduleSettings.get('devices', ()))
+deviceTypes = configure_for_devices(moduleSettings.get('devices', ()), protected_pins=[device_settings.status_led_pin], protected_display=local_display_config)
 
 validation_errors = validate_device_config(moduleSettings, deviceTypes)
 for validation_error in validation_errors:

@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class KernelProvider:
-    ABI_VERSION = 6
+    ABI_VERSION = 7
 
     def capabilities(self):
         return json.loads((

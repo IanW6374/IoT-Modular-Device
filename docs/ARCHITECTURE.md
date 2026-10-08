@@ -51,7 +51,7 @@ owns HTTP parsing, mTLS and stream lifetime. A listener bound to all IP
 interfaces can therefore serve Wi-Fi or qualified Ethernet/USB interfaces
 without changing the API contract. The portal and API retain independent TLS
 listeners because their identity and authorization models differ. Portal routes
-declare their required role; API v2 requires mutual TLS and scoped client
+declare their required role; API v3 requires mutual TLS and scoped client
 certificates.
 
 USB NCM is an experimental `NetworkTransport`. The interface can activate only

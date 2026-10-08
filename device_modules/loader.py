@@ -77,13 +77,22 @@ def configured_driver_names(devices):
     return names
 
 
-def configure_for_devices(devices):
+def configure_for_devices(devices, native=True, protected_pins=None, provider=None,
+                          protected_display=None):
     """Import only drivers referenced by the installed module configuration."""
     global _MODULES, _DEVICE_TYPES, _DRIVER_METADATA, _RESOURCE_MANAGER
-    errors, manager = validate_resources(devices)
+    errors, manager = validate_resources(devices, protected_pins, protected_display)
     if errors:
         raise ValueError('hardware resource conflict: ' + '; '.join(errors))
-    _MODULES, _DEVICE_TYPES, _DRIVER_METADATA = _load_for_devices(devices)
+    modules, types, metadata = _load_for_devices(devices)
+    if _RESOURCE_MANAGER and _RESOURCE_MANAGER.native:
+        for owner in set(owner for item in _RESOURCE_MANAGER.snapshot()
+                         for owner in item['owners']):
+            _RESOURCE_MANAGER.release_owner(owner)
+    if native:
+        manager.enable_native(provider)
+        manager.native.prepare('core')
+    _MODULES, _DEVICE_TYPES, _DRIVER_METADATA = modules, types, metadata
     _RESOURCE_MANAGER = manager
     return list(_DEVICE_TYPES.values())
 
@@ -148,7 +157,11 @@ def setup_device(device, index):
         }
     try:
         resources = _RESOURCE_MANAGER.scope(device.get('uuid', ''))
-        if (
+        if _RESOURCE_MANAGER.native:
+            from .managed_setup import setup_driver
+            _RESOURCE_MANAGER.native.prepare(resources.owner)
+            device_char = setup_driver(module, device, index, resources)
+        elif (
             hasattr(module, 'setup_with_resources') and
             callable(module.setup_with_resources)
         ):
@@ -169,6 +182,8 @@ def setup_device(device, index):
         if device_char.get('driver') is not None:
             validate_driver_instance(device_char['driver'])
     except Exception as exc:
+        if _RESOURCE_MANAGER and _RESOURCE_MANAGER.native:
+            _RESOURCE_MANAGER.release_owner(device.get('uuid', ''))
         message = str(exc)
         log_output(
             'Local', 'Device loader',

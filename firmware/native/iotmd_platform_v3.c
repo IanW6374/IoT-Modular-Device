@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "py/mpconfig.h"
@@ -27,11 +28,11 @@
 #include "nvs.h"
 #include "sdkconfig.h"
 
-#define IOTMD_PLATFORM_V3_ABI_VERSION (6)
+#define IOTMD_PLATFORM_V3_ABI_VERSION (7)
 #define IOTMD_V3_STORAGE_HANDLES (4)
 #define IOTMD_V3_STORAGE_MAX_PAYLOAD (4096)
 #define IOTMD_V3_STORAGE_HEADER_BYTES (16)
-#define IOTMD_V3_RESOURCE_CLAIMS (16)
+#define IOTMD_V3_RESOURCE_CLAIMS (32)
 #define IOTMD_V3_RESOURCE_KIND_BYTES (12)
 #define IOTMD_V3_RESOURCE_IDENTIFIER_BYTES (32)
 #define IOTMD_V3_RESOURCE_OWNER_BYTES (32)
@@ -81,6 +82,8 @@ typedef struct {
     bool shared;
     bool constructed;
     bool interrupt_installed;
+    bool managed_object;
+    uint32_t handle;
     char kind[IOTMD_V3_RESOURCE_KIND_BYTES + 1];
     char identifier[IOTMD_V3_RESOURCE_IDENTIFIER_BYTES + 1];
     char owner[IOTMD_V3_RESOURCE_OWNER_BYTES + 1];
@@ -93,6 +96,9 @@ static iotmd_v3_resource_claim_t iotmd_v3_resource_claims[
     IOTMD_V3_RESOURCE_CLAIMS
 ];
 static adc_oneshot_unit_handle_t iotmd_v3_adc_units[SOC_ADC_PERIPH_NUM];
+static uint32_t iotmd_v3_resource_generation;
+MP_REGISTER_ROOT_POINTER(mp_obj_t iotmd_resource_objects[32]);
+MP_REGISTER_ROOT_POINTER(mp_obj_t iotmd_resource_parameters[32]);
 static uint8_t iotmd_v3_adc_unit_references[SOC_ADC_PERIPH_NUM];
 
 typedef struct {
@@ -1177,8 +1183,26 @@ static MP_DEFINE_CONST_FUN_OBJ_1(
     iotmd_platform_v3_storage_close_obj, iotmd_platform_v3_storage_close
 );
 
+static void iotmd_v3_validate_apiops_storage(iotmd_v3_storage_handle_t *handle) {
+    // Never recover an older corrupt API watermark and repeat physical I/O.
+    if (strcmp(handle->namespace_name, "apiops") != 0) { return; }
+    const char *keys[] = {"snapshot_a", "snapshot_b"};
+    for (size_t i = 0; i < MP_ARRAY_SIZE(keys); ++i) {
+        size_t length = 0;
+        esp_err_t error = nvs_get_blob(handle->nvs, keys[i], NULL, &length);
+        if (error == ESP_ERR_NVS_NOT_FOUND) { continue; }
+        if (error != ESP_OK) { mp_raise_OSError(error); }
+        uint32_t generation;
+        mp_obj_t payload;
+        if (!iotmd_v3_storage_read_slot(handle->nvs, keys[i], &generation, &payload)) {
+            mp_raise_OSError(MP_EIO);
+        }
+    }
+}
+
 static mp_obj_t iotmd_platform_v3_storage_snapshot(mp_obj_t handle_in) {
     iotmd_v3_storage_handle_t *handle = iotmd_v3_storage_handle(handle_in);
+    iotmd_v3_validate_apiops_storage(handle);
     uint32_t generation = 0;
     mp_obj_t payload = mp_const_none;
     iotmd_v3_storage_latest(handle->nvs, &generation, &payload);
@@ -1197,6 +1221,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(
 static mp_obj_t iotmd_platform_v3_storage_commit(size_t n_args,
         const mp_obj_t *args) {
     iotmd_v3_storage_handle_t *handle = iotmd_v3_storage_handle(args[0]);
+    iotmd_v3_validate_apiops_storage(handle);
     mp_int_t expected = mp_obj_get_int(args[1]);
     if (expected < 0 || (uint64_t)expected > UINT32_MAX) {
         mp_raise_ValueError(MP_ERROR_TEXT("invalid storage generation"));
@@ -1372,14 +1397,17 @@ static void iotmd_v3_validate_parameters(mp_obj_t parameters,
 static iotmd_v3_resource_claim_t *iotmd_v3_resource_handle(
         mp_obj_t handle_in, size_t *index_out) {
     mp_int_t handle = mp_obj_get_int(handle_in);
-    if (handle < 1 || handle > IOTMD_V3_RESOURCE_CLAIMS ||
-            !iotmd_v3_resource_claims[handle - 1].used) {
-        mp_raise_ValueError(MP_ERROR_TEXT("invalid resource handle"));
+    for (size_t index = 0; index < IOTMD_V3_RESOURCE_CLAIMS; ++index) {
+        if (handle > 0 && iotmd_v3_resource_claims[index].used &&
+                iotmd_v3_resource_claims[index].handle == (uint32_t)handle) {
+            if (index_out != NULL) {
+                *index_out = index;
+            }
+            return &iotmd_v3_resource_claims[index];
+        }
     }
-    if (index_out != NULL) {
-        *index_out = (size_t)(handle - 1);
-    }
-    return &iotmd_v3_resource_claims[handle - 1];
+    mp_raise_ValueError(MP_ERROR_TEXT("invalid or released resource handle"));
+    return NULL;
 }
 
 static const iotmd_v3_resource_claim_t *iotmd_v3_resource_constructed_peer(
@@ -1402,13 +1430,13 @@ static bool iotmd_v3_resource_peer_constructed(
 }
 
 static void iotmd_v3_resource_interrupt(void *argument) {
-    size_t index = (size_t)(uintptr_t)argument;
-    if (iotmd_v3_event_queue == NULL || index >= IOTMD_V3_RESOURCE_CLAIMS) {
+    uint32_t handle = (uint32_t)(uintptr_t)argument;
+    if (iotmd_v3_event_queue == NULL || handle == 0) {
         return;
     }
     iotmd_v3_event_t event;
     memset(&event, 0, sizeof(event));
-    event.identifier = (uint32_t)(index + 1);
+    event.identifier = handle;
     memcpy(event.kind, "resource-interrupt", sizeof("resource-interrupt"));
     memcpy(event.status, "observed", sizeof("observed"));
     memcpy(event.detail, "gpio edge", sizeof("gpio edge"));
@@ -1420,7 +1448,13 @@ static void iotmd_v3_resource_interrupt(void *argument) {
     (void)awakened;
 }
 
+#include "iotmd_managed_resources.h"
+
 static void iotmd_v3_resource_deinit(iotmd_v3_resource_claim_t *claim) {
+    if (claim->managed_object) {
+        iotmd_v3_managed_deinit(claim);
+        return;
+    }
     if (!claim->constructed || iotmd_v3_resource_peer_constructed(claim)) {
         claim->constructed = false;
         claim->backend = NULL;
@@ -1485,12 +1519,15 @@ static mp_obj_t iotmd_platform_v3_resource_claim(size_t n_args,
             (kind_length == 4 && memcmp(kind, "gpio", 4) == 0) ||
             (kind_length == 3 && memcmp(kind, "i2c", 3) == 0) ||
             (kind_length == 3 && memcmp(kind, "spi", 3) == 0) ||
-            (kind_length == 4 && memcmp(kind, "uart", 4) == 0))) {
+            (kind_length == 4 && memcmp(kind, "uart", 4) == 0) ||
+            (kind_length == 3 && memcmp(kind, "pwm", 3) == 0))) {
         mp_raise_ValueError(MP_ERROR_TEXT("unsupported resource kind"));
     }
     if (shared && !(
             (kind_length == 3 && memcmp(kind, "i2c", 3) == 0) ||
-            (kind_length == 3 && memcmp(kind, "spi", 3) == 0))) {
+            (kind_length == 3 && memcmp(kind, "spi", 3) == 0) ||
+            (kind_length == 4 && memcmp(kind, "gpio", 4) == 0 &&
+             strncmp(signature, "bus:", 4) == 0))) {
         mp_raise_ValueError(
             MP_ERROR_TEXT("only I2C and SPI buses may be shared")
         );
@@ -1504,7 +1541,7 @@ static mp_obj_t iotmd_platform_v3_resource_claim(size_t n_args,
                         strcmp(claim->signature, signature) != 0) {
                     mp_raise_OSError(MP_EBUSY);
                 }
-                return MP_OBJ_NEW_SMALL_INT(index + 1);
+                return mp_obj_new_int_from_uint(claim->handle);
             }
             if (!shared || !claim->shared ||
                     strcmp(claim->signature, signature) != 0) {
@@ -1515,6 +1552,10 @@ static mp_obj_t iotmd_platform_v3_resource_claim(size_t n_args,
     for (size_t index = 0; index < IOTMD_V3_RESOURCE_CLAIMS; ++index) {
         iotmd_v3_resource_claim_t *claim = &iotmd_v3_resource_claims[index];
         if (!claim->used) {
+            if (iotmd_v3_resource_generation >= 0x3ffffffe) {
+                mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("resource generation exhausted"));
+            }
+            claim->handle = ++iotmd_v3_resource_generation;
             memcpy(claim->kind, kind, kind_length);
             claim->kind[kind_length] = '\0';
             memcpy(claim->identifier, identifier, identifier_length);
@@ -1525,7 +1566,7 @@ static mp_obj_t iotmd_platform_v3_resource_claim(size_t n_args,
             claim->signature[signature_length] = '\0';
             claim->shared = shared;
             claim->used = true;
-            return MP_OBJ_NEW_SMALL_INT(index + 1);
+            return mp_obj_new_int_from_uint(claim->handle);
         }
     }
     mp_raise_msg(
@@ -1575,7 +1616,7 @@ static esp_err_t iotmd_v3_resource_construct_physical(
             } else {
                 error = gpio_isr_handler_add(
                     (gpio_num_t)number, iotmd_v3_resource_interrupt,
-                    (void *)(uintptr_t)index
+                    (void *)(uintptr_t)claim->handle
                 );
                 claim->interrupt_installed = error == ESP_OK;
             }
@@ -1745,6 +1786,9 @@ static mp_obj_t iotmd_platform_v3_resource_construct(mp_obj_t handle_in,
     if (claim->constructed) {
         mp_raise_OSError(MP_EBUSY);
     }
+    if (strcmp(claim->kind, "pwm") == 0) {
+        mp_raise_ValueError(MP_ERROR_TEXT("PWM requires managed resource construction"));
+    }
     esp_err_t error = iotmd_v3_resource_construct_physical(
         claim, index, parameters
     );
@@ -1771,6 +1815,9 @@ static mp_obj_t iotmd_platform_v3_resource_recover(mp_obj_t handle_in) {
     iotmd_v3_resource_claim_t *claim = iotmd_v3_resource_handle(
         handle_in, &index
     );
+    if (claim->managed_object) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("managed driver recovery requires owner release and reconstruction"));
+    }
     int32_t saved[5];
     memcpy(saved, claim->parameters, sizeof(saved));
     if (claim->shared) {
@@ -1908,7 +1955,7 @@ static mp_obj_t iotmd_platform_v3_resource_snapshot(void) {
         }
         mp_obj_t item = mp_obj_new_dict(7);
         iotmd_v3_dict_store(
-            item, MP_QSTR_handle, MP_OBJ_NEW_SMALL_INT(index + 1)
+            item, MP_QSTR_handle, mp_obj_new_int_from_uint(claim->handle)
         );
         iotmd_v3_dict_store(
             item, MP_QSTR_kind,
@@ -2080,6 +2127,7 @@ static mp_obj_t iotmd_platform_v3_capabilities(void) {
         mp_obj_new_str("i2c", sizeof("i2c") - 1),
         mp_obj_new_str("spi", sizeof("spi") - 1),
         mp_obj_new_str("uart", sizeof("uart") - 1),
+        mp_obj_new_str("pwm", sizeof("pwm") - 1),
     };
     mp_obj_t resources = mp_obj_new_dict(9);
     iotmd_v3_dict_store(resources, MP_QSTR_managed, mp_const_true);
@@ -2143,6 +2191,9 @@ static const mp_rom_map_elem_t iotmd_platform_v3_module_globals_table[] = {
       MP_ROM_PTR(&iotmd_platform_v3_storage_commit_obj) },
     { MP_ROM_QSTR(MP_QSTR_resource_claim),
       MP_ROM_PTR(&iotmd_platform_v3_resource_claim_obj) },
+    { MP_ROM_QSTR(MP_QSTR_resource_object), MP_ROM_PTR(&iotmd_platform_v3_resource_object_obj) },
+    { MP_ROM_QSTR(MP_QSTR_resource_call), MP_ROM_PTR(&iotmd_platform_v3_resource_call_obj) },
+    { MP_ROM_QSTR(MP_QSTR_resource_sensor), MP_ROM_PTR(&iotmd_platform_v3_resource_sensor_obj) },
     { MP_ROM_QSTR(MP_QSTR_resource_construct),
       MP_ROM_PTR(&iotmd_platform_v3_resource_construct_obj) },
     { MP_ROM_QSTR(MP_QSTR_resource_recover),

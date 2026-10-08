@@ -1,5 +1,10 @@
 # Feature flags and network transports
 
+Scope update (Alpha 108): USB networking is retired as a delivery requirement.
+The USB NCM investigation below is historical, not an installation procedure or
+a current feature promise. Device API access now uses `/api/v3`; USB serial
+seeding, diagnostics and secured recovery remain supported separately.
+
 IoT-MD v2.5 resolves optional behavior in one `FeatureFlags` registry. A feature
 is enabled only when every required input agrees:
 

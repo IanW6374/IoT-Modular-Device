@@ -39,7 +39,7 @@ class DriverContractTests(unittest.TestCase):
     def test_loader_exposes_only_configured_driver_metadata(self):
         devices = [{'type': {'class': 'sensor', 'subclass': 'WHES'}}]
         with patch.object(loader, '_import_driver', return_value=FakeModule):
-            loader.configure_for_devices(devices)
+            loader.configure_for_devices(devices, native=False)
 
         catalog = loader.driver_catalog()
         self.assertEqual(catalog[0]['name'], 'whes')

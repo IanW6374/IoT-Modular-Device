@@ -69,7 +69,6 @@ def profile(**changes):
         'required_watchdog_recoveries': 1,
         'required_identity_transactions': 1,
         'required_fleet_transactions': 1,
-        'required_migration_rollbacks': 1,
         'required_driver_checks': 1,
     }
     value.update(changes)
@@ -102,6 +101,38 @@ class V3OperationalQualificationTests(unittest.TestCase):
         self.assertEqual(states['certificate-renewal'], 'not-run')
         self.assertEqual(states['release-confirmation'], 'passed')
         self.assertFalse(result['promotion_ready'])
+
+    def test_retired_migration_evidence_is_retained_but_not_a_gate(self):
+        state = json.loads(self.namespace.payload)
+        state['counters']['migration_rollbacks_attempts'] = 2
+        state['counters']['migration_rollbacks_failures'] = 2
+        self.namespace.commit(self.namespace.generation, json.dumps(state).encode())
+        campaign = json.loads(self.campaign_namespace.payload)
+        campaign['counters']['migration_rollbacks_attempts'] = 2
+        campaign['counters']['migration_rollbacks_failures'] = 2
+        self.campaign_namespace.commit(self.campaign_namespace.generation, json.dumps(campaign).encode())
+        history = {'history_version': 2, 'current': None, 'releases': [],
+                   'retries': [], 'retry_generation': 0}
+        history['releases'].append({
+            'release_version': '3.0.0-alpha.107', 'release_sequence': 2812,
+            'observed_at': 999, 'promotion_ready': False,
+            'passed_gates': [], 'failed_gates': ['migration-rollback'],
+        })
+        self.history_namespace.commit(self.history_namespace.generation, json.dumps(history).encode())
+        recorder = OperationalQualification(
+            self.namespace, lambda: self.now[0], 'iot-md-001',
+            lambda: self.release, profile(), self.history_namespace,
+            self.campaign_namespace)
+        recorder.start()
+        result = recorder.snapshot()
+        self.assertEqual(result['contract_version'], 2)
+        self.assertEqual(len(result['gates']), 14)
+        self.assertNotIn('migration-rollback', [gate['name'] for gate in result['gates']])
+        self.assertEqual(result['counters']['migration_rollbacks_failures'], 2)
+        self.assertFalse(result['promotion_ready'])
+        self.assertEqual(json.loads(self.history_namespace.payload)['releases'][0]['failed_gates'], ['migration-rollback'])
+        with self.assertRaises(QualificationError):
+            recorder.record_validation('migration-rollback', True)
 
     def test_health_retry_is_scoped_and_requires_a_new_observation_window(self):
         self.recorder.record_power_recovery(True)
@@ -314,7 +345,7 @@ class V3OperationalQualificationTests(unittest.TestCase):
         for name in (
             'native-recovery', 'watchdog-recovery',
             'identity-interoperability', 'fleet-interoperability',
-            'migration-rollback', 'driver-hardware',
+            'driver-hardware',
         ):
             self.recorder.record_validation(name, True)
         self.now[0] = 1060

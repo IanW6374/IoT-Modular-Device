@@ -19,13 +19,25 @@ import http_support
 import tls_listener
 from api_security import APIAuthorizationError
 from api_contracts import APIRequest, APIResponse
+from api_operations import OperationError, MAX_OPERATIONS, MAX_CLIENTS, MAX_RESULT_BYTES, MAX_RESULT_STORAGE
 from portal_http import is_client_disconnect_error, is_http_timeout_error
 
 
-API_VERSION = 2
+API_VERSION = 3
 API_KEEP_ALIVE_REQUESTS = 32
 API_KEEP_ALIVE_TIMEOUT_SECONDS = 30
 CONFIGURATION_BACKUP_BODY_BYTES = 384 * 1024
+
+
+def error_payload(status, message):
+    """Stable v3 errors; no automatic mutation retry is safe on this device."""
+    return {'api_version': API_VERSION, 'error': {
+        'code': {400: 'invalid_request', 403: 'permission_denied',
+                 404: 'not_found', 405: 'method_not_allowed',
+                 410: 'unsupported_api_version', 413: 'body_too_large',
+                 503: 'service_unavailable'}.get(status, 'request_failed'),
+        'message': str(message)[:256], 'retryable': False,
+    }}
 
 
 def request_body_limit(path, configured_maximum):
@@ -38,7 +50,7 @@ def request_body_limit(path, configured_maximum):
     """
     route = str(path).split('?', 1)[0]
     configured_maximum = int(configured_maximum)
-    if route == '/api/v2/configuration/backups/preview':
+    if route == '/api/v3/configuration/backups/preview':
         return max(configured_maximum, CONFIGURATION_BACKUP_BODY_BYTES)
     return configured_maximum
 
@@ -74,7 +86,7 @@ class DeviceAPI:
                  certificate_applier=None, network_confirmer=None,
                  configuration_restarter=None, configuration_backup=None,
                  configuration_restore_preview=None,
-                 configuration_restore_apply=None):
+                 configuration_restore_apply=None, operations=None):
         self.broker = broker
         self.health = health
         self.registry = registry
@@ -95,6 +107,26 @@ class DeviceAPI:
         self.configuration_backup = configuration_backup
         self.configuration_restore_preview = configuration_restore_preview
         self.configuration_restore_apply = configuration_restore_apply
+        self.operations = operations
+        self._operation_id = ''
+        if operations and hasattr(broker, 'add_listener'):
+            previous = getattr(operations, '_broker_listener', None)
+            if previous and hasattr(broker, 'remove_listener'):
+                broker.remove_listener(previous)
+            broker.add_listener(self._operation_completed)
+            operations._broker_listener = self._operation_completed
+
+    def _operation_completed(self, value):
+        if value.get('status') not in ('complete', 'failed') or value.get('source') != 'api':
+            return
+        for record in self.operations.state['records']:
+            if (record['id'] == value['id'] and value.get('identity') == record['client'][:16]
+                    and record['state'] not in ('complete', 'failed', 'interrupted')):
+                try:
+                    self.operations.finish(record, 200, value, value['status'])
+                except (RuntimeError, OSError):
+                    self.operations.update(record['id'], record['client'], state='interrupted')
+                return
 
     def connection_opened(self, identity, peer='unknown'):
         client = self.registry.identify(identity)
@@ -110,29 +142,97 @@ class DeviceAPI:
         return client
 
     def dispatch(self, method, path, body, identity, authenticated_client=None):
-        """Backward-compatible tuple interface for existing API callers."""
-        return self.handle(APIRequest(
-            method, path, body, identity, authenticated_client
-        )).as_tuple()
+        """Internal tuple adapter; exceptions are handled by the transport."""
+        return self._dispatch(method, path, body, identity, authenticated_client)
 
     def handle(self, request):
         """Handle an APIRequest without depending on its concrete transport."""
-        status, payload = self._dispatch(
-            request.method, request.path, request.body, request.identity,
-            request.client
-        )
+        record = None
+        try:
+            route, client = self._authenticate(request.method, request.path,
+                request.identity, request.client)
+            if request.method == 'POST' and route.startswith('/api/v3/'):
+                if self.operations is None:
+                    raise OperationError('durable_operations_unavailable',
+                        'Durable operation storage is unavailable; writes are disabled', 503)
+                body = request.body.encode() if isinstance(request.body, str) else bytes(request.body)
+                record, replay = self.operations.reserve(client['fingerprint'],
+                    request.headers.get('idempotency-key'), request.method,
+                    request.path, body)
+                if replay:
+                    status, payload = self.operations.result(record['id'], record['client'])
+                    payload['api_version'] = API_VERSION
+                    return APIResponse(status, payload)
+                self._operation_id = record['id']
+            status, payload = self._dispatch(
+                request.method, request.path, request.body, request.identity,
+                request.client
+            )
+        except OperationError as exc:
+            self._record_failure(request, exc)
+            status, payload = exc.status, error_payload(exc.status, exc)
+            payload['error'].update(code=exc.code, operation_id=exc.operation_id)
+            record = None
+        except APIAuthorizationError as exc:
+            self._record_failure(request, exc)
+            status, payload = 403, error_payload(403, exc)
+        except KeyError as exc:
+            self._record_failure(request, exc)
+            status, payload = 404, error_payload(404, exc)
+        except ValueError as exc:
+            self._record_failure(request, exc)
+            status, payload = 400, error_payload(400, exc)
+        except RuntimeError as exc:
+            self._record_failure(request, exc)
+            status, payload = 503, error_payload(503, exc)
+        except OSError as exc:
+            self._record_failure(request, exc)
+            status, payload = 503, error_payload(503, 'Storage or device I/O failed; reconcile before another write')
+        finally:
+            self._operation_id = ''
+        if status >= 400 and isinstance(payload.get('error'), str):
+            payload = error_payload(status, payload['error'])
+        else:
+            payload = dict(payload)
+            payload['api_version'] = API_VERSION
+        if record:
+            state = 'failed' if status >= 400 else 'complete'
+            if status == 503:
+                state = 'interrupted'
+            elif status < 400 and request.path.split('?', 1)[0].endswith('/commands'):
+                state = 'queued'
+            try:
+                payload['operation'] = self.operations.finish(record, status, payload, state)
+            except (RuntimeError, OSError):
+                try:
+                    self.operations.update(record['id'], record['client'], state='interrupted')
+                except (RuntimeError, OSError):
+                    pass  # Reservation remains: fail closed rather than repeating I/O.
+                payload = error_payload(503, 'Outcome could not be recorded; do not repeat the mutation')
+                payload['error'].update(code='operation_outcome_uncertain', operation_id=record['id'])
+                status = 503
         return APIResponse(status, payload)
 
-    def _dispatch(self, method, path, body, identity, authenticated_client=None):
+    def _record_failure(self, request, error):
+        if self.health:
+            self.health.increment('api_failures')
+        if self.log_output:
+            self.log_output('API', 'Request rejected', {
+                'log': request.method + ' ' + request.path.split('?', 1)[0] +
+                       ': ' + str(error)[:256],
+                'force': True, 'audit': True,
+            }, 'ERROR')
+
+    def _authenticate(self, method, path, identity, authenticated_client=None):
         route = str(path).split('?', 1)[0]
-        is_fleet = route.startswith('/api/v2/fleet')
-        is_qualification = route.startswith('/api/v2/qualification')
-        if route.startswith('/api/v2/configuration/') and method == 'POST':
+        is_fleet = route.startswith('/api/v3/fleet')
+        is_qualification = route.startswith('/api/v3/qualification')
+        if route.startswith('/api/v3/configuration/') and method == 'POST':
             scope = 'configuration:write'
         elif is_qualification and method == 'POST':
             scope = (
                 'qualification:execute'
-                if route.startswith('/api/v2/qualification/scenarios/')
+                if route.startswith('/api/v3/qualification/scenarios/')
                 else 'qualification:write'
             )
         elif is_fleet:
@@ -148,32 +248,67 @@ class DeviceAPI:
             client = self.registry.authenticate_fingerprint(
                 authenticated_client.get('fingerprint', ''), scope
             )
+        return route, client
+
+    def _dispatch(self, method, path, body, identity, authenticated_client=None):
+        route, client = self._authenticate(method, path, identity, authenticated_client)
         self._record_request(client, method, route)
 
-        if method == 'GET' and route == '/api/v2/device':
+        if route == '/api/v2' or route.startswith('/api/v2/'):
+            return 410, {'error': 'Device API v2 is retired; use /api/v3'}
+        if method == 'GET' and route == '/api/v3':
+            return 200, {
+                'api_version': API_VERSION,
+                'capabilities': {
+                    'configuration_profiles': bool(self.configuration_profile_applier),
+                    'encrypted_backups': bool(self.configuration_backup),
+                    'restore_preview': bool(self.configuration_restore_preview),
+                    'restore_apply': bool(self.configuration_restore_apply),
+                    'certificates': bool(self.certificate_stager and self.certificate_applier),
+                    'fleet': bool(self.fleet),
+                    'qualification': bool(self.qualification_getter),
+                    'module_operations': True,
+                    'persistent_idempotency': bool(self.operations),
+                },
+                'next_request_sequence': self.operations.next_sequence(client['fingerprint']) if self.operations else None,
+                'limits': {
+                    'retained_operations': MAX_OPERATIONS,
+                    'operation_clients': MAX_CLIENTS,
+                    'operation_result_bytes': MAX_RESULT_BYTES,
+                    'operation_result_storage_bytes': MAX_RESULT_STORAGE,
+                    'request_body_bytes': getattr(self, 'maximum_body_bytes', 8192),
+                    'restore_preview_body_bytes': request_body_limit(
+                        '/api/v3/configuration/backups/preview',
+                        getattr(self, 'maximum_body_bytes', 8192)),
+                    'keep_alive_requests': API_KEEP_ALIVE_REQUESTS,
+                    'keep_alive_timeout_seconds': API_KEEP_ALIVE_TIMEOUT_SECONDS,
+                },
+            }
+
+        if method == 'GET' and route == '/api/v3/device':
             return 200, {
                 'api_version': API_VERSION,
                 'device': self._device_section('device'),
             }
-        if method == 'GET' and route == '/api/v2/interfaces':
+        if method == 'GET' and route == '/api/v3/interfaces':
             return 200, {
                 'api_version': API_VERSION,
                 'interfaces': self._device_section('interfaces'),
             }
-        if method == 'GET' and route == '/api/v2/hardware':
+        if method == 'GET' and route == '/api/v3/hardware':
             return 200, {
                 'api_version': API_VERSION,
                 'hardware': self._device_section('hardware'),
             }
-        if method == 'GET' and route == '/api/v2/services':
+        if method == 'GET' and route == '/api/v3/services':
             return 200, {
                 'api_version': API_VERSION,
                 'services': self._device_section('services'),
             }
-        if method == 'GET' and route == '/api/v2/configuration':
+        if method == 'GET' and route == '/api/v3/configuration':
             value = self.configuration_getter() if self.configuration_getter else {}
             return 200, {'api_version': API_VERSION, 'configuration': value}
-        if method == 'POST' and route == '/api/v2/configuration/profile':
+        if method == 'POST' and route == '/api/v3/configuration/profile':
             if not self.configuration_profile_applier:
                 raise RuntimeError('configuration profile management is unavailable')
             value = json.loads(body.decode() if isinstance(body, bytes) else body)
@@ -183,7 +318,7 @@ class DeviceAPI:
                 value, str(client.get('label', 'API client'))
             )
             return 202, {'accepted': True, 'profile': result}
-        if method == 'POST' and route == '/api/v2/configuration/backups':
+        if method == 'POST' and route == '/api/v3/configuration/backups':
             if not self.configuration_backup:
                 raise RuntimeError('complete configuration backup is unavailable')
             value = json.loads(body.decode() if isinstance(body, bytes) else body)
@@ -196,7 +331,7 @@ class DeviceAPI:
             return 201, {
                 'backup': self.configuration_backup(value)
             }
-        if method == 'POST' and route == '/api/v2/configuration/backups/preview':
+        if method == 'POST' and route == '/api/v3/configuration/backups/preview':
             if not self.configuration_restore_preview:
                 raise RuntimeError('complete configuration restore is unavailable')
             value = json.loads(body.decode() if isinstance(body, bytes) else body)
@@ -207,7 +342,7 @@ class DeviceAPI:
                     'managed backup preview requires IoT-MD Management 2.7.3 or newer'
                 )
             return 200, {'preview': self.configuration_restore_preview(value)}
-        if method == 'POST' and route == '/api/v2/configuration/backups/apply':
+        if method == 'POST' and route == '/api/v3/configuration/backups/apply':
             if not self.configuration_restore_apply:
                 raise RuntimeError('complete configuration restore is unavailable')
             value = json.loads(body.decode() if isinstance(body, bytes) else body)
@@ -217,7 +352,7 @@ class DeviceAPI:
                 'accepted': True,
                 'restore': self.configuration_restore_apply(value.get('token', '')),
             }
-        certificate_prefix = '/api/v2/configuration/certificates/'
+        certificate_prefix = '/api/v3/configuration/certificates/'
         if method == 'POST' and route == certificate_prefix + 'apply':
             if not self.certificate_applier:
                 raise RuntimeError('certificate profile management is unavailable')
@@ -234,26 +369,26 @@ class DeviceAPI:
                 'accepted': True,
                 'certificate': self.certificate_stager(kind, body),
             }
-        if method == 'POST' and route == '/api/v2/configuration/network/confirm':
+        if method == 'POST' and route == '/api/v3/configuration/network/confirm':
             if not self.network_confirmer:
                 raise RuntimeError('network confirmation is unavailable')
             return 200, {
                 'confirmed': bool(self.network_confirmer())
             }
-        if method == 'POST' and route == '/api/v2/configuration/restart':
+        if method == 'POST' and route == '/api/v3/configuration/restart':
             if not self.configuration_restarter:
                 raise RuntimeError('configuration restart is unavailable')
             return 202, {
                 'accepted': True, 'restart': self.configuration_restarter()
             }
-        if method == 'GET' and route == '/api/v2/qualification':
+        if method == 'GET' and route == '/api/v3/qualification':
             if not self.qualification_getter:
                 raise RuntimeError('qualification recorder is unavailable')
             return 200, {
                 'api_version': API_VERSION,
                 'qualification': self.qualification_getter(),
             }
-        if method == 'POST' and route == '/api/v2/qualification/events':
+        if method == 'POST' and route == '/api/v3/qualification/events':
             if not self.qualification_event:
                 raise RuntimeError('qualification evidence recording is unavailable')
             value = json.loads(body.decode() if isinstance(body, bytes) else body)
@@ -261,7 +396,7 @@ class DeviceAPI:
                 value, str(client.get('label', 'API client'))
             )
             return 202, {'accepted': True, 'event': result}
-        scenario_prefix = '/api/v2/qualification/scenarios/'
+        scenario_prefix = '/api/v3/qualification/scenarios/'
         if method == 'POST' and route.startswith(scenario_prefix):
             if not self.qualification_scenario:
                 raise RuntimeError('qualification scenario execution is unavailable')
@@ -275,30 +410,30 @@ class DeviceAPI:
             )
             return 202, {'accepted': True, 'scenario': result}
 
-        if method == 'GET' and route == '/api/v2/device/inventory':
+        if method == 'GET' and route == '/api/v3/device/inventory':
             return 200, {
                 'api_version': API_VERSION,
                 'device': self.device_getter(),
                 'modules': self.broker.catalog(),
                 'fleet': self.fleet.snapshot() if self.fleet else None,
             }
-        if method == 'GET' and route == '/api/v2/health':
+        if method == 'GET' and route == '/api/v3/health':
             return 200, {
                 'api_version': API_VERSION, 'health': self.health.snapshot()
             }
-        if method == 'GET' and route == '/api/v2/events':
+        if method == 'GET' and route == '/api/v3/events':
             cursor = self._query_integer(path, 'cursor', 0)
             limit = self._query_integer(path, 'limit', 32)
             return 200, self.health.events_since(cursor, limit)
-        if method == 'GET' and route == '/api/v2/support':
+        if method == 'GET' and route == '/api/v3/support':
             if not self.support_getter:
                 raise RuntimeError('support bundle is unavailable')
             return 200, self.support_getter()
-        if method == 'GET' and route == '/api/v2/fleet':
+        if method == 'GET' and route == '/api/v3/fleet':
             if not self.fleet:
                 raise RuntimeError('fleet management is unavailable')
             return 200, self.fleet.snapshot()
-        if method == 'POST' and route == '/api/v2/fleet/policy':
+        if method == 'POST' and route == '/api/v3/fleet/policy':
             if not self.fleet:
                 raise RuntimeError('fleet management is unavailable')
             policy = json.loads(body.decode() if isinstance(body, bytes) else body)
@@ -310,9 +445,9 @@ class DeviceAPI:
             )
             return 202, result
         if method == 'POST' and (
-            route == '/api/v2/fleet/command-result' or
+            route == '/api/v3/fleet/command-result' or
             (
-                route.startswith('/api/v2/fleet/commands/') and
+                route.startswith('/api/v3/fleet/commands/') and
                 route.endswith('/result')
             )
         ):
@@ -323,7 +458,7 @@ class DeviceAPI:
                 raise ValueError('command result must be an object')
             route_identifier = (
                 route.split('/')[-2]
-                if route.startswith('/api/v2/fleet/commands/') else ''
+                if route.startswith('/api/v3/fleet/commands/') else ''
             )
             result = self.fleet.complete_command(
                 route_identifier or value.get('id', ''), value.get('result', 'complete'),
@@ -331,13 +466,21 @@ class DeviceAPI:
             )
             return 200, result
 
-        if method == 'GET' and route == '/api/v2/modules':
+        if method == 'GET' and route == '/api/v3/modules':
             return 200, {'api_version': API_VERSION, 'modules': self.broker.catalog()}
-        if method == 'GET' and route.startswith('/api/v2/operations/'):
-            operation = self.broker.operation(route.rsplit('/', 1)[-1])
-            return (200, operation) if operation else (404, {'error': 'operation not found'})
-
-        prefix = '/api/v2/modules/'
+        if method == 'GET' and (route == '/api/v3/operations' or route.startswith('/api/v3/operations/')) and not self.operations:
+            raise RuntimeError('Durable operation storage is unavailable')
+        if method == 'GET' and route == '/api/v3/operations' and self.operations:
+            return 200, {'operations': [self.operations.public(item) for item in self.operations.state['records']
+                if item['client'] == client['fingerprint']]}
+        if method == 'GET' and route.startswith('/api/v3/operations/') and self.operations:
+            parts = route[len('/api/v3/operations/'):].split('/')
+            if len(parts) == 2 and parts[1] == 'result':
+                return self.operations.result(parts[0], client['fingerprint'])
+            if len(parts) == 1:
+                return 200, self.operations.operation(parts[0], client['fingerprint'])
+            return 404, {'error': 'operation endpoint not found'}
+        prefix = '/api/v3/modules/'
         if route.startswith(prefix):
             remainder = route[len(prefix):]
             parts = remainder.split('/')
@@ -357,6 +500,8 @@ class DeviceAPI:
                     return 200, {'module': uuid, 'diagnostics': diagnostics}
                 if method == 'POST' and action == 'commands':
                     command = json.loads(body.decode() if isinstance(body, bytes) else body)
+                    if self._operation_id and isinstance(command, dict):
+                        command['request_id'] = self._operation_id
                     try:
                         operation = self.broker.submit(
                             uuid, command, 'api', client.get('fingerprint', '')[:16]
@@ -451,10 +596,12 @@ class DeviceAPI:
 
 
 async def _write_response(writer, status, payload, keep_alive=False):
+    if status >= 400 and isinstance(payload.get('error'), str):
+        payload = error_payload(status, payload['error'])
     reason = {
-        200: 'OK', 202: 'Accepted', 400: 'Bad Request',
+        200: 'OK', 201: 'Created', 202: 'Accepted', 400: 'Bad Request',
         401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found',
-        405: 'Method Not Allowed', 413: 'Payload Too Large',
+        405: 'Method Not Allowed', 409: 'Conflict', 410: 'Gone', 413: 'Payload Too Large',
         503: 'Service Unavailable',
     }.get(status, 'Error')
     body = json.dumps(payload).encode()
@@ -506,6 +653,7 @@ async def _start_http_device_api(settings, api):
     if not settings.get('enabled'):
         return None
     maximum = int(settings.get('max_body_bytes', 8192))
+    api.maximum_body_bytes = maximum
 
     async def handle(reader, writer):
         peer = _peer_address(reader, writer)
@@ -551,7 +699,7 @@ async def _start_http_device_api(settings, api):
                 stage = 'dispatch'
                 response = api.handle(APIRequest(
                     method, path, body, identity, authenticated_client,
-                    transport='https', peer=peer
+                    transport='https', peer=peer, headers=headers
                 ))
                 status, payload = response.as_tuple()
                 connection = str(headers.get('connection', '')).lower()

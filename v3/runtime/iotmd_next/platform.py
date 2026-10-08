@@ -1,6 +1,6 @@
 """Validated MicroPython adapter for the versioned native v3 platform ABI."""
 
-EXPECTED_ABI_VERSION = 6
+EXPECTED_ABI_VERSION = 7
 
 
 class PlatformContractError(RuntimeError):
@@ -172,7 +172,7 @@ def validate_capabilities(value):
             maximum < 1 or maximum > 32):
         raise PlatformContractError('resources.max_claims is invalid')
     kinds = resources['kinds']
-    allowed_kinds = ('adc', 'gpio', 'i2c', 'spi', 'uart')
+    allowed_kinds = ('adc', 'gpio', 'i2c', 'spi', 'uart', 'pwm')
     if (not isinstance(kinds, (list, tuple)) or not kinds or len(kinds) > 8 or
             len(set(kinds)) != len(kinds)):
         raise PlatformContractError('resources.kinds is invalid')

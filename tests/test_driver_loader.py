@@ -24,11 +24,11 @@ class DriverLoaderTests(unittest.TestCase):
             return FakeWhes
 
         devices = [
-            {'type': {'class': 'sensor', 'subclass': 'WHES'}},
-            {'type': {'class': 'sensor', 'subclass': 'WHES'}},
+            {'uuid': '1', 'rs485': {'uart': 1, 'tx': 17, 'rx': 18}, 'type': {'class': 'sensor', 'subclass': 'WHES'}},
+            {'uuid': '2', 'rs485': {'uart': 2, 'tx': 8, 'rx': 9}, 'type': {'class': 'sensor', 'subclass': 'WHES'}},
         ]
         with patch.object(loader, '_import_driver', side_effect=import_driver):
-            types = loader.configure_for_devices(devices)
+            types = loader.configure_for_devices(devices, native=False)
 
         self.assertEqual(imported, ['whes'])
         self.assertEqual(types, [FakeWhes.DEVICE_TYPE])

@@ -14,7 +14,7 @@ low-accuracy ambient sensor and is unsuitable for safety or process control.
 ## State and integrations
 
 State is one JSON object on the configured module state topic and through
-`GET /api/v2/modules/{uuid}/state`:
+`GET /api/v3/modules/{uuid}/state`:
 
 ```json
 {"temperature":21.4,"humidity":48}

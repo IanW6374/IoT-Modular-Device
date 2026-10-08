@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import secrets
 
 
 class QualificationClient:
@@ -19,9 +20,15 @@ class QualificationClient:
 
     def request(self, method, path, value=None):
         body = None if value is None else json.dumps(value).encode()
+        headers = {'Content-Type': 'application/json'} if body else {}
+        if method == 'POST':
+            metadata = self.get('/api/v3')
+            if not metadata.get('capabilities', {}).get('persistent_idempotency'):
+                raise ValueError('durable Device API v3 required for qualification writes')
+            headers['Idempotency-Key'] = str(metadata['next_request_sequence']) + '.' + secrets.token_hex(8)
         request = urllib.request.Request(
             self.base_url + path, data=body, method=method,
-            headers={'Content-Type': 'application/json'} if body else {},
+            headers=headers,
         )
         with urllib.request.urlopen(
                 request, context=self.context, timeout=self.timeout) as response:
@@ -35,11 +42,11 @@ class QualificationClient:
 
 
 def _boot(client):
-    return client.get('/api/v2/services').get('services', {}).get('boot', {})
+    return client.get('/api/v3/services').get('services', {}).get('boot', {})
 
 
 def _record(client, gate, outcome, run_id, notes='', evidence_digest=''):
-    return client.post('/api/v2/qualification/events', {
+    return client.post('/api/v3/qualification/events', {
         'gate': gate, 'outcome': outcome, 'run_id': run_id,
         'notes': notes, 'evidence_digest': evidence_digest, 'confirm': True,
     })
@@ -48,7 +55,7 @@ def _record(client, gate, outcome, run_id, notes='', evidence_digest=''):
 def watchdog(client, run_id, recovery_timeout):
     before = _boot(client)
     before_count = int(before.get('boot_count', 0) or 0)
-    client.post('/api/v2/qualification/scenarios/watchdog-recovery', {
+    client.post('/api/v3/qualification/scenarios/watchdog-recovery', {
         'run_id': run_id, 'confirmation': 'execute watchdog-recovery',
     })
     deadline = time.monotonic() + int(recovery_timeout)
@@ -84,14 +91,14 @@ def native(client, run_id, recovery_timeout, minimum_recovery_s=60,
     """Observe a requested frozen-recovery boot and healthy application return."""
     before_boot = _boot(client)
     before_count = int(before_boot.get('boot_count', 0) or 0)
-    before_status = client.get('/api/v2/qualification')['qualification']
+    before_status = client.get('/api/v3/qualification')['qualification']
     before_native = int(
         before_status.get('native_update', {}).get('recovery', {}).get(
             'boot_count', 0
         ) or 0
     )
     release = dict(before_status.get('release', {}))
-    client.post('/api/v2/qualification/scenarios/native-recovery', {
+    client.post('/api/v3/qualification/scenarios/native-recovery', {
         'run_id': run_id, 'confirmation': 'execute native-recovery',
     })
     deadline = clock() + int(recovery_timeout)
@@ -101,8 +108,8 @@ def native(client, run_id, recovery_timeout, minimum_recovery_s=60,
         sleeper(5)
         try:
             after_boot = _boot(client)
-            device = client.get('/api/v2/device').get('device', {})
-            status = client.get('/api/v2/qualification')['qualification']
+            device = client.get('/api/v3/device').get('device', {})
+            status = client.get('/api/v3/qualification')['qualification']
             native_count = int(
                 status.get('native_update', {}).get('recovery', {}).get(
                     'boot_count', 0
@@ -178,7 +185,7 @@ def main(argv=None):
         )
     elif args.command == 'scenario':
         result = client.post(
-            '/api/v2/qualification/scenarios/' + args.name,
+            '/api/v3/qualification/scenarios/' + args.name,
             {'run_id': run_id, 'confirmation': 'execute ' + args.name},
         )
     else:

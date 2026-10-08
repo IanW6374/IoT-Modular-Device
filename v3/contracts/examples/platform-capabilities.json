@@ -1,5 +1,5 @@
 {
-  "abi_version": 6,
+  "abi_version": 7,
   "board": {
     "target": "esp32-s3",
     "revision": "devkitc-n8r8"
@@ -7,7 +7,7 @@
   "runtime": {
     "engine": "micropython",
     "version": "1.29.0",
-    "platform_abi": 6
+    "platform_abi": 7
   },
   "security": {
     "secure_boot": true,
@@ -62,7 +62,7 @@
     "soft_restart_cleanup": true,
     "recovery": true,
     "qualified": false,
-    "max_claims": 16,
-    "kinds": ["adc", "gpio", "i2c", "spi", "uart"]
+    "max_claims": 32,
+    "kinds": ["adc", "gpio", "i2c", "spi", "uart", "pwm"]
   }
 }

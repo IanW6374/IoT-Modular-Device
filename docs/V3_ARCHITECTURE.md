@@ -2,9 +2,14 @@
 
 ## Status
 
-This document defines the greenfield architecture under development on
-`alpha/v3-platform-rewrite`. It is not the v2.5 runtime architecture and does
-not change the stable release contract.
+This document retains the greenfield architecture and historical alpha
+mechanism descriptions on `alpha/v3-platform-rewrite`. On 2026-10-08, v2 backup
+migration, compatibility/shadow cutover and USB networking were retired.
+Sections describing those paths are design history, not current delivery
+requirements. The [active requirements](V3_REQUIREMENTS.md) and
+[native resource/API review](V3_RESOURCE_API_REVIEW.md) distinguish current
+production integration from retained prototypes. Secure v3 recovery and paired
+rollback remain required.
 
 ## Design objective
 
@@ -63,10 +68,17 @@ observation/control, encrypted native boot/recovery state, and a fixed-capacity
 native job/event queue. ABI 5 adds physical resource construction, safe bus
 sharing, interrupt ownership and peripheral recovery. ABI 6 adds the encrypted
 paired-release journal which binds a release sequence, platform partition and
-runtime slot across trial, confirmation and rollback. The ABI follows these
-rules:
+runtime slot across trial, confirmation and rollback. ABI 7 / core API 15 adds
+the production GPIO/ADC/PWM/UART/SPI/I2C driver path: core-rooted peripheral
+objects, generation-safe handles, bounded I/O, immutable bus configuration and
+owner release. Soft IRQ callbacks receive owner-bound proxies, never raw
+peripheral objects; timing-sensitive DHT/pulse reads execute in core helpers.
+The API mutation ledger uses encrypted native transactional storage and bounded
+encrypted-flash results. Hardware qualification remains separate from these
+compiled mechanisms. The ABI follows these rules:
 
-- primitive values only: bounded strings, integers, booleans, bytes and maps;
+- bounded strings, integers, booleans, bytes and maps; managed soft-IRQ callbacks
+  are the explicit driver-only callable exception, not a Device API parameter;
 - explicit maximum size and timeout for every call;
 - opaque integer handles for secrets and long-lived native resources;
 - no silent fallback when a capability or ABI version is unavailable;
@@ -205,7 +217,7 @@ Kernel health and support snapshots have fixed collection limits and contain
 only operational state. Runtime configuration and module settings are excluded
 so these snapshots cannot become an accidental secret-export path.
 
-## Integration cutover and qualification
+## Historical integration cutover and current qualification
 
 Alpha 6 introduced one persistent cutover coordinator rather than allowing a
 build flag to select the greenfield runtime. Compatibility is the durable
@@ -260,7 +272,7 @@ before native bootloader rollback. `paired_trial` and `native_rollback`
 capabilities nevertheless remain false until the interruption matrix proves the
 complete mechanism on hardware.
 
-## Configuration migration
+## Historical v2 configuration migration (retired)
 
 V3 has a new configuration namespace and schema. Importing a v2 encrypted
 backup produces a preview, validation report and migration plan. The confirmed

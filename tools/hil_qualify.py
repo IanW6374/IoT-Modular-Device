@@ -30,11 +30,11 @@ def main():
     base = 'https://' + args.host + ':' + str(args.port)
     report = {'format_version': 1, 'device': args.host, 'checks': {}}
     for name, path in (
-        ('inventory', '/api/v2/device/inventory'),
-        ('health', '/api/v2/health'),
-        ('events', '/api/v2/events?cursor=0&limit=8'),
-        ('support', '/api/v2/support'),
-        ('fleet', '/api/v2/fleet'),
+        ('inventory', '/api/v3/device/inventory'),
+        ('health', '/api/v3/health'),
+        ('events', '/api/v3/events?cursor=0&limit=8'),
+        ('support', '/api/v3/support'),
+        ('fleet', '/api/v3/fleet'),
     ):
         value, latency = fetch(base, path, context)
         report['checks'][name] = {'passed': isinstance(value, dict), 'latency_ms': latency}

@@ -36,7 +36,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_provider_must_match_versioned_native_abi(self):
         class Provider:
-            ABI_VERSION = 6
+            ABI_VERSION = 7
 
             def storage_open(self, namespace):
                 return 1
@@ -105,7 +105,7 @@ class V3PlatformContractTests(unittest.TestCase):
                 return V3PlatformContractTests().example()
 
         platform = Platform(Provider())
-        self.assertEqual(platform.capabilities()['abi_version'], 6)
+        self.assertEqual(platform.capabilities()['abi_version'], 7)
         self.assertEqual(platform.update_snapshot()['running_label'], 'ota_1')
         Provider.ABI_VERSION = 3
         with self.assertRaisesRegex(PlatformContractError, 'ABI'):
@@ -125,7 +125,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_native_storage_must_be_complete(self):
         class Provider:
-            ABI_VERSION = 6
+            ABI_VERSION = 7
 
             def capabilities(self):
                 return V3PlatformContractTests().example()
@@ -145,6 +145,19 @@ class V3PlatformContractTests(unittest.TestCase):
         retry = source.index('nvs_set_blob(handle->nvs, key, buffer, length)', erase)
         self.assertLess(erase, retry)
         self.assertIn('Reclaim it before allocating the replacement', source)
+
+    def test_api_watermark_storage_rejects_corrupt_present_slots_before_fallback(self):
+        source = (ROOT / 'firmware' / 'native' / 'iotmd_platform_v3.c').read_text()
+        start = source.index('static void iotmd_v3_validate_apiops_storage')
+        end = source.index('static mp_obj_t iotmd_platform_v3_storage_snapshot', start)
+        validator = source[start:end]
+        self.assertIn('strcmp(handle->namespace_name, "apiops")', validator)
+        self.assertIn('iotmd_v3_storage_read_slot', validator)
+        self.assertIn('mp_raise_OSError(MP_EIO)', validator)
+        for name in ('storage_snapshot', 'storage_commit'):
+            body = source[source.index('static mp_obj_t iotmd_platform_v3_' + name):]
+            self.assertLess(body.index('iotmd_v3_validate_apiops_storage(handle)'),
+                body.index('iotmd_v3_storage_latest('))
 
     def test_native_rollback_requires_paired_trial(self):
         value = self.example()
@@ -173,7 +186,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_native_update_snapshot_fails_closed_on_inconsistent_state(self):
         class Provider:
-            ABI_VERSION = 6
+            ABI_VERSION = 7
 
             def capabilities(self):
                 return V3PlatformContractTests().example()
@@ -223,7 +236,7 @@ class V3PlatformContractTests(unittest.TestCase):
 
     def test_recovery_and_native_jobs_are_bounded(self):
         class Provider:
-            ABI_VERSION = 6
+            ABI_VERSION = 7
             def capabilities(self): return V3PlatformContractTests().example()
             def storage_open(self, namespace): return 1
             def storage_close(self, handle): return None

@@ -140,6 +140,10 @@ class ModuleBroker:
     def add_listener(self, listener):
         self._listeners.append(listener)
 
+    def remove_listener(self, listener):
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
     def _new_id(self):
         self._sequence += 1
         try:
@@ -163,6 +167,8 @@ class ModuleBroker:
         if len(self._queue) >= self.queue_limit:
             raise RuntimeError('module command queue is full')
         request_id = str(payload.get('request_id') or self._new_id())[:64]
+        if request_id in self._operations:
+            raise ValueError('module request ID is already in use')
         payload = dict(payload)
         payload['request_id'] = request_id
         operation = {

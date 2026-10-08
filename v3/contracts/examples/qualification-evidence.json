@@ -1,5 +1,5 @@
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "profile": "v3-beta",
   "device_id": "iot-md-001",
   "release": {"version": "3.0.0-alpha.20", "sequence": 2725, "confirmed": true},
@@ -63,7 +63,6 @@
     {"name": "watchdog-recovery", "status": "passed", "observed": 3, "required": 3},
     {"name": "identity-interoperability", "status": "passed", "observed": 1, "required": 1},
     {"name": "fleet-interoperability", "status": "passed", "observed": 1, "required": 1},
-    {"name": "migration-rollback", "status": "passed", "observed": 1, "required": 1},
     {"name": "driver-hardware", "status": "passed", "observed": 13, "required": 13}
   ],
   "promotion_ready": true

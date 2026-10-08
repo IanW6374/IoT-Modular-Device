@@ -16,6 +16,8 @@ from device_api import DeviceAPI
 from device_api_inventory import DeviceInventory
 from feature_flags import FeatureFlags
 from runtime_health import HealthHistory
+from api_operations import OperationJournal
+from api_operation_fixtures import MemoryNamespace
 
 
 def client_certificate(common_name='automation-client.local'):
@@ -118,13 +120,138 @@ class DeviceAPITests(unittest.TestCase):
         self.cert = client_certificate()
         self.health = HealthHistory(str(Path(self.temp.name) / 'health.json'))
         self.broker = FakeBroker()
+        self.operation_storage = MemoryNamespace()
+        self.operations = OperationJournal(lambda: self.operation_storage,
+            str(Path(self.temp.name) / 'operations'))
         self.api = DeviceAPI(
             self.broker, self.health, self.registry,
-            lambda: {'device_name': 'test'}
+            lambda: {'device_name': 'test'}, operations=self.operations
         )
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def mutation(self, key='1.0123456789abcdef', body=b'{}'):
+        return APIRequest('POST', '/api/v3/configuration/restart', body, self.cert,
+            headers={'Idempotency-Key': key})
+
+    def test_mutation_replay_after_restart_never_calls_device_again(self):
+        self.registry.enrol(self.cert, 'writer', ('read', 'configuration:write'))
+        self.api.configuration_restarter = mock.Mock(return_value={'scheduled': True})
+        first = self.api.handle(self.mutation())
+        self.assertEqual(first.status, 202)
+        self.api.operations = OperationJournal(lambda: self.operation_storage,
+            str(Path(self.temp.name) / 'operations'), boot_id='new-boot')
+        second = self.api.handle(self.mutation())
+        self.assertEqual(second.status, 202)
+        self.assertEqual(first.payload['operation']['id'], second.payload['operation']['id'])
+        self.api.configuration_restarter.assert_called_once()
+        self.assertEqual(second.payload['operation']['completion_scope'], 'request')
+
+    def test_mutation_without_key_or_durable_storage_never_executes(self):
+        self.registry.enrol(self.cert, 'writer', ('configuration:write',))
+        self.api.configuration_restarter = mock.Mock()
+        request = self.mutation(); request.headers = {}
+        self.assertEqual(self.api.handle(request).status, 400)
+        self.api.operations = None
+        self.assertEqual(self.api.handle(self.mutation()).status, 503)
+        self.api.configuration_restarter.assert_not_called()
+
+    def test_authorization_is_rechecked_before_replaying_a_result(self):
+        self.registry.enrol(self.cert, 'writer', ('read', 'configuration:write'))
+        self.api.configuration_restarter = mock.Mock(return_value={'scheduled': True})
+        self.assertEqual(self.api.handle(self.mutation()).status, 202)
+        self.registry.enrol(self.cert, 'reader', ('read',))
+        self.assertEqual(self.api.handle(self.mutation()).status, 403)
+        self.api.configuration_restarter.assert_called_once()
+
+    def test_unavailable_journal_does_not_fall_back_to_unscoped_broker_history(self):
+        self.registry.enrol(self.cert, 'reader', ('read',))
+        self.api.operations = None
+        self.broker.operation = mock.Mock(return_value={'id': 'other-client'})
+        for path in ('/api/v3/operations', '/api/v3/operations/other-client',
+                     '/api/v3/operations/other-client/result'):
+            with self.subTest(path=path):
+                self.assertEqual(self.api.handle(APIRequest('GET', path, identity=self.cert)).status, 503)
+        self.broker.operation.assert_not_called()
+
+    def test_operation_reservation_failure_prevents_callback(self):
+        self.registry.enrol(self.cert, 'writer', ('configuration:write',))
+        self.api.configuration_restarter = mock.Mock()
+        self.operation_storage.fail = True
+        self.assertEqual(self.api.handle(self.mutation()).status, 503)
+        self.api.configuration_restarter.assert_not_called()
+
+    def test_async_module_completion_is_durable_and_client_bound(self):
+        self.registry.enrol(self.cert, 'writer', ('read', 'write'))
+        response = self.api.handle(APIRequest('POST', '/api/v3/modules/0001/commands',
+            b'{"request_id":"spoofed"}', self.cert,
+            headers={'Idempotency-Key': '1.0123456789abcdef'}))
+        operation = response.payload['operation']
+        identifier = operation['id']
+        self.assertEqual(operation['status'], 'queued')
+        self.assertEqual(self.broker.commands[0][1]['request_id'], identifier)
+        record = self.operations.state['records'][0]
+        event = {'id': identifier, 'status': 'complete', 'source': 'mqtt', 'identity': record['client'][:16]}
+        self.api._operation_completed(event)
+        self.assertEqual(self.operations.operation(identifier, record['client'])['status'], 'queued')
+        event['source'] = 'api'
+        self.api._operation_completed(event)
+        self.assertEqual(self.operations.operation(identifier, record['client'])['status'], 'complete')
+        self.api.operations = OperationJournal(lambda: self.operation_storage,
+            str(Path(self.temp.name) / 'operations'), boot_id='new-boot')
+        result = self.api.handle(APIRequest('GET', '/api/v3/operations/' + identifier + '/result', identity=self.cert))
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.payload['status'], 'complete')
+
+    def test_commit_failure_after_callback_reports_uncertain_and_never_repeats(self):
+        self.registry.enrol(self.cert, 'writer', ('configuration:write',))
+        callback = mock.Mock(return_value={'scheduled': True})
+        self.api.configuration_restarter = callback
+        with mock.patch.object(self.operations, 'finish', side_effect=OSError('result storage failed')):
+            response = self.api.handle(self.mutation())
+        self.assertEqual(response.status, 503)
+        retry = self.api.handle(self.mutation())
+        self.assertEqual(retry.status, 409)
+        callback.assert_called_once()
+
+    def test_v3_discovery_is_scoped_and_advertises_real_capabilities(self):
+        denied = self.api.handle(APIRequest('GET', '/api/v3', identity=self.cert))
+        self.assertEqual(denied.status, 403)
+        self.assertEqual(denied.payload['error']['code'], 'permission_denied')
+        self.registry.enrol(self.cert, 'reader', ('read',))
+        response = self.api.handle(APIRequest('GET', '/api/v3', identity=self.cert))
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.payload['api_version'], 3)
+        self.assertFalse(response.payload['capabilities']['encrypted_backups'])
+        self.assertTrue(response.payload['capabilities']['persistent_idempotency'])
+        self.assertEqual(response.payload['limits']['request_body_bytes'], 8192)
+        self.assertEqual(response.payload['limits']['restore_preview_body_bytes'], 384 * 1024)
+
+    def test_v2_retirement_never_executes_a_command(self):
+        self.registry.enrol(self.cert, 'controller', ('read', 'write'))
+        for method, path in (('GET', '/api/v2'), ('GET', '/api/v2/device'),
+                             ('POST', '/api/v2/modules/0001/commands')):
+            response = self.api.handle(APIRequest(method, path, b'{}', self.cert))
+            self.assertEqual(response.status, 410)
+            self.assertEqual(response.payload['error']['code'], 'unsupported_api_version')
+            self.assertFalse(response.payload['error']['retryable'])
+        self.assertEqual(self.broker.commands, [])
+
+    def test_v3_wire_errors_and_successes_have_version(self):
+        self.registry.enrol(self.cert, 'controller', ('read', 'write'))
+        response = self.api.handle(APIRequest('GET', '/api/v3/modules/0001/state', identity=self.cert))
+        self.assertEqual(response.payload['api_version'], 3)
+        response = self.api.handle(APIRequest('POST', '/api/v3/modules/0001/commands', b'{', self.cert,
+            headers={'Idempotency-Key': '1.0123456789abcdef'}))
+        self.assertEqual(response.status, 400)
+        self.assertEqual(response.payload['error']['code'], 'invalid_request')
+        response = self.api.handle(APIRequest('GET', '/api/v3/missing', identity=self.cert))
+        self.assertEqual(response.status, 404)
+        self.assertEqual(response.payload['error']['code'], 'not_found')
+        self.registry.revoke(self.registry.list_clients()[0]['fingerprint'])
+        response = self.api.handle(APIRequest('GET', '/api/v3', identity=self.cert))
+        self.assertEqual(response.status, 403)
 
     def test_read_scoped_client_can_read_but_not_write(self):
         record = self.registry.enrol(self.cert, 'reader', ('read',))
@@ -134,21 +261,21 @@ class DeviceAPITests(unittest.TestCase):
         self.assertIn('days_remaining', listed)
 
         status, payload = self.api.dispatch(
-            'GET', '/api/v2/modules/0001/state', b'', self.cert
+            'GET', '/api/v3/modules/0001/state', b'', self.cert
         )
         self.assertEqual(status, 200)
         self.assertEqual(payload['state']['temperature'], 55)
 
         with self.assertRaisesRegex(PermissionError, 'write scope'):
             self.api.dispatch(
-                'POST', '/api/v2/modules/0001/commands', b'{"value":1}', self.cert
+                'POST', '/api/v3/modules/0001/commands', b'{"value":1}', self.cert
             )
 
     def test_write_client_submits_same_json_command_contract(self):
         self.registry.enrol(self.cert, 'controller', ('read', 'write'))
 
         status, operation = self.api.dispatch(
-            'POST', '/api/v2/modules/0001/commands',
+            'POST', '/api/v3/modules/0001/commands',
             b'{"request_id":"abc","operation":"write","value":20}',
             self.cert
         )
@@ -179,7 +306,7 @@ class DeviceAPITests(unittest.TestCase):
             },
         }
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/profile',
+            'POST', '/api/v3/configuration/profile',
             json.dumps(profile).encode(), self.cert,
         )
         self.assertEqual(status, 202)
@@ -196,7 +323,7 @@ class DeviceAPITests(unittest.TestCase):
         self.registry.enrol(self.cert, 'controller', ('write',))
         with self.assertRaisesRegex(PermissionError, 'configuration:write'):
             api.dispatch(
-                'POST', '/api/v2/configuration/profile',
+                'POST', '/api/v3/configuration/profile',
                 b'{"name":"Standard","settings":{"ha_discovery":true}}',
                 self.cert,
             )
@@ -216,20 +343,20 @@ class DeviceAPITests(unittest.TestCase):
         self.registry.enrol(self.cert, 'fleet manager', ('configuration:write',))
 
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/backups',
+            'POST', '/api/v3/configuration/backups',
             b'{"salt":"00000000000000000000000000000000",'
             b'"derived_key":"11111111111111111111111111111111"}', self.cert,
         )
         self.assertEqual((status, payload['backup']['format']), (201, 'encrypted'))
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/backups/preview',
+            'POST', '/api/v3/configuration/backups/preview',
             b'{"backup":{"format":"encrypted"},'
             b'"derived_key":"11111111111111111111111111111111"}',
             self.cert,
         )
         self.assertEqual((status, payload['preview']['token']), (200, 'restore-token'))
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/backups/apply',
+            'POST', '/api/v3/configuration/backups/apply',
             b'{"token":"restore-token"}', self.cert,
         )
         self.assertEqual((status, payload['restore']), (202, 'restart required'))
@@ -251,7 +378,7 @@ class DeviceAPITests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, 'Management 2.7.3'):
             api.dispatch(
-                'POST', '/api/v2/configuration/backups',
+                'POST', '/api/v3/configuration/backups',
                 b'{"password":"legacy-password"}', self.cert,
             )
 
@@ -262,20 +389,20 @@ class DeviceAPITests(unittest.TestCase):
 
         self.assertEqual(
             device_api.request_body_limit(
-                '/api/v2/configuration/backups/preview', configured
+                '/api/v3/configuration/backups/preview', configured
             ),
             384 * 1024,
         )
         self.assertEqual(
             device_api.request_body_limit(
-                '/api/v2/configuration/backups/preview?source=management',
+                '/api/v3/configuration/backups/preview?source=management',
                 configured,
             ),
             384 * 1024,
         )
         self.assertEqual(
             device_api.request_body_limit(
-                '/api/v2/configuration/profile', configured
+                '/api/v3/configuration/profile', configured
             ),
             configured,
         )
@@ -295,21 +422,21 @@ class DeviceAPITests(unittest.TestCase):
         )
         self.registry.enrol(self.cert, 'fleet manager', ('configuration:write',))
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/certificates/mqtt-ca',
+            'POST', '/api/v3/configuration/certificates/mqtt-ca',
             b'certificate-bytes', self.cert,
         )
         self.assertEqual(status, 202)
         self.assertEqual(staged, [('mqtt-ca', b'certificate-bytes')])
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/certificates/apply', b'{}', self.cert,
+            'POST', '/api/v3/configuration/certificates/apply', b'{}', self.cert,
         )
         self.assertTrue(payload['certificates']['restart'])
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/network/confirm', b'{}', self.cert,
+            'POST', '/api/v3/configuration/network/confirm', b'{}', self.cert,
         )
         self.assertTrue(payload['confirmed'])
         status, payload = api.dispatch(
-            'POST', '/api/v2/configuration/restart', b'{}', self.cert,
+            'POST', '/api/v3/configuration/restart', b'{}', self.cert,
         )
         self.assertEqual(status, 202)
         self.assertEqual(restarted, [True])
@@ -341,18 +468,18 @@ class DeviceAPITests(unittest.TestCase):
             'read', 'qualification:write', 'qualification:execute'
         ))
         status, payload = api.dispatch(
-            'GET', '/api/v2/qualification', b'', self.cert
+            'GET', '/api/v3/qualification', b'', self.cert
         )
         self.assertEqual(status, 200)
         self.assertEqual(payload['qualification']['summary'], 'In progress')
         status, payload = api.dispatch(
-            'POST', '/api/v2/qualification/events',
+            'POST', '/api/v3/qualification/events',
             b'{"gate":"watchdog-recovery"}', self.cert
         )
         self.assertEqual(status, 202)
         self.assertEqual(events[0][1], 'HIL rig')
         status, payload = api.dispatch(
-            'POST', '/api/v2/qualification/scenarios/watchdog-recovery',
+            'POST', '/api/v3/qualification/scenarios/watchdog-recovery',
             b'{"run_id":"hil-1"}', self.cert
         )
         self.assertEqual(status, 202)
@@ -362,7 +489,7 @@ class DeviceAPITests(unittest.TestCase):
         self.registry.enrol(self.cert, 'controller', ('read', 'write'))
         with self.assertRaisesRegex(PermissionError, 'qualification:write'):
             self.api.dispatch(
-                'POST', '/api/v2/qualification/events', b'{}', self.cert
+                'POST', '/api/v3/qualification/events', b'{}', self.cert
             )
 
     def test_connection_and_commands_are_audit_but_requests_are_debug(self):
@@ -375,9 +502,9 @@ class DeviceAPITests(unittest.TestCase):
         self.registry.enrol(self.cert, 'controller', ('read', 'write'))
 
         api.connection_opened(self.cert, '192.0.2.10')
-        api.dispatch('GET', '/api/v2/modules', b'', self.cert)
+        api.dispatch('GET', '/api/v3/modules', b'', self.cert)
         api.dispatch(
-            'POST', '/api/v2/modules/0001/commands',
+            'POST', '/api/v3/modules/0001/commands',
             b'{"request_id":"audit-1","operation":"write"}', self.cert
         )
 
@@ -392,20 +519,20 @@ class DeviceAPITests(unittest.TestCase):
 
     def test_unenrolled_certificate_is_rejected(self):
         with self.assertRaisesRegex(PermissionError, 'not enrolled'):
-            self.api.dispatch('GET', '/api/v2/device/inventory', b'', self.cert)
+            self.api.dispatch('GET', '/api/v3/device/inventory', b'', self.cert)
 
     def test_revoked_certificate_is_rejected(self):
         record = self.registry.enrol(self.cert, 'reader', ('read',))
         self.assertTrue(self.registry.revoke(record['fingerprint']))
         with self.assertRaises(PermissionError):
-            self.api.dispatch('GET', '/api/v2/device/inventory', b'', self.cert)
+            self.api.dispatch('GET', '/api/v3/device/inventory', b'', self.cert)
 
     def test_cached_connection_identity_honours_immediate_revocation(self):
         record = self.registry.enrol(self.cert, 'reader', ('read',))
         client = self.api.connection_opened(self.cert)
 
         status, _payload = self.api.dispatch(
-            'GET', '/api/v2/device/inventory', b'', self.cert,
+            'GET', '/api/v3/device/inventory', b'', self.cert,
             authenticated_client=client
         )
         self.assertEqual(status, 200)
@@ -413,7 +540,7 @@ class DeviceAPITests(unittest.TestCase):
         self.assertTrue(self.registry.revoke(record['fingerprint']))
         with self.assertRaises(PermissionError):
             self.api.dispatch(
-                'GET', '/api/v2/device/inventory', b'', self.cert,
+                'GET', '/api/v3/device/inventory', b'', self.cert,
                 authenticated_client=client
             )
 
@@ -505,7 +632,7 @@ class DeviceAPITests(unittest.TestCase):
         self.registry.enrol(self.cert, 'reader', ('read',))
 
         status, payload = self.api.dispatch(
-            'GET', '/api/v2/modules/ffff/state', b'', self.cert
+            'GET', '/api/v3/modules/ffff/state', b'', self.cert
         )
 
         self.assertEqual(status, 404)
@@ -543,7 +670,7 @@ class DeviceAPITests(unittest.TestCase):
             def __init__(stream_self):
                 stream_self.s = TLSStream()
                 stream_self.data = (
-                    b'GET /api/v2/modules HTTP/1.1\r\n'
+                    b'GET /api/v3/modules HTTP/1.1\r\n'
                     b'Connection: close\r\n\r\n'
                 )
 
@@ -647,6 +774,7 @@ class DeviceAPITests(unittest.TestCase):
             self.broker, self.health, self.registry,
             lambda: {'device_name': 'test'},
             qualification_event=reject_event,
+            operations=self.operations,
         )
         self.registry.enrol(
             self.cert, 'HIL rig', ('qualification:write',)
@@ -665,9 +793,10 @@ class DeviceAPITests(unittest.TestCase):
                 stream_self.s = TLSStream()
                 stream_self.records = [
                     bytearray(
-                        b'POST /api/v2/qualification/events HTTP/1.1\r\n'
+                        b'POST /api/v3/qualification/events HTTP/1.1\r\n'
                         b'Content-Type: application/json\r\n'
                         b'Content-Length: 2\r\n'
+                        b'Idempotency-Key: 1.0123456789abcdef\r\n'
                         b'Connection: close\r\n\r\n'
                     ),
                     bytearray(b'{}'),
@@ -731,7 +860,7 @@ class DeviceAPITests(unittest.TestCase):
 
         asyncio.run(exercise())
 
-    def test_v2_inventory_events_and_support_endpoints(self):
+    def test_v3_inventory_events_and_support_endpoints(self):
         self.registry.enrol(self.cert, 'dashboard', ('read',))
         self.health.record_event('boot_complete', component='startup')
         self.api.support_getter = lambda: {
@@ -739,20 +868,20 @@ class DeviceAPITests(unittest.TestCase):
         }
 
         status, inventory = self.api.dispatch(
-            'GET', '/api/v2/device/inventory', b'', self.cert
+            'GET', '/api/v3/device/inventory', b'', self.cert
         )
         self.assertEqual(status, 200)
-        self.assertEqual(inventory['api_version'], 2)
+        self.assertEqual(inventory['api_version'], 3)
         self.assertEqual(inventory['modules'][0]['uuid'], '0001')
 
         status, events = self.api.dispatch(
-            'GET', '/api/v2/events?cursor=0&limit=1', b'', self.cert
+            'GET', '/api/v3/events?cursor=0&limit=1', b'', self.cert
         )
         self.assertEqual(status, 200)
         self.assertEqual(len(events['events']), 1)
 
         status, support = self.api.dispatch(
-            'GET', '/api/v2/support', b'', self.cert
+            'GET', '/api/v3/support', b'', self.cert
         )
         self.assertEqual(status, 200)
         self.assertEqual(support['redaction'], 'verified')
@@ -772,7 +901,7 @@ class DeviceAPITests(unittest.TestCase):
         self.api.configuration_getter = lambda: {'release_channel': 'beta'}
 
         response = self.api.handle(APIRequest(
-            'GET', '/api/v2/device', identity=self.cert, transport='usb-ncm'
+            'GET', '/api/v3/device', identity=self.cert, transport='usb-ncm'
         ))
         self.assertIsInstance(response, APIResponse)
         self.assertEqual(response.status, 200)
@@ -780,10 +909,10 @@ class DeviceAPITests(unittest.TestCase):
         self.assertNotIn('resources', response.payload['device'])
 
         expected = {
-            '/api/v2/interfaces': 'interfaces',
-            '/api/v2/hardware': 'hardware',
-            '/api/v2/services': 'services',
-            '/api/v2/configuration': 'configuration',
+            '/api/v3/interfaces': 'interfaces',
+            '/api/v3/hardware': 'hardware',
+            '/api/v3/services': 'services',
+            '/api/v3/configuration': 'configuration',
         }
         for path, key in expected.items():
             status, payload = self.api.dispatch('GET', path, b'', self.cert)
@@ -807,7 +936,7 @@ class DeviceAPITests(unittest.TestCase):
             lambda: {'device_name': 'test'}, fleet=Fleet()
         )
         status, result = api.dispatch(
-            'POST', '/api/v2/fleet/commands/command-7/result',
+            'POST', '/api/v3/fleet/commands/command-7/result',
             b'{"result":"complete"}', self.cert
         )
         self.assertEqual(status, 200)

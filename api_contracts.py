@@ -5,7 +5,7 @@ class APIRequest:
     """A protocol request independent of HTTP, Wi-Fi, Ethernet, or USB."""
 
     def __init__(self, method, path, body=b'', identity=None, client=None,
-                 transport='unknown', peer='unknown'):
+                 transport='unknown', peer='unknown', headers=None):
         self.method = str(method).upper()
         self.path = str(path)
         self.body = body if body is not None else b''
@@ -13,6 +13,7 @@ class APIRequest:
         self.client = client
         self.transport = str(transport)
         self.peer = str(peer)
+        self.headers = {str(key).lower(): str(value) for key, value in (headers or {}).items()}
 
 
 class APIResponse:

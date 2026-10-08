@@ -158,7 +158,7 @@ def _parser():
     validation.add_argument('--gate', choices=(
         'native-recovery', 'watchdog-recovery',
         'identity-interoperability', 'fleet-interoperability',
-        'migration-rollback', 'driver-hardware',
+        'driver-hardware',
     ), required=True)
     validation.add_argument(
         '--outcome', choices=('success', 'failure'), required=True

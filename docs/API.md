@@ -1,15 +1,25 @@
-# Device API v2
+# Device API v3
 
 The Device API is a JSON HTTPS interface for inventory, state, diagnostics,
 commands, events, support data and fleet coordination. It listens on port 8444
 by default and always requires mutual TLS. The machine-readable contract is
 [`openapi.yaml`](openapi.yaml).
 
-From v2.5 the router consumes transport-neutral `APIRequest` objects and returns
-`APIResponse` objects. HTTPS/mTLS remains the supported external adapter; this
-internal separation does not create an unauthenticated API. A listener bound to
-`0.0.0.0` can serve any policy-enabled lwIP interface, including experimental
-USB NCM, using the same certificate registry and scopes.
+Alpha 108 replaces API v2 outright. Only `/api/v3` is supported; authenticated
+v2 requests return HTTP 410 with `unsupported_api_version`. There are no aliases
+or fallback. Upgrade devices locally, then install Management 3.0.0. Existing
+configuration and Management records are retained; no fresh install is needed.
+
+The router consumes transport-neutral `APIRequest` objects and returns
+`APIResponse` objects. HTTPS/mTLS is the supported external adapter. USB serial
+recovery remains independent; USB networking is no longer a requirement.
+
+`GET /api/v3` requires the enrolled client's `read` scope and advertises the
+protocol, enabled services and actual body/connection limits. Every HTTP JSON
+response includes `api_version: 3`. Errors contain `error.code`, `error.message`
+and `error.retryable`. Do not infer mutation success from a timeout or retry an
+ambiguous write. Durable reservations suppress duplicate mutations, while
+interrupted outcomes require reconciliation; see the operation contract below.
 
 Its server certificate is stored independently from the web portal identity
 and is expected to chain to the private IoT CA. A public portal renewal never
@@ -44,6 +54,42 @@ configuration-profile changes require `configuration:write`, and disruptive
 scenarios require `qualification:execute`. Revocation is checked for every request,
 including requests on reused TLS connections.
 
+## Durable mutations and operations
+
+Every POST requires `Idempotency-Key: sequence.hex_nonce`. Obtain the next
+sequence from authenticated `GET /api/v3`; choose a fresh 16–32 digit lowercase
+hex nonce. Send mutations sequentially for each device/client certificate.
+Management allocates sequences and records request keys durably before sending.
+Discovery advertises storage limits and `persistent_idempotency`; if encrypted
+storage is unavailable, reads work but writes fail closed with 503.
+
+The encrypted-NVS reservation and watermark are committed before any side
+effect. The same certificate/key/method/path/body replays its retained result;
+changed content returns 409. Even after result eviction, a consumed sequence
+cannot execute again. Use the exact original request bytes when reconciling.
+Duplicate `Idempotency-Key` HTTP headers are rejected.
+
+Successful writes include an `operation` with ID, request key, state and
+`completion_scope`. `request` completion means the callback returned (for example
+settings were saved or restart was scheduled), **not** that a deployment or
+network trial succeeded. Fleet/update telemetry remains authoritative for those
+workflows. `module_command` completion follows the broker's device result.
+
+`GET /api/v3/operations`, `/operations/{id}` and `/operations/{id}/result` expose
+only this certificate's retained operations and require read scope. At most six
+operations and 16 client watermarks are retained; results are bounded to 384 KiB
+each and 768 KiB total on encrypted flash. Terminal results may be evicted to
+maintain those bounds, but client watermarks are never automatically discarded.
+Progress samples do not trigger flash writes. Clean recovery erases user state
+and starts a new provisioning identity boundary; it is not a retry mechanism.
+
+A queued/running operation at restart becomes `interrupted`: its effect may or
+may not have happened, so reconcile current state. The device never reconstructs
+or repeats its command from the journal, and Management never auto-retries an
+ambiguous write. The journal does not store request bodies, passwords or keys.
+This guarantees duplicate suppression, not exactly-once physical effects across
+a power failure. Private results retain mTLS, scope and revocation checks.
+
 An administrator can expand or reduce an existing caller's permissions under
 **Maintenance > Certificates > API client trust**.
 Open **Edit API scopes**, select one or more permissions, and save. The registry
@@ -58,33 +104,45 @@ handshake is substantially more expensive than a JSON request on ESP32-S3.
 
 | Method | Path | Scope | Result |
 | --- | --- | --- | --- |
-| GET | `/api/v2/device` | `read` | Identity, versions, uptime, release sequences and bounded release-qualification state |
-| GET | `/api/v2/interfaces` | `read` | Wi-Fi, MQTT, API, syslog and USB NCM state |
-| GET | `/api/v2/hardware` | `read` | Board, runtime capability, USB/NCM gates, drivers and resource bindings |
-| GET | `/api/v2/services` | `read` | Lifecycle, boot and effective feature-flag state |
-| GET | `/api/v2/configuration` | `read` | Bounded non-secret operating configuration |
-| POST | `/api/v2/configuration/profile` | `configuration:write` | Validate and apply a bounded non-secret settings profile; restart required |
-| GET | `/api/v2/device/inventory` | `read` | Compatibility combined device, module and fleet inventory |
-| GET | `/api/v2/health` | `read` | Bounded health counters and observations |
-| GET | `/api/v2/events?cursor=0&limit=32` | `read` | Cursor-based event page |
-| GET | `/api/v2/support` | `read` | Redacted support snapshot |
-| GET | `/api/v2/modules` | `read` | Module catalog and capabilities |
-| GET | `/api/v2/modules/{uuid}/state` | `read` | Current transport-neutral state |
-| GET | `/api/v2/modules/{uuid}/diagnostics` | `read` | Driver diagnostics |
-| POST | `/api/v2/modules/{uuid}/commands` | `write` | Queued operation (`202`) |
-| GET | `/api/v2/operations/{id}` | `read` | Operation status |
-| GET | `/api/v2/fleet` | `fleet:read` | Fleet enrollment and policy state |
-| POST | `/api/v2/fleet/policy` | `fleet:write` | Apply a monotonic signed policy |
-| POST | `/api/v2/fleet/commands/{id}/result` | `fleet:write` | Complete a fleet command |
-| GET | `/api/v2/qualification` | `read` | Full on-device qualification status and evidence |
-| POST | `/api/v2/qualification/events` | `qualification:write` | Append one observed controlled-test outcome |
-| POST | `/api/v2/qualification/scenarios/{name}` | `qualification:execute` | Start an allowlisted disruptive Alpha-only test |
+| GET | `/api/v3` | `read` | Protocol, capability and limit discovery |
+| GET | `/api/v3/device` | `read` | Identity, versions, uptime, release sequences and bounded release-qualification state |
+| GET | `/api/v3/interfaces` | `read` | Wi-Fi, MQTT, API, syslog and USB NCM state |
+| GET | `/api/v3/hardware` | `read` | Board, runtime capability, USB/NCM gates, drivers and resource bindings |
+| GET | `/api/v3/services` | `read` | Lifecycle, boot and effective feature-flag state |
+| GET | `/api/v3/configuration` | `read` | Bounded non-secret operating configuration |
+| POST | `/api/v3/configuration/profile` | `configuration:write` | Validate and apply selected settings and protected secrets; reports restart/trial requirements |
+| POST | `/api/v3/configuration/backups` | `configuration:write` | Create an encrypted complete backup |
+| POST | `/api/v3/configuration/backups/preview` | `configuration:write` | Validate and preview a bounded encrypted restore |
+| POST | `/api/v3/configuration/backups/apply` | `configuration:write` | Apply the previously previewed restore token |
+| POST | `/api/v3/configuration/certificates/{kind}` | `configuration:write` | Stage an allowlisted certificate/key file |
+| POST | `/api/v3/configuration/certificates/apply` | `configuration:write` | Validate and apply staged certificates |
+| POST | `/api/v3/configuration/network/confirm` | `configuration:write` | Confirm a ready network rollback trial |
+| POST | `/api/v3/configuration/restart` | `configuration:write` | Request configuration restart |
+| GET | `/api/v3/device/inventory` | `read` | Combined device, module and fleet inventory |
+| GET | `/api/v3/health` | `read` | Bounded health counters and observations |
+| GET | `/api/v3/events?cursor=0&limit=32` | `read` | Cursor-based event page |
+| GET | `/api/v3/support` | `read` | Redacted support snapshot |
+| GET | `/api/v3/modules` | `read` | Module catalog and capabilities |
+| GET | `/api/v3/modules/{uuid}/state` | `read` | Current transport-neutral state |
+| GET | `/api/v3/modules/{uuid}/diagnostics` | `read` | Driver diagnostics |
+| POST | `/api/v3/modules/{uuid}/commands` | `write` | Queued operation (`202`) |
+| GET | `/api/v3/operations/{id}` | `read` | Operation status |
+| GET | `/api/v3/operations` | `read` | This client's bounded retained operations |
+| GET | `/api/v3/operations/{id}/result` | `read` | This client's last durable operation result |
+| GET | `/api/v3/fleet` | `fleet:read` | Fleet enrollment and policy state |
+| POST | `/api/v3/fleet/policy` | `fleet:write` | Apply a monotonic signed policy |
+| POST | `/api/v3/fleet/commands/{id}/result` | `fleet:write` | Complete a fleet command |
+| GET | `/api/v3/qualification` | `read` | Full on-device qualification status and evidence |
+| POST | `/api/v3/qualification/events` | `qualification:write` | Append one observed controlled-test outcome |
+| POST | `/api/v3/qualification/scenarios/{name}` | `qualification:execute` | Start an allowlisted disruptive Alpha-only test |
 
 Configuration profiles may contain standard operational settings such as time,
-logging, Home Assistant discovery, MQTT routing and remote syslog. Passwords,
-certificates, API trust, device identity and network addressing are rejected.
-The profile is validated before its settings are stored, application is audited,
-and the response explicitly reports that a restart is required.
+logging, Home Assistant discovery, MQTT routing, Wi-Fi and remote syslog.
+Allowlisted Wi-Fi/MQTT passwords use the separate protected `secrets` object;
+certificate/key files use the staged certificate endpoints. Configuration reads
+never expose these values. The profile is validated before storage, application
+is audited, and the result reports whether a restart or network rollback trial
+is required. Description-only edits do not require a restart.
 
 Qualification event submissions require a controlled gate, `success` or
 `failure`, a bounded run ID and explicit confirmation. They append an observation;
@@ -96,7 +154,9 @@ the resulting evidence.
 UUIDs are the configured four-digit hexadecimal module IDs. State keys and
 command bodies are driver-specific and are documented in the
 [module guide](modules/README.md). A command returns an operation record
-immediately; poll its URL until `status` is `complete` or `failed`.
+immediately; poll its URL until `status` is `complete` or `failed`. A restart
+before a durable outcome is recorded reports `interrupted`; reconcile device
+state rather than submitting the command again.
 
 ## Example
 
@@ -107,7 +167,7 @@ curl --fail-with-body \
   --cacert home-iot-ca-bundle.pem \
   --cert api-client.pem \
   --key api-client-key.pem \
-  https://iot-md-001.local:8444/api/v2/modules/00A1/state
+  https://iot-md-001.local:8444/api/v3/modules/00A1/state
 ```
 
 ```json
@@ -117,7 +177,8 @@ curl --fail-with-body \
 Routine GETs increment aggregate counters but are logged only at debug level;
 mutating calls create health and audit records. Responses are `no-store` JSON.
 Typical failures are `400` malformed input, `401` missing/invalid identity,
-`403` insufficient scope, `404` unknown endpoint/module/operation, `413`
+`403` insufficient scope, `404` unknown endpoint/module/operation, `409`
+idempotency conflict or uncertain outcome, `413`
 oversized input and `503` temporarily unavailable service.
 
 New clients should request only the smaller projection they need. The combined

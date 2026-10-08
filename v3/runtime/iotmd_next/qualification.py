@@ -8,7 +8,7 @@ except ImportError:
 from .storage import StorageContractError
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 STATE_VERSION = 3
 CAMPAIGN_STATE_VERSION = 1
 MAX_COUNTER = 1000000
@@ -20,15 +20,16 @@ GATE_NAMES = (
     'paired-updates', 'power-recovery', 'canary-health',
     'release-confirmation', 'native-recovery', 'watchdog-recovery',
     'identity-interoperability', 'fleet-interoperability',
-    'migration-rollback', 'driver-hardware',
+    'driver-hardware',
 )
+# Persisted evidence is historical data, not a supported API/protocol fallback.
+HISTORICAL_GATE_NAMES = GATE_NAMES + ('migration-rollback',)
 
 VALIDATION_COUNTERS = {
     'native-recovery': 'native_recoveries',
     'watchdog-recovery': 'watchdog_recoveries',
     'identity-interoperability': 'identity_transactions',
     'fleet-interoperability': 'fleet_transactions',
-    'migration-rollback': 'migration_rollbacks',
     'driver-hardware': 'driver_checks',
 }
 
@@ -75,7 +76,7 @@ def validate_profile(value):
         'required_update_confirmations', 'required_power_recoveries',
         'required_native_recoveries', 'required_watchdog_recoveries',
         'required_identity_transactions', 'required_fleet_transactions',
-        'required_migration_rollbacks', 'required_driver_checks',
+        'required_driver_checks',
     }
     if not isinstance(value, dict) or set(value) != required:
         raise QualificationError('qualification profile has invalid fields')
@@ -103,7 +104,7 @@ def validate_profile(value):
         'required_update_confirmations', 'required_power_recoveries',
         'required_native_recoveries', 'required_watchdog_recoveries',
         'required_identity_transactions', 'required_fleet_transactions',
-        'required_migration_rollbacks', 'required_driver_checks',
+        'required_driver_checks',
     ):
         _integer(result[key], key.replace('_', ' '), 1, 1000)
     return result
@@ -127,7 +128,6 @@ def beta_profile():
         'required_watchdog_recoveries': 3,
         'required_identity_transactions': 1,
         'required_fleet_transactions': 1,
-        'required_migration_rollbacks': 1,
         'required_driver_checks': 13,
     }
 
@@ -222,9 +222,9 @@ def _validate_history(value):
             raise QualificationError('qualification history result is invalid')
         for key in ('passed_gates', 'failed_gates'):
             gates = item[key]
-            if (not isinstance(gates, list) or len(gates) > len(GATE_NAMES) or
+            if (not isinstance(gates, list) or len(gates) > len(HISTORICAL_GATE_NAMES) or
                     len(set(gates)) != len(gates) or
-                    any(name not in GATE_NAMES for name in gates)):
+                    any(name not in HISTORICAL_GATE_NAMES for name in gates)):
                 raise QualificationError('qualification history gates are invalid')
 
 
@@ -253,7 +253,7 @@ def _decode_history(payload):
                 'gate', 'time', 'actor', 'reason', 'release_version',
                 'release_sequence', 'observed', 'required', 'detail'}:
             raise QualificationError('qualification retry record is invalid')
-        if retry['gate'] not in GATE_NAMES:
+        if retry['gate'] not in HISTORICAL_GATE_NAMES:
             raise QualificationError('qualification retry gate is invalid')
         for field in ('time', 'release_sequence', 'observed', 'required'):
             _integer(retry[field], 'qualification retry ' + field)
@@ -955,13 +955,12 @@ class OperationalQualification:
             'watchdog-recovery': 'required_watchdog_recoveries',
             'identity-interoperability': 'required_identity_transactions',
             'fleet-interoperability': 'required_fleet_transactions',
-            'migration-rollback': 'required_migration_rollbacks',
             'driver-hardware': 'required_driver_checks',
         }
         for name in (
             'native-recovery', 'watchdog-recovery',
             'identity-interoperability', 'fleet-interoperability',
-            'migration-rollback', 'driver-hardware',
+            'driver-hardware',
         ):
             prefix = VALIDATION_COUNTERS[name]
             attempts = counters[prefix + '_attempts']

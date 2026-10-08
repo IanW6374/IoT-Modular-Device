@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class KernelProvider:
-    ABI_VERSION = 6
+    ABI_VERSION = 7
 
     def __init__(self):
         self.resources = {}
@@ -310,7 +310,7 @@ class V3ApplicationKernelTests(unittest.TestCase):
         ).read_text())
         Draft202012Validator(schema).validate(snapshot)
         support = kernel.support_snapshot()
-        self.assertEqual(support['platform_abi'], 6)
+        self.assertEqual(support['platform_abi'], 7)
         self.assertNotIn('settings', json.dumps(support).lower())
 
 

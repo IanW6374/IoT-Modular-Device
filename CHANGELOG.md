@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.0.0-alpha.108 - 2026-10-08
+
+- Retire Device API v2. Serve only API v3 with authenticated capability/limit
+  discovery, versioned responses and structured errors. No route aliases or
+  protocol fallback. Requires Management 3.0.0; upgrade devices locally first.
+- Version qualification evidence to contract 2 with 14 active gates, retiring
+  migration rollback without deleting historical counters, outcomes or retries.
+  Untested native and operational gates remain unqualified.
+- Retire v2 backup migration, shadow cutover and USB networking requirements.
+  Preserve encrypted v3 backup/restore, serial recovery and signed update trials.
+- Advance runtime generation to 204 and require core API 15 / native ABI 7.
+  Shipped driver types use owner-bound native peripherals, with stale-handle
+  rejection, protected core pins, shared-bus validation and failed-setup cleanup.
+- Add encrypted-NVS mutation reservations, bounded encrypted-flash result
+  retention and certificate-scoped operation status. Duplicate writes cannot
+  repeat commands, restores or restarts; interrupted outcomes remain uncertain.
+  Management persists request sequences/keys and never retries ambiguous writes.
+- Host tests and a private native-core build do not establish hardware
+  qualification. Live driver, interruption and recovery acceptance remains due.
+
 ## 3.0.0-alpha.107 - 2026-10-08
 
 - Use scoped tone attributes for update activity markers so information dots

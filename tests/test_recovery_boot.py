@@ -225,7 +225,7 @@ class RecoveryBootTests(unittest.TestCase):
 
     def test_native_recovery_request_is_honoured_before_product_load(self):
         class Native:
-            ABI_VERSION = 6
+            ABI_VERSION = 7
             def recovery_boot_begin(self): return 1
             def recovery_snapshot(self):
                 return {'requested': True, 'reason': 'native watchdog loop'}
@@ -246,7 +246,7 @@ class RecoveryBootTests(unittest.TestCase):
 
     def test_native_failed_boot_threshold_requests_recovery(self):
         class Native:
-            ABI_VERSION = 6
+            ABI_VERSION = 7
             def __init__(self): self.reasons = []
             def recovery_boot_begin(self): return 3
             def recovery_snapshot(self): return {'requested': False}

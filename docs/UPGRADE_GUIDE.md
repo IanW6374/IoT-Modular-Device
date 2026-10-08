@@ -4,8 +4,15 @@
 
 All managed devices now use the V3 product runtime. Application bundles no
 longer ship the retired V2 transition, shadow, migration or cutover modules.
-The stable `/api/v2` path remains the Device API contract version and is not a
-reference to the removed product generation.
+Alpha 108 retires the old Device API protocol. Only `/api/v3` is supported;
+upgrade devices through their portal before installing Management 3.0.0.
+There is no v2 fallback and no fresh installation is required. Configuration,
+backup and qualification evidence are retained.
+
+Alpha 108 now requires core API 15 / native ABI 7 for managed drivers. Install
+the matched universal bundle rather than its application component alone on an
+older core. Management 3.0.0 sends persisted Device API v3 idempotency keys;
+devices without durable operation storage reject writes but retain read access.
 
 Use the release-specific qualification note, monotonically increasing release
 sequence and open hardware gates before installing an alpha. Historical V2 to
@@ -212,7 +219,7 @@ python3 v3/host/qualification_runner.py \
   --state .qualification/alpha32.state.json \
   --evidence .qualification/alpha32.evidence.json \
   --device-id iot-md-001 --version 3.0.0-alpha.61 --sequence 2766 monitor \
-  --url https://iot-md-001.local:8444/api/v2/device \
+  --url https://iot-md-001.local:8444/api/v3/device \
   --ca-file home-iot-ca.pem --cert-file client.pem --key-file client-key.pem \
   --health-path device.qualification_observation.health_state \
   --storage-path device.qualification_observation.storage_free_bytes \
@@ -225,7 +232,7 @@ tool exits 2 while any gate remains open or failed and 0 only when promotion is
 ready. A connection failure is recorded as network-down evidence only.
 
 Alpha 37 additionally accepts controlled observations through the administrator
-portal and `POST /api/v2/qualification/events`. Enrol a dedicated qualification
+portal and `POST /api/v3/qualification/events`. Enrol a dedicated qualification
 automation certificate rather than granting this authority to an ordinary API
 writer. Run the real watchdog HIL scenario and independently observe the reset:
 

@@ -4,6 +4,12 @@ Contracts are the compatibility boundary between the ESP-IDF platform and the
 MicroPython runtime. Every contract has an integer ABI version, fixed limits,
 explicit optional fields and fail-closed validation.
 
+The alpha descriptions below retain historical contracts. V2 migration,
+compatibility/shadow cutover and USB networking were retired on 2026-10-08;
+their archived schemas are not active release prerequisites. See the
+[current requirements](../../docs/V3_REQUIREMENTS.md) and
+[resource/API review](../../docs/V3_RESOURCE_API_REVIEW.md).
+
 The executable contracts currently describe platform capabilities, paired
 update state, runtime configuration, bounded kernel snapshots, unified
 connectivity diagnostics, identity metadata, fleet reports, migration plans,
@@ -84,8 +90,8 @@ Later qualification milestones must prove:
 
 - power-loss-safe paired ownership and rollback on hardware;
 - native recovery, job, resource and driver fault matrices;
-- transport, identity, fleet and migration interoperability; and
-- controlled active-v3 cutover with persistent compatibility fallback.
+- transport, identity and fleet interoperability; and
+- release-bound qualification of the single v3 runtime.
 
 Schema files document values for host tools and tests. The native module and
 MicroPython adapter will use generated/shared constants where practical rather

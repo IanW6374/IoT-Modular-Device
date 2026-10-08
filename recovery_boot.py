@@ -260,6 +260,26 @@ def _complete_factory_reset(app_update, certificate_manager, credential_store,
     if firmware_update.update_status().get('status') == 'ready':
         firmware_update.discard_pending_update()
     certificate_manager.clear_certificate_state()
+    try:
+        import esp32
+    except ImportError:
+        esp32 = None  # Host recovery tests have no encrypted NVS provider.
+    if esp32 is not None:
+        store = esp32.NVS('apiops')
+        for key in ('snapshot_a', 'snapshot_b'):
+            try:
+                store.erase_key(key)
+            except OSError as exc:
+                if exc.args[0] != 0x1102:  # ESP_ERR_NVS_NOT_FOUND
+                    raise
+        store.commit()
+    try:
+        for name in os.listdir('/api-operations'):
+            _remove_user_file('/api-operations/' + name)
+        os.rmdir('/api-operations')
+    except OSError as exc:
+        if exc.args[0] != 2:  # Only a genuinely absent directory is ignorable.
+            raise
     module_path = device_config.MODULE_SETTINGS_FILE
     for path in (
         module_path, module_path + '.previous', module_path + '.tmp',

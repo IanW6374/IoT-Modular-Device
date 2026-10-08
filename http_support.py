@@ -165,7 +165,7 @@ async def read_request(reader, timeout_s=REQUEST_TIMEOUT_SECONDS):
         name = name.strip().lower()
         if not name or any(character in name for character in ' \t\r\n'):
             raise ValueError('HTTP header name is invalid')
-        if name in headers and name in ('content-length', 'transfer-encoding', 'host'):
+        if name in headers and name in ('content-length', 'transfer-encoding', 'host', 'idempotency-key'):
             raise ValueError('duplicate security-sensitive HTTP header')
         headers[name] = value.strip()
     if headers.get('transfer-encoding'):

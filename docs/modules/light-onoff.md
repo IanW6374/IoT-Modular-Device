@@ -11,7 +11,7 @@ load.
 ## State and commands
 
 State is `{"state":"ON"}`. Send the same object to the configured MQTT command
-topic or `POST /api/v2/modules/{uuid}/commands`. The API returns an operation
+topic or `POST /api/v3/modules/{uuid}/commands`. The API returns an operation
 record; MQTT publishes the resulting state. Invalid state values are rejected.
 
 Home Assistant discovery creates a light entity only when its profile is

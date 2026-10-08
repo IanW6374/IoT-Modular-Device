@@ -3,7 +3,7 @@
 CONTROLLED_GATES = (
     'native-recovery', 'watchdog-recovery',
     'identity-interoperability', 'fleet-interoperability',
-    'migration-rollback', 'driver-hardware',
+    'driver-hardware',
 )
 
 AUTOMATED_SCENARIOS = ('watchdog-recovery', 'native-recovery')

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MemoryProvider:
-    ABI_VERSION = 6
+    ABI_VERSION = 7
 
     def __init__(self):
         self.namespaces = {}

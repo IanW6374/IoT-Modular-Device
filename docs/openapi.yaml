@@ -1,8 +1,11 @@
 openapi: 3.1.0
 info:
   title: IoT Modular Device API
-  version: 2.6.0
-  description: Mutual-TLS JSON API exposed by an IoT-MD device.
+  version: 3.0.0
+  description: >-
+    Mutual-TLS JSON API. Every POST requires Idempotency-Key in
+    sequence.hex_nonce form. Mutations are certificate-scoped, durably reserved
+    before side effects, and never automatically repeated after interruption.
 servers:
   - url: https://{device}:8444
     variables:
@@ -11,39 +14,46 @@ servers:
 security:
   - mutualTLS: []
 paths:
-  /api/v2/device:
+  /api/v3:
+    get:
+      summary: Discover the sole supported protocol, enabled capabilities and limits
+      responses:
+        '200': {description: API v3 discovery, content: {application/json: {schema: {$ref: '#/components/schemas/Discovery'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v3/device:
     get:
       summary: Bounded device identity and version projection
       responses:
         '200': {description: Device summary, content: {application/json: {schema: {$ref: '#/components/schemas/DeviceProjection'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/interfaces:
+  /api/v3/interfaces:
     get:
       summary: Network and messaging interface state
       responses:
         '200': {description: Interface state, content: {application/json: {schema: {$ref: '#/components/schemas/InterfaceProjection'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/hardware:
+  /api/v3/hardware:
     get:
       summary: Hardware capabilities, drivers and resource bindings
       responses:
         '200': {description: Hardware projection, content: {application/json: {schema: {$ref: '#/components/schemas/HardwareProjection'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/services:
+  /api/v3/services:
     get:
       summary: Runtime, boot and effective feature state
       responses:
         '200': {description: Service projection, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceProjection'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/configuration:
+  /api/v3/configuration:
     get:
       summary: Non-secret operating configuration
       responses:
         '200': {description: Safe configuration projection, content: {application/json: {schema: {$ref: '#/components/schemas/ConfigurationProjection'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/configuration/profile:
+  /api/v3/configuration/profile:
     post:
-      summary: Validate and apply a non-secret configuration profile
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      summary: Validate and apply selected configuration and protected secrets
       requestBody:
         required: true
         content:
@@ -53,38 +63,78 @@ paths:
         '202': {description: Profile accepted; device restart required}
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/configuration/backups:
+  /api/v3/configuration/backups:
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Create a complete password-encrypted device backup
       responses:
         '201': {description: Authenticated encrypted backup envelope}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/configuration/backups/preview:
+  /api/v3/configuration/backups/preview:
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Validate an encrypted backup and preview selected restore sections
       responses:
         '200': {description: Restore token and redacted change preview}
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/configuration/backups/apply:
+  /api/v3/configuration/backups/apply:
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Apply a previously previewed complete backup restore
       responses:
         '202': {description: Restore accepted; device restart required}
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/device/inventory:
+  /api/v3/device/inventory:
     get:
       summary: Device and module inventory
       responses:
         '200': {description: Inventory, content: {application/json: {schema: {$ref: '#/components/schemas/Inventory'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/health:
+  /api/v3/configuration/certificates/{kind}:
+    post:
+      summary: Stage an allowlisted certificate or key
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+        - {name: kind, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '202': {description: Certificate staged}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v3/configuration/certificates/apply:
+    post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      summary: Validate and apply staged certificates
+      responses:
+        '202': {description: Staged certificates applied}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v3/configuration/network/confirm:
+    post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      summary: Confirm a ready network trial
+      responses:
+        '200': {description: Network confirmation result}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v3/configuration/restart:
+    post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      summary: Request restart after configuration changes
+      responses:
+        '202': {description: Restart accepted}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v3/health:
     get:
       summary: Health history snapshot
       responses:
-        '200': {description: Health snapshot, content: {application/json: {schema: {type: object, required: [api_version, health], properties: {api_version: {const: 2}, health: {type: object, additionalProperties: true}}}}}}
-  /api/v2/events:
+        '200': {description: Health snapshot, content: {application/json: {schema: {type: object, required: [api_version, health], properties: {api_version: {const: 3}, health: {type: object, additionalProperties: true}}}}}}
+  /api/v3/events:
     get:
       summary: Read events after a cursor
       parameters:
@@ -92,34 +142,35 @@ paths:
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 256, default: 32}}
       responses:
         '200': {description: Event page, content: {application/json: {schema: {$ref: '#/components/schemas/EventPage'}}}}
-  /api/v2/support:
+  /api/v3/support:
     get:
       summary: Redacted support snapshot
       responses:
         '200': {description: Support data, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /api/v2/modules:
+  /api/v3/modules:
     get:
       summary: List modules
       responses:
-        '200': {description: Module catalog, content: {application/json: {schema: {type: object, required: [api_version, modules], properties: {api_version: {const: 2}, modules: {type: array, items: {$ref: '#/components/schemas/Module'}}}}}}}
-  /api/v2/modules/{uuid}/state:
+        '200': {description: Module catalog, content: {application/json: {schema: {type: object, required: [api_version, modules], properties: {api_version: {const: 3}, modules: {type: array, items: {$ref: '#/components/schemas/Module'}}}}}}}
+  /api/v3/modules/{uuid}/state:
     parameters: [{$ref: '#/components/parameters/ModuleUuid'}]
     get:
       summary: Current module state
       responses:
         '200': {description: State, content: {application/json: {schema: {$ref: '#/components/schemas/ModulePayload'}}}}
         '404': {$ref: '#/components/responses/NotFound'}
-  /api/v2/modules/{uuid}/diagnostics:
+  /api/v3/modules/{uuid}/diagnostics:
     parameters: [{$ref: '#/components/parameters/ModuleUuid'}]
     get:
       summary: Current module diagnostics
       responses:
         '200': {description: Diagnostics, content: {application/json: {schema: {$ref: '#/components/schemas/ModulePayload'}}}}
         '404': {$ref: '#/components/responses/NotFound'}
-  /api/v2/modules/{uuid}/commands:
+  /api/v3/modules/{uuid}/commands:
     parameters: [{$ref: '#/components/parameters/ModuleUuid'}]
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Submit a driver command
       requestBody:
         required: true
@@ -128,7 +179,7 @@ paths:
         '202': {description: Accepted operation, content: {application/json: {schema: {$ref: '#/components/schemas/Operation'}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
-  /api/v2/operations/{id}:
+  /api/v3/operations/{id}:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
     get:
@@ -136,14 +187,32 @@ paths:
       responses:
         '200': {description: Operation, content: {application/json: {schema: {$ref: '#/components/schemas/Operation'}}}}
         '404': {$ref: '#/components/responses/NotFound'}
-  /api/v2/fleet:
+  /api/v3/operations:
+    get:
+      summary: List this certificate's retained operations
+      responses:
+        '200': {description: Bounded operation list}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v3/operations/{id}/result:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, pattern: '^[0-9a-f]{24}$'}}
+    get:
+      summary: Read this certificate's last durable result without repeating a mutation
+      responses:
+        '200': {description: Durable result; request acceptance is not workflow completion}
+        '201': {description: Durable backup result}
+        '202': {description: Retained acceptance result}
+        '409': {description: Outcome still pending or uncertain after interruption}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v3/fleet:
     get:
       summary: Fleet state
       responses:
         '200': {description: Fleet state, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /api/v2/fleet/policy:
+  /api/v3/fleet/policy:
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Apply fleet policy
       requestBody:
         required: true
@@ -151,10 +220,11 @@ paths:
       responses:
         '202': {description: Policy accepted, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
-  /api/v2/fleet/commands/{id}/result:
+  /api/v3/fleet/commands/{id}/result:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Complete a fleet command
       requestBody:
         required: true
@@ -167,15 +237,16 @@ paths:
                 detail: {type: string}
       responses:
         '200': {description: Updated command, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
-  /api/v2/qualification:
+  /api/v3/qualification:
     get:
       summary: Read complete qualification status
       responses:
-        '200': {description: Qualification status, content: {application/json: {schema: {type: object, required: [api_version, qualification], properties: {api_version: {const: 2}, qualification: {type: object, additionalProperties: true}}}}}}
+        '200': {description: Qualification status, content: {application/json: {schema: {type: object, required: [api_version, qualification], properties: {api_version: {const: 3}, qualification: {type: object, additionalProperties: true}}}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /api/v2/qualification/events:
+  /api/v3/qualification/events:
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Append an observed controlled qualification result
       requestBody:
         required: true
@@ -184,10 +255,11 @@ paths:
         '202': {description: Evidence accepted, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v2/qualification/scenarios/{name}:
+  /api/v3/qualification/scenarios/{name}:
     parameters:
       - {name: name, in: path, required: true, schema: {enum: [watchdog-recovery, native-recovery]}}
     post:
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
       summary: Start an allowlisted disruptive Alpha qualification scenario
       requestBody:
         required: true
@@ -201,36 +273,37 @@ components:
     mutualTLS: {type: mutualTLS, description: Enrolled client certificate and scope registry}
   parameters:
     ModuleUuid: {name: uuid, in: path, required: true, schema: {type: string, pattern: '^[0-9A-Fa-f]{4}$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, description: 'Monotonic sequence plus fresh lowercase hex nonce; serialize writes', schema: {type: string, pattern: '^[1-9][0-9]{0,15}\.[0-9a-f]{16,32}$'}}
   schemas:
     DeviceProjection:
       type: object
       required: [api_version, device]
       properties:
-        api_version: {const: 2}
+        api_version: {const: 3}
         device: {type: object, additionalProperties: true}
     InterfaceProjection:
       type: object
       required: [api_version, interfaces]
       properties:
-        api_version: {const: 2}
+        api_version: {const: 3}
         interfaces: {type: object, additionalProperties: true}
     HardwareProjection:
       type: object
       required: [api_version, hardware]
       properties:
-        api_version: {const: 2}
+        api_version: {const: 3}
         hardware: {type: object, additionalProperties: true}
     ServiceProjection:
       type: object
       required: [api_version, services]
       properties:
-        api_version: {const: 2}
+        api_version: {const: 3}
         services: {type: object, additionalProperties: true}
     ConfigurationProjection:
       type: object
       required: [api_version, configuration]
       properties:
-        api_version: {const: 2}
+        api_version: {const: 3}
         configuration: {type: object, additionalProperties: true}
     ConfigurationProfile:
       type: object
@@ -240,12 +313,18 @@ components:
         format_version: {const: 1}
         name: {type: string, minLength: 1, maxLength: 64}
         description: {type: string, maxLength: 256}
-        settings: {type: object, minProperties: 1, additionalProperties: true}
+        settings: {type: object, additionalProperties: true}
+        secrets:
+          type: object
+          additionalProperties: false
+          properties:
+            wifi_password: {type: string, maxLength: 64, writeOnly: true}
+            mqtt_password: {type: string, maxLength: 256, writeOnly: true}
     Inventory:
       type: object
       required: [api_version, device, modules]
       properties:
-        api_version: {const: 2}
+        api_version: {const: 3}
         device: {type: object, additionalProperties: true}
         modules: {type: array, items: {$ref: '#/components/schemas/Module'}}
         fleet: {oneOf: [{type: object, additionalProperties: true}, {type: 'null'}]}
@@ -270,7 +349,10 @@ components:
       additionalProperties: true
       properties:
         id: {type: string}
-        status: {enum: [pending, running, complete, failed]}
+        status: {enum: [queued, running, processing, complete, failed, interrupted]}
+        request_key: {type: string}
+        completion_scope: {enum: [request, module_command]}
+        retryable: {const: false}
         result: {}
         error: {type: string}
     QualificationEvent:
@@ -278,7 +360,7 @@ components:
       additionalProperties: false
       required: [gate, outcome, run_id, confirm]
       properties:
-        gate: {enum: [native-recovery, watchdog-recovery, identity-interoperability, fleet-interoperability, migration-rollback, driver-hardware]}
+        gate: {enum: [native-recovery, watchdog-recovery, identity-interoperability, fleet-interoperability, driver-hardware]}
         outcome: {enum: [success, failure]}
         run_id: {type: string, minLength: 1, maxLength: 64}
         notes: {type: string, maxLength: 160}
@@ -300,8 +382,30 @@ components:
         events: {type: array, items: {type: object, additionalProperties: true}}
     Error:
       type: object
-      required: [error]
-      properties: {error: {type: string}}
+      required: [api_version, error]
+      properties:
+        api_version: {const: 3}
+        error:
+          type: object
+          required: [code, message, retryable]
+          properties:
+            code: {type: string}
+            message: {type: string, maxLength: 256}
+            retryable: {const: false}
+    Discovery:
+      type: object
+      required: [api_version, capabilities, limits]
+      properties:
+        api_version: {const: 3}
+        capabilities:
+          type: object
+          additionalProperties: {type: boolean}
+          properties:
+            persistent_idempotency: {type: boolean}
+        next_request_sequence: {type: [integer, 'null'], minimum: 1}
+        limits:
+          type: object
+          additionalProperties: {type: integer, minimum: 1}
   responses:
     BadRequest: {description: Invalid request, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     Forbidden: {description: Client lacks the required scope, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}

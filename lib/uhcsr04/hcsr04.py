@@ -14,7 +14,8 @@ class HCSR04:
 
     """
     # echo_timeout_us is based in chip range limit (400cm)
-    def __init__(self, trigger_pin, echo_pin, echo_timeout_us=500*2*30):
+    def __init__(self, trigger_pin, echo_pin, echo_timeout_us=500*2*30,
+                 trigger=None, echo=None, pulse_reader=None):
         """
         trigger_pin: Output pin to send pulses
         echo_pin: Readonly pin to measure the distance. The pin should be protected with 1k resistor
@@ -23,11 +24,12 @@ class HCSR04:
         """
         self.echo_timeout_us = echo_timeout_us
         # Init trigger pin (out)
-        self.trigger = Pin(trigger_pin, mode=Pin.OUT, pull=None)
+        self.trigger = trigger if trigger is not None else Pin(trigger_pin, mode=Pin.OUT, pull=None)
         self.trigger.value(0)
 
         # Init echo pin (in)
-        self.echo = Pin(echo_pin, mode=Pin.IN, pull=None)
+        self.echo = echo if echo is not None else Pin(echo_pin, mode=Pin.IN, pull=None)
+        self.pulse_reader = pulse_reader
 
     def _send_pulse_and_wait(self):
         """
@@ -41,11 +43,12 @@ class HCSR04:
         sleep_us(10)
         self.trigger.value(0)
         try:
-            pulse_time = time_pulse_us(self.echo, 1, self.echo_timeout_us)
+            pulse_time = (self.pulse_reader(1, self.echo_timeout_us) if self.pulse_reader
+                          else time_pulse_us(self.echo, 1, self.echo_timeout_us))
             # time_pulse_us returns -2 if there was timeout waiting for condition; and -1 if there was timeout during the main measurement. It DOES NOT raise an exception
             # ...as of MicroPython 1.17: http://docs.micropython.org/en/v1.17/library/machine.html#machine.time_pulse_us
             if pulse_time < 0:
-                MAX_RANGE_IN_CM = const(500) # it's really ~400 but I've read people say they see it working up to ~460
+                MAX_RANGE_IN_CM = 500 # bounded fallback for an out-of-range echo
                 pulse_time = int(MAX_RANGE_IN_CM * 29.1) # 1cm each 29.1us
             return pulse_time
         except OSError as ex:

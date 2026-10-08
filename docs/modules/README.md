@@ -11,10 +11,10 @@ committed.
 
 Each module has one transport-neutral state object. It is published to the
 administrator-defined MQTT state topic and returned by
-`GET /api/v2/modules/{uuid}/state`. Writable drivers accept the same JSON command
+`GET /api/v3/modules/{uuid}/state`. Writable drivers accept the same JSON command
 body through the configured MQTT command topic or
-`POST /api/v2/modules/{uuid}/commands`. Diagnostics are available in the portal
-and at `/api/v2/modules/{uuid}/diagnostics`. See the
+`POST /api/v3/modules/{uuid}/commands`. Diagnostics are available in the portal
+and at `/api/v3/modules/{uuid}/diagnostics`. See the
 [messaging](../MESSAGING.md) and [API](../API.md) guides.
 
 Home Assistant discovery is optional. Enabling it adds an HA presentation for
@@ -46,7 +46,7 @@ resource manager maps owner-qualified logical names (for example
 driver is created. Do not assign an exclusive pin or UART to more than one
 module. Shared SPI buses are allowed only when their pins and electrical mode
 match; each device retains its own chip select. The portal validator reports
-conflicts before restart, and `/api/v2/hardware` exposes the effective binding
+conflicts before restart, and `/api/v3/hardware` exposes the effective binding
 catalog. Resource-aware drivers receive an owner-scoped acquisition interface;
 they cannot acquire another module's declaration. After applying a change, use
 **Module > Diagnostics** to confirm values and driver health.

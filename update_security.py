@@ -16,7 +16,7 @@ except ImportError:
 
 
 RECOVERY_API_VERSION = 6
-CORE_API_VERSION = 14
+CORE_API_VERSION = 15
 CONFIG_API_VERSION = 3
 VERIFICATION_KEY_PATH = '.update-verification-key'
 CATALOG_VERIFICATION_KEY_PATH = '.fleet-verification-key'

@@ -15,11 +15,14 @@ requirement.
   reset-persistent diagnostics identify the last completed startup stage.
 - Responsive HTTPS portal with administrator, operator and viewer roles.
 - Platform-neutral MQTT topics, optional Home Assistant discovery and
-  mandatory-mTLS `/api/v2` access.
+  mandatory-mTLS `/api/v3` access.
 - Encrypted complete configuration backup and validated restore preview.
 - NTP, IANA time zones, daylight-saving support and local-time energy resets.
 - Structured audit, health and upgrade history with local and remote syslog.
 - Resource-aware modular drivers with persistent calibration and diagnostics.
+- Core-owned peripheral leases with generation-checked driver I/O (ABI 7).
+- Durable, certificate-scoped API mutation reservations and bounded results;
+  interrupted requests are not automatically executed again.
 - Transport-neutral API contracts, bounded resource injection and centrally
   resolved feature flags.
 
@@ -175,7 +178,8 @@ Important entry points:
 | `services/` | Application use cases |
 | `device_modules/` | Drivers, capabilities and resource allocation |
 | `web_portal.py` | Authenticated portal transport |
-| `api_contracts.py` / `device_api.py` | Transport-neutral API v2 contract and mandatory-mTLS HTTPS adapter |
+| `api_contracts.py` / `device_api.py` | Transport-neutral API v3 contract and mandatory-mTLS HTTPS adapter |
+| `api_operations.py` | Encrypted-NVS mutation journal and encrypted-flash result retention |
 | `feature_flags.py` / `network_transports.py` | Capability-aware feature policy and optional network interfaces |
 | `firmware/` | Frozen-core manifest and partition configuration |
 | `tools/` | Build, signing, qualification and recovery tooling |
@@ -192,7 +196,7 @@ Important entry points:
 - [MicroPython and firmware baseline](docs/MICROPYTHON.md)
 - [Certificate identities and initial provisioning](docs/CERTIFICATES.md)
 - [MQTT messaging and Home Assistant](docs/MESSAGING.md)
-- [Device API v2](docs/API.md) and [OpenAPI contract](docs/openapi.yaml)
+- [Device API v3](docs/API.md) and [OpenAPI contract](docs/openapi.yaml)
 - [Feature flags and network transports](docs/FEATURES_AND_TRANSPORTS.md)
 - [Management ecosystem](docs/MANAGEMENT_SUITE.md)
 - [Upgrade and recovery](docs/UPGRADE_GUIDE.md)

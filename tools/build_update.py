@@ -53,6 +53,7 @@ CORE_FILES = (
     'configuration_manager.py',
     'api_contracts.py',
     'device_api.py',
+    'api_operations.py',
     'device_api_inventory.py',
     'feature_flags.py',
     'network_transports.py',
@@ -99,6 +100,8 @@ V3_DEVICE_FILES = (
     'v3/runtime/iotmd_next/storage.py',
 )
 CORE_DEVICE_MODULES = (
+    'device_modules/native_resources.py',
+    'device_modules/managed_setup.py',
     'device_modules/__init__.py',
     'device_modules/loader.py',
     'device_modules/driver_index.py',
@@ -823,9 +826,9 @@ def main():
         help='Fleet-wide monotonically increasing signed release number'
     )
     parser.add_argument(
-        '--minimum-core-api', type=int, default=14,
+        '--minimum-core-api', type=int, default=15,
         help=(
-            'signed application compatibility floor (default: 14); lower this '
+            'signed application compatibility floor (default: 15); lower this '
             'only for an unpublished inner application in a firmware-first '
             'paired universal migration'
         )

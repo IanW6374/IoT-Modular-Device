@@ -8,11 +8,32 @@ class ResourceConflict(ValueError):
 class ResourceManager:
     """Reserve exclusive resources and consistently configured shared buses."""
 
-    def __init__(self, providers=None):
+    def __init__(self, providers=None, protected_pins=None):
         self._resources = {}
         self._logical = {}
         self._providers = dict(providers or {})
         self._instances = {}
+        self.native = None
+        for pin in protected_pins or ():
+            self.reserve('gpio', pin, 'core')
+
+    def enable_native(self, provider=None):
+        from .native_resources import NativeBackend
+        self.native = NativeBackend(self, provider)
+
+    def release_owner(self, owner):
+        if self.native:
+            self.native.release_owner(str(owner))
+        for key in tuple(self._resources):
+            resource = self._resources[key]
+            if str(owner) in resource['owners']:
+                resource['owners'].remove(str(owner))
+            if not resource['owners']:
+                self._instances.pop(key, None)
+                del self._resources[key]
+                for name in tuple(self._logical):
+                    if self._logical[name] == key:
+                        del self._logical[name]
 
     def reserve(self, kind, identifier, owner, shared=False, signature=None,
                 logical_name=None):
@@ -122,6 +143,17 @@ class ResourceScope:
     def bindings(self):
         return self.manager.bindings_for(self.owner)
 
+    def construct(self, kind, identifier, **parameters):
+        if self.manager.native is None:
+            raise RuntimeError('native driver resource backend is unavailable')
+        return self.manager.native.construct(self.owner, kind, identifier, parameters)
+
+    def pin(self, identifier, mode=0, pull=None, value=None):
+        parameters = {'mode': mode, 'pull': pull}
+        if value is not None:
+            parameters['value'] = value
+        return self.construct('gpio', identifier, **parameters)
+
 
 def _gpio(declarations, value, role, shared=False):
     if isinstance(value, int) and not isinstance(value, bool):
@@ -133,8 +165,37 @@ def _gpio(declarations, value, role, shared=False):
 
 
 def resources_for_device(device):
-    """Return deterministic resources from the v2 module configuration model."""
+    """Return deterministic resources from the installed module configuration."""
     declarations = []
+    device = dict(device)
+    subtype = (device.get('type') or {}).get('subclass')
+    if subtype in ('WHES', 'RS485-Modbus'):
+        cfg = dict(device.get('rs485') or {})
+        if cfg.get('ports'):
+            if len(cfg['ports']) != 1:
+                raise ValueError('single-port RS485 requires exactly one configured port')
+            cfg['ports'] = {name: dict({'uart': 1, 'tx': 17, 'rx': 18}, **port)
+                for name, port in cfg['ports'].items()}
+        else:
+            cfg = dict({'uart': 1, 'tx': 17, 'rx': 18}, **cfg)
+        device['rs485'] = cfg
+    elif subtype == 'RS485-Modbus-Multiport' and not (device.get('rs485') or {}).get('ports'):
+        device['rs485'] = {'ports': {'ch0': {
+            'uart': device.get('uart', 1), 'tx': device.get('tx', 8), 'rx': device.get('rx', 9)}}}
+    elif subtype == 'RS485-Modbus-Multiport':
+        cfg = dict(device.get('rs485') or {})
+        cfg['ports'] = {name: dict({'uart': 1}, **port) for name, port in cfg['ports'].items()}
+        if any(port.get('tx') is None or port.get('rx') is None for port in cfg['ports'].values()):
+            raise ValueError('multiport RS485 requires explicit TX and RX pins for each port')
+        device['rs485'] = cfg
+    elif subtype == 'EMS-Boiler':
+        device['ems'] = dict({'uart': 1, 'tx': 17, 'rx': 18}, **(device.get('ems') or {}))
+    elif subtype == 'MAX31865-PT1000':
+        device['max31865'] = dict({'spi': 1, 'sck': 2, 'mosi': 3, 'miso': 4,
+            'cs': 5, 'baudrate': 1000000, 'polarity': 0, 'phase': 1,
+            'bits': 8, 'firstbit': 0}, **(device.get('max31865') or {}))
+    elif subtype == 'Grove-AC-Voltage':
+        device['ac_voltage'] = dict({'adc_pin': device.get('adc_pin', 1)}, **(device.get('ac_voltage') or {}))
 
     for section_name in ('rs485', 'ems'):
         section = device.get(section_name)
@@ -200,15 +261,25 @@ def resources_for_device(device):
         for direction in ('input', 'output'):
             mapping = gpio.get(direction)
             if isinstance(mapping, dict):
-                for pin in mapping.values():
-                    _gpio(declarations, pin, 'gpio.' + direction)
+                for name, pin in mapping.items():
+                    _gpio(declarations, pin, 'gpio.' + direction + '.' + str(name))
+                    if direction == 'output' and (device.get('type') or {}).get('class') == 'light' and subtype in ('rgb', 'brightness'):
+                        declarations.append({'kind': 'pwm', 'id': pin, 'name': 'pwm.' + str(name)})
 
     return declarations
 
 
-def validate_resources(devices):
-    manager = ResourceManager()
+def validate_resources(devices, protected_pins=None, protected_display=None):
+    manager = ResourceManager(protected_pins=protected_pins)
     errors = []
+    if protected_display and protected_display.get('enabled'):
+        from display import DEFAULT_CONFIG
+        cfg = dict(DEFAULT_CONFIG, **protected_display)
+        manager.reserve('spi', cfg['spi'], 'core')
+        for field in ('sck', 'mosi', 'miso', 'cs', 'dc', 'rst', 'button_a', 'button_b'):
+            pin = cfg.get(field)
+            if isinstance(pin, int) and not isinstance(pin, bool):
+                manager.reserve('gpio', pin, 'core')
     for device in devices or ():
         try:
             manager.reserve_device(device)
