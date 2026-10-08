@@ -695,9 +695,9 @@ async def start_web_portal(portal):
                 await send_response(
                     writer, '200 OK', render_configuration_backup_page(csrf_token)
                 )
-            elif method == 'GET' and (is_health_history or route == '/update-activity'):
+            elif method == 'GET' and is_health_history:
                 await send_response(
-                    writer, '200 OK', (render_health_history_page if is_health_history else render_update_activity_page)(
+                    writer, '200 OK', render_health_history_page(
                         csrf_token, status_snapshot.get()
                     )
                 )
@@ -925,10 +925,11 @@ async def start_web_portal(portal):
                 return False
             return True
         async def handle_live_routes():
-            if method == 'GET' and route in ('/task', '/update-task'):
+            if method == 'GET' and route == '/update-activity':
+                await send_response(writer, '200 OK', render_update_activity_page(csrf_token, status_snapshot.get()))
+            elif method == 'GET' and route in ('/task', '/update-task'):
                 await send_response(writer, '200 OK', render_persistent_task_route(
-                    route, action_path, csrf_token, task_status_getter,
-                    status_snapshot.get()
+                    route, action_path, csrf_token, task_status_getter, status_snapshot.get()
                 ))
             elif method == 'POST' and path.startswith('/set-loglevel'):
                 try:
@@ -937,9 +938,7 @@ async def start_web_portal(portal):
                         raise ValueError('invalid log level')
                     apply_loglevel_change(level, loglevel_setter, log_output)
                 except (ValueError, RuntimeError) as exc:
-                    await send_response(
-                        writer, '400 Bad Request', str(exc), 'text/plain'
-                    )
+                    await send_response(writer, '400 Bad Request', str(exc), 'text/plain')
                 else:
                     await action_response.send(
                         '200 OK', 'Log level changed to ' + level

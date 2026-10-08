@@ -719,6 +719,13 @@ class AppUpdateTests(unittest.TestCase):
             routes['portal_route_live.py'].decode()
         )
         self.assertIn(
+            'from portal_activity_views import render_update_activity_page',
+            routes['portal_route_live.py'].decode()
+        )
+        self.assertNotIn(
+            'from portal_activity_views', routes['portal_route_settings.py'].decode()
+        )
+        self.assertIn(
             'import portal_module_transport',
             routes['portal_route_live.py'].decode()
         )

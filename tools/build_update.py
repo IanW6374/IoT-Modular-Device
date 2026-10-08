@@ -225,7 +225,6 @@ PORTAL_ROUTE_IMPORTS = (
     "from portal_http import *\n"
     "from portal_settings_views import *\n"
     "from portal_live_views import *\n"
-    "from portal_activity_views import render_update_activity_page\n"
     "from portal_presenters import *\n\n"
 )
 
@@ -363,8 +362,12 @@ def split_portal_route_modules(source):
         top_level = top_level.replace(
             'async def ' + function_name + '():\n', signature, 1
         )
+        activity_import = (
+            'from portal_activity_views import render_update_activity_page\n'
+            if module_name == 'portal_route_live' else ''
+        )
         generated[module_name + '.py'] = (
-            PORTAL_ROUTE_IMPORTS + top_level
+            PORTAL_ROUTE_IMPORTS + activity_import + top_level
         ).encode('utf-8')
         if mutable_arguments:
             wrapper = (
