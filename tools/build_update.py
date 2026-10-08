@@ -43,6 +43,7 @@ CORE_FILES = (
     'portal_http.py',
     'portal_action_response.py',
     'portal_live_views.py',
+    'portal_activity_views.py',
     'portal_module_transport.py',
     'portal_presenters.py',
     'portal_settings_views.py',
@@ -224,6 +225,7 @@ PORTAL_ROUTE_IMPORTS = (
     "from portal_http import *\n"
     "from portal_settings_views import *\n"
     "from portal_live_views import *\n"
+    "from portal_activity_views import render_update_activity_page\n"
     "from portal_presenters import *\n\n"
 )
 

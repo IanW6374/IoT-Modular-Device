@@ -535,7 +535,7 @@ class AppUpdateTests(unittest.TestCase):
             'certificate_portal_transport.py', 'certificate_portal_views.py',
             'certificate_trust.py', 'qualification_control.py',
             'portal_http.py', 'portal_action_response.py',
-            'portal_live_views.py',
+            'portal_live_views.py', 'portal_activity_views.py',
             'portal_module_transport.py',
             'portal_presenters.py', 'portal_settings_views.py',
             'api_security.py', 'configuration_profiles.py',

@@ -22,6 +22,14 @@ jobs:
       - run: python tools/check_architecture.py
       - run: python tools/check_micropython_compat.py
       - run: python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Offline portal DOM contracts
+        working-directory: tests/browser
+        run: |
+          npm install --ignore-scripts
+          npm run test:contracts
       - name: Compile host-only Python
         run: python -m py_compile tools/*.py tests/*.py
       - uses: actions/checkout@v5

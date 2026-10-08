@@ -4,6 +4,7 @@ target_sources(usermod_iotmd_crypto INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/iotmd_crypto.c
     ${CMAKE_CURRENT_LIST_DIR}/iotmd_platform.c
     ${CMAKE_CURRENT_LIST_DIR}/iotmd_transport_diagnostics.c
+    ${CMAKE_CURRENT_LIST_DIR}/iotmd_heap_diagnostics.c
     ${CMAKE_CURRENT_LIST_DIR}/iotmd_platform_v3.c
 )
 

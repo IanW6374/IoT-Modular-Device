@@ -795,7 +795,8 @@ class WebPortalTests(unittest.TestCase):
         })
 
         self.assertIn('Enable the mTLS device API', api)
-        self.assertIn('Mutual TLS (required)', api)
+        self.assertIn('value="Mutual TLS" readonly', api)
+        self.assertIn('id="api-auth-help"', api)
         api_listener = api.split('<h2>API listener</h2>', 1)[1].split('</section>', 1)[0]
         self.assertIn('class="actions device-api-actions"', api_listener)
         self.assertNotIn('settings-save-bar', api_listener)
@@ -995,14 +996,12 @@ class WebPortalTests(unittest.TestCase):
         )[1].split('</div></div><div class="nav-group">', 1)[0]
 
         self.assertIn('aria-label="Maintenance submenu"', html)
-        self.assertIn('aria-label="Updates submenu"', maintenance_menu)
+        self.assertNotIn('aria-label="Updates submenu"', maintenance_menu)
         self.assertIn('href="/updates">Update</a>', maintenance_menu)
         self.assertNotIn('href="/update-install">Install upgrade</a>', maintenance_menu)
-        self.assertIn('href="/update-settings">Settings</a>', maintenance_menu)
-        self.assertLess(
-            maintenance_menu.index('href="/update-settings">Settings</a>'),
-            maintenance_menu.index('href="/updates">Update</a>'),
-        )
+        self.assertNotIn('href="/update-settings"', maintenance_menu)
+        self.assertIn('href="/update-settings">Update settings</a>', html)
+        self.assertIn('href="/update-activity">Update activity</a>', maintenance_menu)
         self.assertNotIn('/updates?check=1', maintenance_menu)
         self.assertIn('class="nav-subgroup">', maintenance_menu)
         self.assertIn('aria-expanded="false">Certificates</button>', maintenance_menu)
@@ -2338,7 +2337,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('aria-label="Maintenance submenu"', logging)
 
         self.assertIn('<h1>Update</h1>', updates)
-        self.assertIn('<h2>Update history</h2>', updates)
+        self.assertNotIn('<h2>Update history</h2>', updates)
+        self.assertIn('href="/update-activity"', updates)
         self.assertIn('<h2>Select update method</h2>', updates)
         self.assertIn('href="/updates?source=automatic"', updates)
         self.assertIn('href="/updates?source=manual"', updates)
@@ -2401,12 +2401,12 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('class="upgrade-stage-name"', manual_update)
         self.assertIn('class="upgrade-stage-ring" role="progressbar"', manual_update)
         self.assertIn('class="upgrade-stage-percent">0%</span>', manual_update)
-        self.assertIn(
+        self.assertNotIn(
             '<button class="secondary" type="button" disabled>Restart and install</button>',
             manual_update,
         )
         self.assertNotIn('upgrade-stage-manual', manual_update)
-        self.assertNotIn('Restart and install progress', manual_update)
+        self.assertIn('Restart and install progress', manual_update)
         self.assertNotIn('--upgrade-step-count', manual_update)
         self.assertIn('Manual update selected', manual_update)
         self.assertIn('<li class="complete">', manual_update)
@@ -2422,15 +2422,16 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Prepare and hash file', manual_update)
         self.assertIn('Pair verified components', manual_update)
         self.assertIn('renderWorkflow(workflowKind(selected))', manual_update)
-        self.assertIn('button.textContent="Restart and install"', manual_update)
-        self.assertIn('button.disabled=true', manual_update)
+        self.assertNotIn('button.textContent="Restart and install"', manual_update)
+        self.assertIn('primaryButton.textContent="Staging…"', manual_update)
+        self.assertIn('primaryButton.disabled=true', manual_update)
         self.assertNotIn('removeAttribute(("aria-current")', manual_update)
         self.assertNotIn(
             'class="status-spinner"', manual_update.split('<main', 1)[1]
         )
         self.assertNotIn('fileSelection.hidden=', manual_update)
         self.assertIn('fileSelection.classList.add("busy")', manual_update)
-        self.assertIn('primaryButton.hidden=true', manual_update)
+        self.assertNotIn('primaryButton.hidden=true', manual_update)
         self.assertIn('Staging does not restart the device.', manual_update)
         self.assertIn('class="selected-release-label">Selected file', manual_update)
         self.assertIn('fileSelection.classList.toggle("has-selection",!!selected)', manual_update)
@@ -2624,7 +2625,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('Base firmware update', staged_html)
         self.assertNotIn('id="firmware-upload-form"', staged_html)
         self.assertEqual(staged_html.count('>Restart and install</button>'), 1)
-        self.assertIn('class="upgrade-stage-action-control"><form', staged_html)
+        self.assertIn('<button id="update-primary"', staged_html)
+        self.assertNotIn('class="upgrade-stage-action-control"><form', staged_html)
         self.assertIn('background:var(--surface)', portal_ui.PORTAL_CSS)
         self.assertNotIn('Restart and install core firmware', staged_html)
         self.assertIn(
@@ -2747,7 +2749,7 @@ class WebPortalTests(unittest.TestCase):
             'update_status': 'idle',
             'firmware_update_status': 'idle',
         }, {})
-        self.assertIn('<h2>Update history</h2>', idle)
+        self.assertNotIn('<h2>Update history</h2>', idle)
         self.assertNotIn('<summary>Update status and history', idle)
         self.assertNotIn('class="metric update-status', idle)
         self.assertNotIn('Last automatic check', idle)
@@ -2820,8 +2822,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('action="/download-release"', version_step)
         self.assertIn('action="/check-release"', version_step)
         self.assertIn('automaticSelect.onchange=renderAutomaticFlow', automatic)
-        self.assertIn('button.textContent="Restart and install"', automatic)
-        self.assertIn('button.disabled=true', automatic)
+        self.assertNotIn('button.textContent="Restart and install"', automatic)
+        self.assertIn('ring.setAttribute', automatic)
         self.assertIn('>Start update</button>', automatic)
         self.assertIn('action="/discard-update"', automatic)
         self.assertIn('>Discard</button>', automatic)
@@ -2954,10 +2956,10 @@ class WebPortalTests(unittest.TestCase):
         self.assertEqual(universal.count('<li class="complete">'), 9)
         self.assertNotIn('<span class="badge good">Verified</span>', universal)
         final_step = universal.rsplit('<li ', 1)[1].split('</li>', 1)[0]
-        self.assertIn('class="active upgrade-stage-action"', final_step)
-        self.assertIn('action="/activate-universal"', final_step)
-        self.assertNotIn('role="progressbar"', final_step)
-        self.assertNotIn('upgrade-stage-percent', final_step)
+        self.assertNotIn('action="/activate-universal"', final_step)
+        self.assertIn('role="progressbar"', final_step)
+        self.assertIn('upgrade-stage-percent', final_step)
+        self.assertIn('<button id="update-primary"', universal)
         self.assertNotIn('action="/activate-update"', universal)
         self.assertNotIn('action="/activate-firmware"', universal)
         interrupted = web_portal.render_update_install_page('csrf', {
@@ -2996,25 +2998,29 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('>Restart and rollback</button>', rollback)
         self.assertNotIn('Rollback application to ', rollback)
         rollback_step = rollback.rsplit('<li ', 1)[1].split('</li>', 1)[0]
-        self.assertIn('action="/rollback-application"', rollback_step)
-        self.assertNotIn('role="progressbar"', rollback_step)
+        self.assertNotIn('action="/rollback-application"', rollback_step)
+        self.assertIn('role="progressbar"', rollback_step)
         retained_step = rollback.split('Previous application retained', 1)[1].split('</li>', 1)[0]
         self.assertIn('class="selected-release-summary"', retained_step)
         self.assertIn('Application — 3.0.0-alpha.36', retained_step)
-        self.assertNotIn('class="upgrade-operation"', rollback)
+        self.assertIn('class="upgrade-operation"', rollback)
 
-    def test_upgrade_history_is_visible_and_escapes_version_checks(self):
-        page = web_portal.render_updates_page('csrf', {
+    def test_upgrade_activity_is_searchable_and_escapes_version_checks(self):
+        page = web_portal.render_update_activity_page('csrf', {
             'update_history': [{'time': 200, 'event': 'confirmed', 'kind': 'universal', 'version': '3.0.0-alpha.34'}],
             'release_check_history': [{'time': 300, 'event': 'Check failed: <offline>', 'kind': 'automatic check'}],
         })
-        self.assertIn('<h2>Update history</h2>', page)
+        self.assertIn('<h1>Update activity</h1>', page)
         self.assertIn('Check failed: &lt;offline&gt;', page)
         self.assertIn('automatic check', page)
-        self.assertIn('class="history-timeline update-history"', page)
+        self.assertIn('class="history-timeline"', page)
+        self.assertIn('id="activity-search"', page)
+        self.assertIn('class="history-marker bad"', page)
+        self.assertIn('class="history-marker good"', page)
+        self.assertIn('aria-label="Confirmed"', page)
         self.assertLess(
             page.index('Check failed:'),
-            page.index('>confirmed · universal</strong>'),
+            page.index('>Confirmed · universal</strong>'),
         )
         self.assertNotIn('<details', page)
 

@@ -257,6 +257,8 @@ def main():
         help='Mode-0600 output file for the unique first-boot AP password/label'
     )
     parser.add_argument('--allow-version-mismatch', action='store_true')
+    parser.add_argument('--heap-trace', action='store_true',
+        help='Build an opt-in core with bounded UART native-allocation traces')
     parser.add_argument(
         '--allow-dirty', action='store_true',
         help='permit a non-production build stamped with the current dirty revision'
@@ -357,6 +359,7 @@ def main():
         '-D', 'MICROPY_MANIFEST_CORE_METADATA_DIR=' + str(core_metadata_dir),
         '-D', 'USER_C_MODULES=' + str(user_c_modules),
         '-D', 'IOTMD_PRODUCTION_SECURITY=ON',
+        '-D', 'IOTMD_HEAP_TRACE=' + ('ON' if args.heap_trace else 'OFF'),
         '-D', 'IOTMD_SECURE_BOOT_SIGNING_KEY=' + str(secure_boot_key),
         '-B', build_dir,
         'reconfigure',
@@ -371,11 +374,17 @@ def main():
         'USER_C_MODULES=' + str(user_c_modules),
         'CMAKE_ARGS=-DIOTMD_PRODUCTION_SECURITY=ON -DIOTMD_SECURE_BOOT_SIGNING_KEY=' +
         str(secure_boot_key) + ' -DMICROPY_MANIFEST_CORE_METADATA_DIR=' +
-        str(core_metadata_dir),
+        str(core_metadata_dir) + ' -DIOTMD_HEAP_TRACE=' +
+        ('ON' if args.heap_trace else 'OFF'),
     ]
     partition_target = port / 'partitions-IOTMD-8MiB-ota.csv'
     applied_patches = []
+    applied_idf_patches = []
     try:
+        applied_idf_patches = apply_core_patches(esp_idf, [
+            project / 'firmware' / 'patches' / name
+            for name in lock.get('esp_idf_patches', ())
+        ])
         applied_patches = apply_core_patches(micropython, [
             project / 'firmware' / 'patches' / name
             for name in lock.get('micropython_patches', ())
@@ -484,11 +493,16 @@ def main():
         print('image bytes', result['size'], 'of', lock['ota_partition_bytes'])
         print('source revision', source_revision)
     finally:
-        restore_core_patches(micropython, applied_patches)
         try:
-            partition_target.unlink()
-        except OSError:
-            pass
+            restore_core_patches(micropython, applied_patches)
+        finally:
+            try:
+                restore_core_patches(esp_idf, applied_idf_patches)
+            finally:
+                try:
+                    partition_target.unlink()
+                except OSError:
+                    pass
 
 
 if __name__ == '__main__':

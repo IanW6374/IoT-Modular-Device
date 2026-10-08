@@ -13,6 +13,7 @@ ROUTES = {
     '/partials': ('viewer', 'status'),
     '/diagnostics': ('viewer', 'modules'),
     '/logging': ('viewer', 'maintenance'),
+    '/update-activity': ('viewer', 'maintenance'),
     '/logs': ('viewer', 'maintenance'),
     '/audit-log': ('administrator', 'maintenance'),
     '/audit-logs': ('administrator', 'maintenance'),

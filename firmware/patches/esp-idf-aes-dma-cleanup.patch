@@ -1,0 +1,27 @@
+diff --git a/components/mbedtls/port/aes/dma/esp_aes_dma_core.c b/components/mbedtls/port/aes/dma/esp_aes_dma_core.c
+--- a/components/mbedtls/port/aes/dma/esp_aes_dma_core.c
++++ b/components/mbedtls/port/aes/dma/esp_aes_dma_core.c
+@@ -263,19 +263,21 @@ static int esp_aes_process_dma_ext_ram(esp_aes_context *ctx, const unsigned char *input, unsigned char *output, size_t len, uint8_t *stream_out, bool realloc_input, bool realloc_output)
+     if (realloc_input) {
+         input_buf = heap_caps_aligned_alloc(input_alignment, chunk_len, input_heap_caps);
+         if (input_buf == NULL) {
+             mbedtls_platform_zeroize(output, len);
+             ESP_LOGE(TAG, "Failed to allocate memory");
+-            return -1;
++            ret = -1;
++            goto cleanup;
+         }
+     }
+ 
+     if (realloc_output) {
+         output_buf = heap_caps_aligned_alloc(output_alignment, chunk_len, output_heap_caps);
+         if (output_buf == NULL) {
+             mbedtls_platform_zeroize(output, len);
+             ESP_LOGE(TAG, "Failed to allocate memory");
+-            return -1;
++            ret = -1;
++            goto cleanup;
+         }
+     } else {
+         output_buf = output;
+     }

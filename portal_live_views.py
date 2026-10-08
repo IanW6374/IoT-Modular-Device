@@ -1195,11 +1195,7 @@ def update_upload_script():
         '"aria-current","step");else li.removeAttribute("aria-current");}'
         'function milestone(item,index,active){var li=document.createElement("li"),name=document.createElement('
         '"span"),ring=document.createElement("span"),value=document.createElement("span");name.className='
-        '"upgrade-stage-name";name.textContent=item[1];li.appendChild(name);li.dataset.stage=item[0];if(item[0]==='
-        '"ready"||item[0]==="activate"){var control=document.createElement("span"),button='
-        'document.createElement("button");control.className="upgrade-stage-action-control";button.className='
-        '"secondary";button.type="button";button.disabled=true;button.textContent="Restart and install";'
-        'control.appendChild(button);li.appendChild(control);setMilestone(li,"",0);return li;}'
+        '"upgrade-stage-name";name.textContent=item[1];li.appendChild(name);li.dataset.stage=item[0];'
         'ring.className="upgrade-stage-ring";ring.setAttribute('
         '"role","progressbar");ring.setAttribute("aria-label",item[1]+" progress");ring.setAttribute('
         '"aria-valuemin","0");ring.setAttribute("aria-valuemax","100");value.className="upgrade-stage-percent";'
@@ -1232,7 +1228,7 @@ def update_upload_script():
         'document.getElementById("update-result").textContent="";};'
         'window.addEventListener("beforeunload",function(e){if(!uploadInProgress)return;e.preventDefault();e.returnValue="";});'
         'uploadForm.onsubmit=function(e){e.preventDefault();uploadForm.dataset.portalDirty="0";updateCancelled=false;uploadInProgress=true;primaryButton.disabled=true;'
-        'primaryButton.hidden=true;cancelButton.disabled=false;cancelButton.hidden=false;fileSelection.classList.add("busy");var input='
+        'primaryButton.hidden=false;primaryButton.textContent="Staging…";cancelButton.disabled=false;cancelButton.hidden=false;fileSelection.classList.add("busy");var input='
         'document.getElementById("update-bundle"),f=input.files&&input.files[0],out=document.getElementById('
         '"update-result");if(!f){portalRequire(input,'
         '"Choose a .iotapp, .iotcore or .iotuni update bundle");primaryButton.disabled=true;'
@@ -1260,13 +1256,13 @@ def update_upload_script():
         'renderWorkflow("");return;}'
         'var selectedKind=universal?"universal":(firmware?"firmware":"application");configureWorkflow(selectedKind);'
         'out.className="portal-status";out.replaceChildren();'
-        'var id="",polling=false,finished=false;function showStaged(){setStage("ready",1);return fetch('
+        'var id="",polling=false,finished=false;function showStaged(){setStage("ready",0);return fetch('
         '"/updates?source=staged",{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){'
         'location.replace("/login?reason=expired");throw new Error("Session expired");}if(!r.ok)throw new Error('
         '"Unable to load staged update");return r.text();}).then(function(html){var parsed=new DOMParser().parseFromString('
         'html,"text/html"),fresh=parsed.querySelector("main .card"),current=uploadForm.closest(".card");if(!fresh||!current)'
         'throw new Error("Staged update view is unavailable");history.replaceState(null,"","/updates?source=staged");'
-        'current.replaceWith(fresh);var restart=fresh.querySelector(".upgrade-stage-action button");if(restart)restart.focus();'
+        'current.replaceWith(fresh);var restart=fresh.querySelector("#update-primary");if(restart)restart.focus();'
         '}).catch(function(){out.className="portal-status success";out.textContent="Update staged. You can leave this page and restart later.";});}'
         'function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
         'function startPolling(){if(polling)return;polling=true;poll();}function poll(){fetch("/update-progress?id="+encodeURIComponent(id),'
@@ -1403,8 +1399,7 @@ def _upgrade_steps(kind, method=''):
     return (str(method) + ' update selected', selection) + steps
 
 
-def _upgrade_step_list(steps, active=0, completed=0, identifier='',
-                       manual_action='', step_controls=None):
+def _upgrade_step_list(steps, active=0, completed=0, identifier='', step_controls=None):
     attributes = (
         ' id="' + html_escape(identifier) + '"' if identifier else ''
     )
@@ -1416,21 +1411,6 @@ def _upgrade_step_list(steps, active=0, completed=0, identifier='',
             ('active' if index == active else '')
         )
         percent = 100 if state == 'complete' else 0
-        manual = index == len(steps) - 1 and 'restart' in label.lower()
-        if manual:
-            control = (
-                '<span class="upgrade-stage-action-control">' + manual_action +
-                '</span>' if manual_action else
-                '<span class="upgrade-stage-action-control"><button class="secondary" '
-                'type="button" disabled>Restart and install</button></span>'
-            )
-            items.append(
-                '<li class="' + state + ' upgrade-stage-action"' +
-                (' aria-current="step"' if state == 'active' else '') + '>'
-                '<span class="upgrade-stage-name">' + html_escape(label) +
-                '</span>' + control + '</li>'
-            )
-            continue
         items.append(
             '<li class="' + state + '"' +
             (' aria-current="step"' if state == 'active' else '') + '>'
@@ -1677,12 +1657,7 @@ def automatic_upgrade_selection_script():
         'var li=document.createElement("li"),name=document.createElement("span"),ring=document.createElement("span"),'
         'value=document.createElement("span"),complete=index<1,active=index===1,percent=complete?100:0;li.className='
         'complete?"complete":(active?"active":"");li.style.setProperty("--step-progress",percent+"%");if(active)'
-        'li.setAttribute("aria-current","step");name.className="upgrade-stage-name";name.textContent=label;if(index==='
-        'labels.length-1){li.className+=(li.className?" ":"")+"upgrade-stage-action";var control='
-        'document.createElement("span"),button=document.createElement("button");control.className='
-        '"upgrade-stage-action-control";button.className="secondary";button.type="button";button.disabled=true;'
-        'button.textContent="Restart and install";control.appendChild(button);li.appendChild(name);'
-        'li.appendChild(control);automaticSteps.appendChild(li);return;}ring.className='
+        'li.setAttribute("aria-current","step");name.className="upgrade-stage-name";name.textContent=label;ring.className='
         '"upgrade-stage-ring";ring.setAttribute("role","progressbar");ring.setAttribute("aria-label",label+" progress");'
         'ring.setAttribute("aria-valuemin","0");ring.setAttribute("aria-valuemax","100");ring.setAttribute('
         '"aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",complete?"Complete":percent+"%");value.className="upgrade-stage-percent";value.textContent=complete?"✓":percent+"%";'
@@ -1800,14 +1775,15 @@ def _staged_update_workspace(token, status):
         '<div class="manual-upgrade-workspace"><aside class="upgrade-steps-panel">' +
         _upgrade_step_list(
             ready_steps, active=len(ready_steps) - 1,
-            completed=len(ready_steps) - 1, manual_action=activation,
+            completed=len(ready_steps) - 1,
             step_controls={1: selected_release}
         ) + '</aside><div class="upgrade-operation">'
         '<div class="actions manual-upgrade-buttons"><form data-portal-async '
         'data-portal-refresh-target="#upgrade-page-content" data-portal-refresh-url="/updates" '
         'data-portal-status="Discarding staged update…" action="/discard-update" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
-        '<button class="danger" type="submit" data-busy-label="Discarding…">Discard</button></form></div>'
+        '<button class="danger" type="submit" data-busy-label="Discarding…">Discard</button></form>' +
+        activation.replace('<button ', '<button id="update-primary" ', 1) + '</div>'
         '</div></div></section>'
     )
 
@@ -1848,9 +1824,9 @@ def _rollback_upgrade_workspace(token, status):
         _upgrade_step_list((
             'Rollback selected', 'Previous application retained', 'Restart and rollback',
         ), active=2, completed=2,
-            manual_action=render_application_rollback_html(status, token),
             step_controls={1: selection}
-        ) + '</aside></div></section>'
+        ) + '</aside><div class="upgrade-operation"><div class="actions">' +
+        render_application_rollback_html(status, token) + '</div></div></div></section>'
     )
 
 
@@ -1890,7 +1866,7 @@ def render_update_install_page(token, status=None, message='', error=False, sour
             'Maintenance', 'Update',
             'Select a method, stage a release, then restart when ready.'
         ) + '<div id="upgrade-page-content">' + (_notice(message, error) if error else '') + workspace +
-        render_upgrade_history(status) + '</div>'
+        '</div>'
     )
     return portal_ui.shell(
         'IoT-MD update', 'updates', body, token, script
@@ -1953,16 +1929,18 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         'new DOMParser().parseFromString(html,"text/html"),fresh=parsed.querySelector("main"),current=document.getElementById('
         '"main-content");if(!fresh||!current)throw new Error("Staged update view is unavailable");current.innerHTML='
         'fresh.innerHTML;history.replaceState(null,"",' + repr(str(return_url)) + ');var restart=current.querySelector('
-        '".upgrade-stage-action button");if(restart)restart.focus();}).catch(function(){r.hidden=false;});}'
+        '"#update-primary");if(restart)restart.focus();}).catch(function(){r.hidden=false;'
+        'b.className="portal-status warning";b.textContent="Update staged, but the install controls could not be loaded. Return to updates to continue.";});}'
         'function poll(){fetch("/task-status?id="+encodeURIComponent(i),{cache:"no-store",credentials:'
         '"same-origin"}).then(function(x){if(x.status===401){location.replace("/login");return null;}'
-        'return x.json();}).then(function(s){if(!s)return;var message=s.message||s.phase||"Working…",'
+        'if(!x.ok)throw new Error("Task status unavailable");return x.json();}).then(function(s){if(!s)return;var message=s.message||s.phase||"Working…",'
         'percent=typeof s.percent==="number"?s.percent:0,done=s.phase==="complete"||s.phase==="failed";'
-        'stage(message,percent);if(done){if(s.phase==="failed"){b.className="portal-status error";b.textContent='
+        'stage(message,percent);b.className="portal-status";b.textContent=message;if(done){if(s.phase==="failed"){b.className="portal-status error";b.textContent='
         'message;r.hidden=false;}if(s.phase==="complete"){'
         'steps.forEach(function(x,k){setStep(x,k<steps.length-1?"complete":(k===steps.length-1?'
         '"active":""),k<steps.length-1?100:0);});showReady();}return;}setTimeout(poll,600);}).catch(function(){'
-        'setTimeout(poll,1200);});}poll();'
+        'b.className="portal-status warning";b.textContent="Device connection interrupted. Retrying; completed milestones are retained.";'
+        'r.hidden=false;setTimeout(poll,1200);});}poll();'
     )
     return portal_ui.shell(
         'IoT-MD install update', 'updates', body, token, script
@@ -1994,7 +1972,7 @@ def render_persistent_task_route(
 def render_update_settings_page(token, settings=None, message='', error=False):
     body = (
         portal_ui.page_heading(
-            'Maintenance', 'Update settings',
+            'Device', 'Update settings',
             'Configure the release channel, schedule, download and activation preferences.'
         ) + _notice(message, error) + '<section class="card">' +
         render_update_preferences(token, settings or {}) + '</section>'

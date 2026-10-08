@@ -3,9 +3,11 @@
   "private": true,
   "scripts": {
     "install:browsers": "playwright install chromium firefox webkit",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:contracts": "node --test ui_contract.test.mjs"
   },
   "devDependencies": {
+    "jsdom": "^30.1.2",
     "@axe-core/playwright": "latest",
     "@playwright/test": "latest"
   }

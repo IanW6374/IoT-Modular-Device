@@ -7,6 +7,7 @@
 #include "esp_attr.h"
 #include "esp_heap_caps.h"
 #include "iotmd_transport_diagnostics.h"
+#include "iotmd_heap_diagnostics.h"
 
 #define IOTMD_BACKUP_MEMORY_BYTES (768)
 
@@ -90,6 +91,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(
 
 static mp_obj_t iotmd_platform_transport_heartbeat(void) {
     iotmd_transport_heartbeat();
+    iotmd_heap_diagnostics_poll();
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(

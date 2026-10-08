@@ -40,6 +40,7 @@ from device_modules.base import module_diagnostics_need_attention
 from portal_http import *
 from portal_settings_views import *
 from portal_live_views import *
+from portal_activity_views import render_update_activity_page
 from portal_presenters import *
 
 _CERTIFICATE_ROUTES = (
@@ -694,9 +695,9 @@ async def start_web_portal(portal):
                 await send_response(
                     writer, '200 OK', render_configuration_backup_page(csrf_token)
                 )
-            elif method == 'GET' and is_health_history:
+            elif method == 'GET' and (is_health_history or route == '/update-activity'):
                 await send_response(
-                    writer, '200 OK', render_health_history_page(
+                    writer, '200 OK', (render_health_history_page if is_health_history else render_update_activity_page)(
                         csrf_token, status_snapshot.get()
                     )
                 )
@@ -1271,8 +1272,7 @@ async def start_web_portal(portal):
                 is_logging_settings or is_user_settings
             )
             is_module_settings = route == '/module-settings'
-            is_updates = route == '/updates'
-            is_update_install = route == '/update-install'
+            is_updates, is_update_install = route == '/updates', route == '/update-install'
             is_update_settings = route == '/update-settings'
             is_diagnostics = route == '/diagnostics'
             is_logging = route == '/logging'

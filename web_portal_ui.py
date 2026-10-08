@@ -426,13 +426,20 @@ PORTAL_CSS = (
     '.settings-save-controls>*{flex:1}.workflow-steps{grid-template-columns:1fr;gap:8px}'
     '.workflow-steps li{grid-template-columns:35px 1fr;justify-items:start;align-items:center;text-align:left}'
     '.workflow-steps li:not(:last-child):after{left:17px;right:auto;top:35px;bottom:-8px;width:2px;height:auto}}'
-    'label.field{align-content:start;grid-auto-rows:max-content;min-width:0}'
+    'label.field{align-content:start;grid-auto-rows:max-content;min-width:0;font-size:14px}'
+    '.grid:has(>label.field){gap:12px 16px}.grid>label.field{margin:0}'
+    'label.field>small,label.field>.help{font-size:12px;font-weight:400;color:var(--muted);line-height:1.45}'
+    'label.field>input,label.field>select,label.field>textarea{font-size:14px}'
+    'input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}'
+    'input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,'
+    'summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}'
     'input:not([type="checkbox"]):not([type="radio"]),'
     'select:not([multiple]):not([size]){height:42px;min-height:42px;line-height:1.4}'
     'textarea,select[multiple],select[size]{height:auto}'
     '.check{min-height:42px;align-self:end}'
     '.check input[type="checkbox"],.check input[type="radio"]{width:16px;height:16px;'
     'min-height:16px;padding:0;margin:0;flex:0 0 16px}'
+    '.notice,.portal-status{overflow-wrap:anywhere}'
 )
 
 
@@ -595,9 +602,16 @@ PORTAL_JS += r'''
 (() => {
   "use strict";
   function annotate() {
+    for (const notice of document.querySelectorAll('.portal-status,.notice,.status:not(.badge)')) {
+      const role = notice.classList.contains('error') ? 'alert' : 'status';
+      if (notice.getAttribute('role') !== role) notice.setAttribute('role', role);
+    }
     for (const label of document.querySelectorAll("label")) {
       const control = label.control || label.querySelector("input:not([type=hidden]),select,textarea");
       if (!control || control.type === "hidden" || control.type === "radio") continue;
+      // Keep the real checkbox before its caption; required-field annotation
+      // must not reverse the control order after the page has rendered.
+      if (control.type === "checkbox" && control.parentElement === label && label.firstChild !== control) label.prepend(control);
       const entry = label.closest(".profile-entry");
       let heading = entry?.querySelector(".profile-entry-heading strong") || label.querySelector(".field-title");
       if (!heading) {
@@ -608,7 +622,7 @@ PORTAL_JS += r'''
           if (!texts.length) continue;
           heading = document.createElement("span");
           heading.className = "field-title";
-          label.insertBefore(heading, label.firstChild);
+          label.insertBefore(heading, control.type === "checkbox" ? control.nextSibling : label.firstChild);
           for (const text of texts) heading.append(text);
         }
       }
@@ -639,11 +653,16 @@ PORTAL_JS += r'''
   annotate();
   document.addEventListener("change", annotate);
   document.addEventListener("reset", () => requestAnimationFrame(annotate));
-  observer.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["required","disabled","readonly","data-requirement"]});
+  observer.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["required","disabled","readonly","data-requirement","class"]});
 })();
 '''
 
 PORTAL_CSS += 'small.field-requirement{display:inline-block;margin-left:5px;color:var(--accent);font-size:.7rem;font-weight:800;line-height:1;vertical-align:middle}'
+PORTAL_CSS += (
+    '.history-event[hidden]{display:none}.history-marker.good{background:var(--good)}'
+    '.history-marker.warn{background:var(--warn)}.history-marker.bad{background:var(--bad)}'
+    '.history-marker.info{background:var(--accent)}'
+)
 
 CERTIFICATE_NAVIGATION = (
     ('api_client_trust', '/api-client-trust', 'API client trust'),
@@ -655,14 +674,12 @@ CERTIFICATE_NAVIGATION = (
 CERTIFICATE_ACTIVE_KEYS = tuple(item[0] for item in CERTIFICATE_NAVIGATION)
 
 LOGGING_NAVIGATION = (
+    ('update_activity', '/update-activity', 'Update activity'),
     ('audit_logging', '/audit-log', 'Audit log'),
     ('logging', '/logging', 'Device log'),
 )
 
-UPGRADE_NAVIGATION = (
-    ('update_settings', '/update-settings', 'Settings'),
-    ('updates', '/updates', 'Update'),
-)
+UPGRADE_NAVIGATION = (('updates', '/updates', 'Update'),)
 
 QUALIFICATION_NAVIGATION = (
     ('qualification_summary', '/release-qualification', 'Summary'),
@@ -681,6 +698,7 @@ NAVIGATION = (
         ('settings', '/settings', 'Network'),
         ('portal_settings', '/portal-settings', 'Portal'),
         ('ntp_settings', '/ntp-settings', 'Time / Date'),
+        ('update_settings', '/update-settings', 'Update settings'),
     )),
     ('module', '/module-settings', 'Module', (
         ('modules', '/module-settings', 'Configuration'),
@@ -694,7 +712,7 @@ NAVIGATION = (
         ('device_control', '/device-control', 'Power & reset'),
         ('device_qualification', '/release-qualification', 'Device qualification',
          QUALIFICATION_NAVIGATION),
-        ('maintenance_updates', '/updates', 'Updates', UPGRADE_NAVIGATION),
+        ('updates', '/updates', 'Update'),
         ('user_settings', '/user', 'Users'),
     )),
 )

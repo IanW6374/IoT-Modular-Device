@@ -16,7 +16,7 @@ def _notice(message='', error=False):
     if not message:
         return ''
     return (
-        '<p class="' + ('error' if error else 'notice') + '" role="status">' +
+        '<p class="' + ('error' if error else 'notice') + '" role="' + ('alert' if error else 'status') + '">' +
         html_escape(message) + '</p>'
     )
 
@@ -424,8 +424,9 @@ def render_device_api_page(csrf, settings, message='', error=False):
         'value="true"' + enabled + '>Enable the mTLS device API</label><div class="grid">'
         '<label class="field">API port<input name="api_port" type="number" min="1" max="65535" '
         'required value="' + html_escape(settings.get('api_port', 8444)) + '"></label>'
-        '<div class="property-row"><span>Authentication</span><strong>Mutual TLS (required)</strong></div>'
-        '</div><p class="muted">A dedicated API client CA and at least one enrolled client '
+        '<label class="field">Authentication<input value="Mutual TLS" readonly '
+        'aria-describedby="api-auth-help"></label>'
+        '</div><p id="api-auth-help" class="muted">A dedicated API client CA and at least one enrolled client '
         'certificate are required. Configure these under Maintenance / Certificates.</p>'
         '<div class="actions device-api-actions"><span class="portal-status action-form-status" '
         'data-portal-form-status role="status" aria-live="polite"></span>'

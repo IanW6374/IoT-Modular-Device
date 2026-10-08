@@ -55,3 +55,72 @@ cause. Correlate snapshots, API/portal behaviour and the surrounding UART log.
 
 Diagnostics do not restart devices, close sockets, bypass TLS verification,
 change socket limits or alter update/confirmation/watchdog policy.
+
+## Internal-memory allocation tracing (opt-in diagnostic core)
+
+The Alpha 104 capture on 7 October showed a roughly 21–23 KB/hour decrease
+in internal free memory across three devices. Two eventually timed out during
+TLS handshakes. One logged hardware AES allocation errors with a largest DMA
+block of just 704 bytes, despite approximately 7 MB of free Python heap. This
+establishes allocation pressure, not the identity of the long-term allocation
+owner. A separate SDK AES partial-allocation cleanup defect is regression-tested
+and patched in the core build; it must not be presented as a proven explanation
+for the earlier steady decline.
+
+A subsequent source audit found an independent, definite ownership leak:
+the pinned MicroPython `esp32.NVS` constructor opens an IDF namespace handle,
+but has no close method or finaliser. IDF retains two native handle objects
+until `nvs_close` is called. The frozen credential store opens a namespace on
+routine reads, including missing network-trial/configuration keys, so those
+reads accumulate internal allocations that Python GC cannot release.
+
+The core patch adds an idempotent `close`, a finaliser and context-manager
+support to `esp32.NVS`. It allocates the Python wrapper before opening the
+native handle, avoiding a further leak if wrapper allocation fails. All frozen
+credential-store transactions use context-managed closure on success, early
+return and exceptions; no periodic GC or application-level caching workaround
+is used. Closing does not commit implicitly, so existing atomic credential
+write/commit ordering is preserved. Native lifecycle and frozen-store
+regressions exercise repeated operations without GC. An on-device soak is
+still required to confirm that this removes the observed long-term decline
+and to identify any remaining allocation owners.
+
+Use `--heap-trace` with `tools/build_micropython_firmware.py` to build a
+diagnostic core. Normal builds explicitly pass `IOTMD_HEAP_TRACE=OFF` and
+regenerate sdkconfig, so a previous diagnostic build cannot silently enable
+tracing in a later production build. Security configuration remains unchanged.
+The pinned IDF patch is applied only during the build and restored even if a
+MicroPython patch or compilation fails.
+
+The existing frozen-core heartbeat advances native tracing; no additional
+Python task, network endpoint, console command or ESP-timer allocation callback
+is added. After a 90-second warm-up, each window records allocations for
+120 seconds, pauses new allocation records, allows 45 seconds for late frees,
+then stops tracing before reporting. Three windows run, with ten minutes
+between windows; afterwards the record buffer is detached and released.
+The first report normally arrives about 4 minutes 15 seconds after the first
+heartbeat. A stalled VM delays this tracing workflow; independent transport
+timer snapshots continue unchanged.
+
+Storage is bounded to 2048 trace records in PSRAM and 32 grouped call stacks.
+IDF's trace hash map is also placed in external RAM. Six-frame native call
+stacks identify allocation callers; no heap contents, request bodies, client
+identities, credentials, certificates or keys are read or logged. UART reports
+include retained internal allocation counts/bytes, start/end free memory,
+record high-water mark, overflow and omitted-group totals. Allocations made
+from ISRs are excluded by the SDK when trace storage is in external RAM.
+
+`IoT-MD-Heap` reports **retained allocations**, not automatically proven leaks:
+some legitimately long-lived allocations and unreachable Python objects whose
+native finalisers have not run may remain. Correlate repeated windows with
+normal request traffic and internal-memory trends. Overflow or omitted groups
+make the report incomplete and are reported explicitly. Tracing adds native
+allocator overhead while enabled and should first be installed on one test
+device; do not install it fleet-wide to investigate a single failure.
+
+Keep the exact diagnostic `micropython.elf`, sdkconfig and signed core together.
+Resolve the `pcs=` addresses using the pinned Xtensa toolchain's
+`xtensa-esp32s3-elf-addr2line -a -f -C -i -e micropython.elf`.
+An ELF from another build can map addresses to unrelated code. Installing a
+diagnostic core requires a normal verified core update/restart; a receive-only
+capture cannot enable tracing on an already installed Alpha 104 image.

@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.0.0-alpha.106 - 2026-10-08
+
+- Close native NVS namespace handles deterministically and fix ESP-IDF AES
+  DMA allocation-failure cleanup. Preserve secure boot, flash encryption and
+  NVS encryption. Bounded allocation tracing is available for diagnostic
+  builds only and is disabled in this release.
+- Standardise checkbox-first controls, required markers, helper typography,
+  aligned fields and accessible success/error feedback across the portal.
+- Move update preferences to Device / Update settings and simplify
+  Maintenance / Update. Add searchable, status-aware Update activity under
+  Maintenance / Logging instead of repeating history in the update workspace.
+- Keep the state-aware Start update / Restart & Install control outside the
+  milestone rail, with visible polling failures and staged-update controls.
+- Add offline browser UI contracts and a portfolio UX review. Rendered browser
+  layout verification remains pending because local headless Chrome timed out.
+- Advance runtime generation to 202 and signed release sequence to 2811.
+  Alpha 105 was a private diagnostic core (sequence 2810), not a public release.
+  Install the universal update for the core fixes and matching application.
+
 ## 3.0.0-alpha.104 - 2026-10-07
 
 - Enable INFO/WARN output for only the native `IoT-MD-Transport` logging tag

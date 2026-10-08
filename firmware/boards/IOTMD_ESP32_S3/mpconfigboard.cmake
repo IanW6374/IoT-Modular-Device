@@ -20,3 +20,7 @@ if(IOTMD_PRODUCTION_SECURITY)
         ${CMAKE_BINARY_DIR}/sdkconfig.iotmd-signing-key
     )
 endif()
+
+if(IOTMD_HEAP_TRACE)
+    list(APPEND SDKCONFIG_DEFAULTS ${MICROPY_BOARD_DIR}/sdkconfig.heap-trace)
+endif()

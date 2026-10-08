@@ -1,0 +1,61 @@
+diff --git a/ports/esp32/esp32_nvs.c b/ports/esp32/esp32_nvs.c
+--- a/ports/esp32/esp32_nvs.c
++++ b/ports/esp32/esp32_nvs.c
+@@ -45,10 +45,31 @@
+ } esp32_nvs_obj_t;
+ 
+-// *esp32_nvs_new allocates a python NVS object given a handle to an esp-idf namespace C obj.
+-static esp32_nvs_obj_t *esp32_nvs_new(nvs_handle_t namespace) {
+-    esp32_nvs_obj_t *self = mp_obj_malloc(esp32_nvs_obj_t, &esp32_nvs_type);
+-    self->namespace = namespace;
+-    return self;
+-}
++// NVS handles own internal IDF allocations, independently of Python's heap.
++// Explicit/context-managed close is deterministic; finalisation is a safety net.
++static mp_obj_t esp32_nvs_close(mp_obj_t self_in) {
++    esp32_nvs_obj_t *self = MP_OBJ_TO_PTR(self_in);
++    if (self->namespace) {
++        nvs_handle_t handle = self->namespace;
++        self->namespace = 0;
++        nvs_close(handle);
++    }
++    return mp_const_none;
++}
++static MP_DEFINE_CONST_FUN_OBJ_1(esp32_nvs_close_obj, esp32_nvs_close);
++
++static mp_obj_t esp32_nvs_enter(mp_obj_t self_in) {
++    esp32_nvs_obj_t *self = MP_OBJ_TO_PTR(self_in);
++    if (!self->namespace) {
++        check_esp_err(ESP_ERR_NVS_INVALID_HANDLE);
++    }
++    return self_in;
++}
++static MP_DEFINE_CONST_FUN_OBJ_1(esp32_nvs_enter_obj, esp32_nvs_enter);
++
++static mp_obj_t esp32_nvs_exit(size_t n_args, const mp_obj_t *args) {
++    (void)n_args;
++    return esp32_nvs_close(args[0]);
++}
++static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(esp32_nvs_exit_obj, 4, 4, esp32_nvs_exit);
+ 
+ // esp32_nvs_print prints an NVS object, unfortunately it doesn't seem possible to extract the
+@@ -64,6 +64,8 @@
+     // Get requested nvs namespace
+     const char *ns_name = mp_obj_str_get_str(all_args[0]);
+-    nvs_handle_t namespace;
+-    check_esp_err(nvs_open(ns_name, NVS_READWRITE, &namespace));
+-    return MP_OBJ_FROM_PTR(esp32_nvs_new(namespace));
++    // Allocate before opening: a Python allocation failure must not leak a native handle.
++    esp32_nvs_obj_t *self = mp_obj_malloc_with_finaliser(esp32_nvs_obj_t, &esp32_nvs_type);
++    self->namespace = 0;
++    check_esp_err(nvs_open(ns_name, NVS_READWRITE, &self->namespace));
++    return MP_OBJ_FROM_PTR(self);
+ }
+@@ -133,3 +133,7 @@
+ static const mp_rom_map_elem_t esp32_nvs_locals_dict_table[] = {
++    { MP_ROM_QSTR(MP_QSTR_close), MP_ROM_PTR(&esp32_nvs_close_obj) },
++    { MP_ROM_QSTR(MP_QSTR___del__), MP_ROM_PTR(&esp32_nvs_close_obj) },
++    { MP_ROM_QSTR(MP_QSTR___enter__), MP_ROM_PTR(&esp32_nvs_enter_obj) },
++    { MP_ROM_QSTR(MP_QSTR___exit__), MP_ROM_PTR(&esp32_nvs_exit_obj) },
+     { MP_ROM_QSTR(MP_QSTR_get_i32), MP_ROM_PTR(&esp32_nvs_get_i32_obj) },
+     { MP_ROM_QSTR(MP_QSTR_set_i32), MP_ROM_PTR(&esp32_nvs_set_i32_obj) },

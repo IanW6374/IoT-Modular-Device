@@ -183,6 +183,12 @@ class SetupWizardTests(unittest.TestCase):
         config = {'schema': credential_store.SCHEMA_VERSION, 'test': True}
 
         class PressuredStore:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exception):
+                self.events.append(('close', None))
+
             def __init__(self):
                 self.values = {'active': 0, 'cfg1': b'stale'}
                 self.events = []

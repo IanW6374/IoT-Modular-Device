@@ -33,6 +33,12 @@ _memory_values = {}
 class _MemoryNVS:
     """CPython test backend; production always uses ``esp32.NVS``."""
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exception):
+        return None
+
     def set_blob(self, key, value):
         _memory_values[key] = bytes(value)
 
@@ -106,22 +112,22 @@ def configure_station(station, wifi):
     return station
 
 def load(require_provisioned=False):
-    store = _nvs()
-    candidates = []
-    try:
-        active = store.get_i32('active')
-        if active in (0, 1):
-            candidates.append(active)
-    except OSError:
-        pass
-    candidates.extend(slot for slot in (0, 1) if slot not in candidates)
-    for slot in candidates:
+    with _nvs() as store:
+        candidates = []
         try:
-            config = json.loads(_read_blob(store, 'cfg' + str(slot)).decode())
-            config = migrate_configuration(config)
-            return validate(config, require_provisioned)
-        except Exception:
-            continue
+            active = store.get_i32('active')
+            if active in (0, 1):
+                candidates.append(active)
+        except OSError:
+            pass
+        candidates.extend(slot for slot in (0, 1) if slot not in candidates)
+        for slot in candidates:
+            try:
+                config = json.loads(_read_blob(store, 'cfg' + str(slot)).decode())
+                config = migrate_configuration(config)
+                return validate(config, require_provisioned)
+            except Exception:
+                continue
     if require_provisioned:
         raise RuntimeError('device setup is incomplete or unreadable')
     return {}
@@ -132,22 +138,22 @@ def save(config):
     encoded = json.dumps(config, separators=(',', ':')).encode()
     if len(encoded) > MAX_CONFIG_BYTES:
         raise ValueError('credential configuration exceeds encrypted NVS capacity')
-    store = _nvs()
-    try:
-        active = store.get_i32('active')
-    except OSError:
-        active = 1
-    target = 1 if active == 0 else 0
-    target_key = 'cfg' + str(target)
-    # Reclaim the inactive generation before allocating its replacement.
-    # The selected generation remains intact if power is lost or the new
-    # value cannot be written, while NVS does not need room for three copies.
-    _erase(store, target_key)
-    store.commit()
-    store.set_blob(target_key, encoded)
-    store.commit()
-    store.set_i32('active', target)
-    store.commit()
+    with _nvs() as store:
+        try:
+            active = store.get_i32('active')
+        except OSError:
+            active = 1
+        target = 1 if active == 0 else 0
+        target_key = 'cfg' + str(target)
+        # Reclaim the inactive generation before allocating its replacement.
+        # The selected generation remains intact if power is lost or the new
+        # value cannot be written, while NVS does not need room for three copies.
+        _erase(store, target_key)
+        store.commit()
+        store.set_blob(target_key, encoded)
+        store.commit()
+        store.set_i32('active', target)
+        store.commit()
     return config
 
 
@@ -166,9 +172,10 @@ def _network_snapshot(config):
 
 def _read_network_trial():
     try:
-        value = json.loads(
-            _read_blob(_nvs(), NETWORK_TRIAL_KEY, MAX_NETWORK_TRIAL_BYTES).decode()
-        )
+        with _nvs() as store:
+            value = json.loads(
+                _read_blob(store, NETWORK_TRIAL_KEY, MAX_NETWORK_TRIAL_BYTES).decode()
+            )
         if (
             not isinstance(value, dict) or int(value.get('version', 0)) != 1 or
             not isinstance(value.get('previous'), dict) or
@@ -184,13 +191,14 @@ def _write_network_trial(value):
     encoded = json.dumps(value, separators=(',', ':')).encode()
     if len(encoded) > MAX_NETWORK_TRIAL_BYTES:
         raise ValueError('network rollback record exceeds encrypted NVS capacity')
-    _write_blob(_nvs(), NETWORK_TRIAL_KEY, encoded)
+    with _nvs() as store:
+        _write_blob(store, NETWORK_TRIAL_KEY, encoded)
 
 
 def _clear_network_trial():
-    store = _nvs()
-    _erase(store, NETWORK_TRIAL_KEY)
-    store.commit()
+    with _nvs() as store:
+        _erase(store, NETWORK_TRIAL_KEY)
+        store.commit()
 
 
 def begin_network_trial(previous, candidate):
@@ -725,7 +733,8 @@ def update_certificate_settings(
 
 def bootstrap_key():
     try:
-        value = _read_blob(_nvs(), 'bootkey', 64).decode()
+        with _nvs() as store:
+            value = _read_blob(store, 'bootkey', 64).decode()
         if MIN_PASSWORD_LENGTH <= len(value) <= 63:
             return value
     except Exception:
@@ -735,7 +744,8 @@ def bootstrap_key():
 
 def update_verification_key():
     try:
-        value = _read_blob(_nvs(), 'verifykey', 64)
+        with _nvs() as store:
+            value = _read_blob(store, 'verifykey', 64)
         if len(value) == 64:
             return value
     except Exception:
@@ -744,9 +754,9 @@ def update_verification_key():
 
 
 def erase_bootstrap_key():
-    store = _nvs()
-    _erase(store, 'bootkey')
-    store.commit()
+    with _nvs() as store:
+        _erase(store, 'bootkey')
+        store.commit()
 
 
 def request_factory_reset(setup_password):
@@ -756,17 +766,18 @@ def request_factory_reset(setup_password):
     credential_security.validate_password_strength(setup_password)
     if len(setup_password) > 63:
         raise ValueError('setup access-point password must not exceed 63 characters')
-    store = _nvs()
-    store.set_blob('bootkey', setup_password.encode())
-    store.commit()
-    store.set_i32(FACTORY_RESET_KEY, 1)
-    store.commit()
+    with _nvs() as store:
+        store.set_blob('bootkey', setup_password.encode())
+        store.commit()
+        store.set_i32(FACTORY_RESET_KEY, 1)
+        store.commit()
     return True
 
 
 def factory_reset_pending():
     try:
-        return _nvs().get_i32(FACTORY_RESET_KEY) == 1
+        with _nvs() as store:
+            return store.get_i32(FACTORY_RESET_KEY) == 1
     except OSError:
         return False
 
@@ -775,12 +786,12 @@ def complete_factory_reset():
     """Erase user configuration after frozen recovery has cleared user files."""
     if not factory_reset_pending():
         return False
-    store = _nvs()
-    for key in ('cfg0', 'cfg1', 'active', NETWORK_TRIAL_KEY):
-        _erase(store, key)
-    store.commit()
-    _erase(store, FACTORY_RESET_KEY)
-    store.commit()
+    with _nvs() as store:
+        for key in ('cfg0', 'cfg1', 'active', NETWORK_TRIAL_KEY):
+            _erase(store, key)
+        store.commit()
+        _erase(store, FACTORY_RESET_KEY)
+        store.commit()
     return True
 
 

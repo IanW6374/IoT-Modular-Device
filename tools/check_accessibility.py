@@ -73,6 +73,7 @@ def main():
     pages = {
         'portal overview': web_portal.render_page('csrf', 'INFO', ('INFO',), [], 5000),
         'portal upgrades': web_portal.render_updates_page('csrf'),
+        'portal update activity': web_portal.render_update_activity_page('csrf', {}),
         'portal backup': web_portal.render_configuration_backup_page('csrf'),
         'portal users': web_portal.render_user_settings_page(
             'csrf', {}, users=({'username': 'admin', 'role': 'administrator', 'enabled': True},)
