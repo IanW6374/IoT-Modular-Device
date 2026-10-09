@@ -44,7 +44,7 @@ use `-k` to bypass verification.
 
 ## Authentication and authorization
 
-Install one or more API client CAs under **Maintenance > Certificates > API
+Install one or more API client CAs under **Device > Settings > Certificates > API
 client trust**, then
 enable the listener under **Device > API**. Each client certificate is
 registered by SHA-256 fingerprint with a label and scopes. Read requests require
@@ -91,7 +91,7 @@ This guarantees duplicate suppression, not exactly-once physical effects across
 a power failure. Private results retain mTLS, scope and revocation checks.
 
 An administrator can expand or reduce an existing caller's permissions under
-**Maintenance > Certificates > API client trust**.
+**Device > Settings > Certificates > API client trust**.
 Open **Edit API scopes**, select one or more permissions, and save. The registry
 updates the existing fingerprint in place, so the certificate does not need to
 be uploaded again. At least one supported scope must remain.

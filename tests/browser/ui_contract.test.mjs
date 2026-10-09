@@ -7,6 +7,44 @@ const require=createRequire(import.meta.url);
 const {JSDOM}=require(process.env.IOT_UI_NODE_MODULES ? `${process.env.IOT_UI_NODE_MODULES}/jsdom` : 'jsdom');
 const root=fileURLToPath(new URL('../..',import.meta.url));
 const python=code=>execFileSync(process.env.PYTHON || 'python3',['-c',code],{cwd:root,encoding:'utf8'});
+test('module configuration is readable immediately, discard stays formatted and invalid JSON cannot submit',()=>{
+  const html=python(`from portal_settings_views import render_module_settings_page
+print(render_module_settings_page('csrf','{"devices":[{"name":"Probe","entities":{"0":{"unit":"C"}}}]}'))`);
+  const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
+  dom.window.fetch=async()=>({ok:true,json:async()=>({})});
+  dom.window.eval(python('import web_portal_ui; print(web_portal_ui.PORTAL_JS)'));
+  for(const script of doc.querySelectorAll('script:not([src])'))dom.window.eval(script.textContent);
+  const raw=doc.getElementById('module-settings-json'),form=raw.form;
+  assert.equal(raw.value,JSON.stringify(JSON.parse(raw.value),null,2));
+  assert.match(raw.value,/\n  "devices":/);
+  assert.equal(raw.defaultValue,raw.value);
+  raw.value='{"bad":';
+  const submit=new dom.window.Event('submit',{cancelable:true});
+  form.onsubmit(submit);assert.equal(submit.defaultPrevented,true);
+  assert.match(doc.querySelector('[data-portal-form-status]').textContent,/Invalid JSON/);
+  form.reset();assert.equal(raw.value,raw.defaultValue);
+  dom.window.close();
+});
+test('Overview and Users are primary links; nested Settings and Certificates preserve breadcrumbs',()=>{
+  const html=python("import web_portal_ui; print(web_portal_ui.shell('Certificates','api_client_trust','', 'csrf'))");
+  const dom=new JSDOM(html,{runScripts:'outside-only',pretendToBeVisual:true}),doc=dom.window.document;
+  const nav=doc.querySelector('#portal-nav');
+  assert.equal(nav.querySelector(':scope>a[href="/"]').textContent,'Overview');
+  assert.equal(nav.querySelector(':scope>a[href="/user"]').textContent,'Users');
+  assert.equal(nav.querySelector('[aria-label="Maintenance submenu"] a[href="/certificates"]'),null);
+  const settings=nav.querySelector('[aria-label="Device submenu"] [aria-label="Settings submenu"]');
+  assert.equal(settings.querySelectorAll('a').length,7);
+  assert.equal(settings.querySelector('a[href="/update-settings"]').textContent,'Updates');
+  assert.equal(settings.parentElement.classList.contains('open'),true);
+  assert.deepEqual([...doc.querySelectorAll('.breadcrumb a')].map(a=>a.textContent),['Device','Settings','Certificates','API client trust']);
+  dom.window.fetch=async()=>({ok:true,json:async()=>({})});
+  dom.window.eval(python('import web_portal_ui; print(web_portal_ui.PORTAL_JS)'));
+  for(const script of doc.querySelectorAll('script:not([src])'))dom.window.eval(script.textContent);
+  const trigger=settings.querySelector('.nav-submenu-trigger');trigger.click();
+  assert.equal(trigger.getAttribute('aria-expanded'),'false');trigger.click();
+  assert.equal(trigger.getAttribute('aria-expanded'),'true');
+  dom.window.close();
+});
 test('shared field markers do not reorder checkboxes, and dynamic errors are announced',async()=>{
   const source=python("import web_portal_ui; print(web_portal_ui.PORTAL_JS[web_portal_ui.PORTAL_JS.index('/* Required/optional labels shared'):])");
   const dom=new JSDOM('<label>Retain password<input name="retained" type="checkbox" required></label><label>Description<input></label><p id="result" class="portal-status">Ready</p>',{runScripts:'outside-only',pretendToBeVisual:true});

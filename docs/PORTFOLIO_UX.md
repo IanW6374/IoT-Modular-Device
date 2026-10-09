@@ -31,7 +31,7 @@ not change device configuration, firmware security or live deployments.
 | Management errors | Profile initialization and backup refresh failures are displayed, not only written to the developer console. A successful backup refresh clears its own failure notice. |
 | Syslog refresh | Receiver status HTTP/network failures are surfaced while old data is retained. A successful refresh clears that failure notice. |
 | IoT-MD updates | Start update remains visible while staging. Restart/install uses the primary action location; the last milestone is a ring, not a button. Transient task connection failures remain visible without resetting progress. |
-| IoT-MD navigation | Device / Update settings; Maintenance / Update; Maintenance / Logging / Update activity. Keep existing update URLs compatible. |
+| IoT-MD navigation | Overview and Users are primary links. Device / Settings groups Certificates, Updates, Logging and Time & Date. Maintenance / Update and Maintenance / Logging / Update log retain their existing URLs. |
 | IoT-MD activity | Search release checks and update events, filter outcomes and show coloured dots with accessible status tooltips. Remove history from the installation workspace. |
 
 ## Selection and data safety

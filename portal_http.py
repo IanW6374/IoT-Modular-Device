@@ -33,6 +33,16 @@ HTML_ESCAPE = (
 )
 JS_ESCAPE = {'\\': '\\\\', "'": "\\'", '\n': '\\n', '\r': '\\r'}
 
+def login_destination(params):
+    """Only allow the known update workspace as a post-login destination."""
+    return '/updates' if (
+        params.get('return') == 'updates' or params.get('return_to') == '/updates'
+    ) else '/'
+
+def update_login_url(login_url):
+    login_url = str(login_url or '/login')
+    return login_url + ('&' if '?' in login_url else '?') + 'return=updates'
+
 def html_escape(value):
     text = str(value)
     # Ampersand must be replaced first. MicroPython does not promise the same

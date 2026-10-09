@@ -227,18 +227,19 @@ async def start_web_portal(portal):
                 body = 'Method not allowed'
                 await send_response(writer, '405 Method Not Allowed', body, 'text/plain')
             elif is_login and method == 'GET':
+                destination = login_destination(parse_query(action_path))
                 expired = parse_query(action_path).get('reason') == 'expired'
                 if expired:
                     if session_valid: sessions.revoke(session_id)
                     await send_response(writer, '200 OK', render_login_page(message=
-                        'You have been signed out because your session expired.'),
+                        'You have been signed out because your session expired.', return_to=destination),
                         extra_headers=(('Set-Cookie', session_cookie('', secure_cookie, True)),))
                 elif session_valid:
                     await send_redirect(
                         writer,
-                        '/user' if session_password_change_required else '/'
+                        '/user' if session_password_change_required else destination
                     )
-                else: await send_response(writer, '200 OK', render_login_page())
+                else: await send_response(writer, '200 OK', render_login_page(return_to=destination))
             elif is_login and method == 'POST':
                 params = form_params
                 identity = (
@@ -281,7 +282,7 @@ async def start_web_portal(portal):
                             )
                     await send_redirect(
                         writer,
-                        '/user' if session_password_change_required else '/', (
+                        '/user' if session_password_change_required else login_destination(params), (
                             ('Set-Cookie', cookie),
                             ('Referrer-Policy', 'no-referrer')
                         )
@@ -299,7 +300,7 @@ async def start_web_portal(portal):
                         writer, '401 Unauthorized',
                         render_login_page(
                             params.get('username', ''),
-                            'Invalid username or password.'
+                            'Invalid username or password.', return_to=login_destination(params)
                         )
                     )
             elif not session_valid:
@@ -1089,7 +1090,7 @@ async def start_web_portal(portal):
                 await send_response(
                     writer, '200 OK',
                     portal_ui.restart_page(
-                        login_url,
+                        update_login_url(login_url),
                         result.get('message', '') if isinstance(result, dict) else result
                     ),
                     extra_headers=(
@@ -1104,7 +1105,7 @@ async def start_web_portal(portal):
                 await send_response(
                     writer, '200 OK',
                     portal_ui.restart_page(
-                        login_url,
+                        update_login_url(login_url),
                         result.get('message', '') if isinstance(result, dict) else result
                     ),
                     extra_headers=(
@@ -1119,7 +1120,7 @@ async def start_web_portal(portal):
                 await send_response(
                     writer, '200 OK',
                     portal_ui.restart_page(
-                        login_url,
+                        update_login_url(login_url),
                         result.get('message', '') if isinstance(result, dict) else result
                     ),
                     extra_headers=(
@@ -1144,7 +1145,7 @@ async def start_web_portal(portal):
                 await send_response(
                     writer, '200 OK',
                     portal_ui.restart_page(
-                        login_url,
+                        update_login_url(login_url),
                         result.get('message', '') if isinstance(result, dict) else result
                     ),
                     extra_headers=(

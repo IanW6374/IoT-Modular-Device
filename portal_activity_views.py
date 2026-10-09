@@ -34,7 +34,7 @@ def render_update_activity_page(token, status):
             html_escape(label + (' · ' + str(entry['kind']) if entry.get('kind') else '')) +
             '</strong><p>' + html_escape(details) + '</p></div></article>'
         )
-    body = ui.page_heading('Logging', 'Update activity', 'Release checks, staging, installation and rollback events.')
+    body = ui.page_heading('Logging', 'Update log', 'Release checks, staging, installation and rollback events.')
     body += (
         '<section class="card"><div class="grid"><label class="field">Search activity'
         '<input id="activity-search" type="search" placeholder="Version, event, date or detail"></label>'
@@ -54,4 +54,4 @@ def render_update_activity_page(token, status):
         'if(!row.hidden)count++;});document.getElementById("activity-count").textContent=count+" of "+rows.length+" events";'
         'document.getElementById("activity-empty").hidden=count>0;}search.oninput=filterActivity;tone.onchange=filterActivity;filterActivity();'
     )
-    return ui.shell('IoT-MD update activity', 'update_activity', body, token, script)
+    return ui.shell('IoT-MD update log', 'update_activity', body, token, script)

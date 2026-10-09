@@ -23,12 +23,12 @@ test('authenticated portal has no serious accessibility violations', async ({ pa
 
 test('primary menus support keyboard navigation and escape', async ({ page }) => {
   await signIn(page);
-  const status = page.getByRole('button', { name: /Status/ }).first();
-  await status.focus();
+  const device = page.getByRole('button', { name: 'Device', exact: true }).first();
+  await device.focus();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('menuitem', { name: 'Overview' })).toBeFocused();
+  await expect(page.getByRole('menuitem', { name: 'API', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(status).toBeFocused();
+  await expect(device).toBeFocused();
 });
 
 test('responsive portal has no horizontal page overflow', async ({ page }) => {

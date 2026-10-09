@@ -52,3 +52,13 @@ class UpdateTelemetryTests(unittest.TestCase):
         self.assertEqual(value.info()['device_description'], 'Heating controller')
         self.assertEqual(value.configuration()['device_description'], 'Heating controller')
         self.assertEqual(value.info()['update_progress']['phase'], 'core_verify')
+
+    def test_rebooted_component_trials_keep_their_durable_release_identity(self):
+        telemetry = UpdateTelemetry()
+        app = SimpleNamespace(update_status=lambda: {'status': 'trial', 'release_sequence': 2814})
+        core = SimpleNamespace(update_status=lambda: {'status': 'idle'})
+        pair = SimpleNamespace(update_status=lambda: {'status': 'idle'})
+        result = telemetry.snapshot(app, core, pair)
+        self.assertEqual(result['application_sequence'], 2814)
+        self.assertEqual(result['firmware_sequence'], 0)
+        self.assertEqual(result['phase'], 'install')

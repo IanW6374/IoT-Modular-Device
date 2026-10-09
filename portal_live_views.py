@@ -1972,7 +1972,7 @@ def render_persistent_task_route(
 def render_update_settings_page(token, settings=None, message='', error=False):
     body = (
         portal_ui.page_heading(
-            'Device', 'Update settings',
+            'Device settings', 'Updates',
             'Configure the release channel, schedule, download and activation preferences.'
         ) + _notice(message, error) + '<section class="card">' +
         render_update_preferences(token, settings or {}) + '</section>'

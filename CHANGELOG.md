@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0-alpha.109 - 2026-10-09
+
+- Format module configuration on opening and keep its formatted baseline when
+  discarding edits. Fix editor script parsing and invalid-JSON submission feedback.
+- Promote Overview and Users to primary navigation. Group Certificates, Updates,
+  Logging and Time & Date under Device / Settings; rename Update activity to Update log.
+- Return to Update after application, core or universal installation and sign-in,
+  retaining session revocation and an allowlisted post-login destination.
+- Export durable component release identities during trials so Management can
+  distinguish a restarted device from stale queued staging commands.
+- Advance runtime generation to 205 and signed release sequence to 2814.
+
 ## 3.0.0-alpha.108 - 2026-10-08
 
 - Retire Device API v2. Serve only API v3 with authenticated capability/limit

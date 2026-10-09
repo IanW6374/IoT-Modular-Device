@@ -46,12 +46,14 @@ def render_operational(route, token, current_settings, message='', error=False,
         )
     return renderer(token, current_settings, message, error)
 
-def render_login_page(username='', error='', message=''):
+def render_login_page(username='', error='', message='', return_to='/'):
     body = (
         '<section class="auth-card card"><span class="eyebrow">Secure device portal</span>'
         '<h1>Welcome back</h1><p class="lead">Sign in to manage this IoT-MD device.</p>' +
         _notice(message) + _notice(error, True) +
         '<form id="login-form" action="/login" method="post">'
+        '<input type="hidden" name="return_to" value="' +
+        ('/updates' if return_to == '/updates' else '/') + '">'
         '<label class="field">Username<input name="username" autocomplete="username" value="' +
         html_escape(username) + '" required maxlength="64" autofocus></label>'
         '<label class="field">Password<input name="password" type="password" '
@@ -315,7 +317,7 @@ def render_ntp_settings_page(csrf, settings, message='', error=False):
     )
     body = (
         portal_ui.page_heading(
-            'Device', 'Time / Date',
+            'Device settings', 'Time & Date',
             'Configure UTC time synchronisation and automatic local daylight-saving rules.'
         ) + _notice(message, error) +
         '<form data-portal-async data-portal-dirty action="/ntp-settings" method="post" autocomplete="off">'
@@ -584,8 +586,8 @@ def render_module_settings_page(csrf, module_json='{"devices":[]}', message='', 
         '</form></section>'
     )
     script = (
-        'var raw=document.getElementById("module-settings-json"),moduleStatus='
-        'document.querySelector("form[action=\"/module-settings\"] [data-portal-form-status]");'
+        'var raw=document.getElementById("module-settings-json"),moduleForm=raw.closest("form"),'
+        'moduleStatus=moduleForm.querySelector("[data-portal-form-status]");'
         'function formatJson(report){try{raw.value=JSON.stringify(JSON.parse(raw.value),null,2);'
         'if(report)portalStatus(moduleStatus,"","");return true;}catch(error){if(report)portalStatus('
         'moduleStatus,"error","Invalid JSON: "+error.message);return false;}}'
@@ -595,9 +597,9 @@ def render_module_settings_page(csrf, module_json='{"devices":[]}', message='', 
         'r.onload=function(){raw.value=r.result;try{raw.value=JSON.stringify(JSON.parse(raw.value),null,2);'
         'portalStatus(moduleStatus,"","");}catch(error){portalStatus(moduleStatus,"error","Invalid JSON: "+'
         'error.message);}};r.readAsText(f);};'
-        'document.querySelector("form[action=\\"/module-settings\\"]").onsubmit=function(e){'
+        'moduleForm.onsubmit=function(e){'
         'if(!formatJson(true))e.preventDefault();};'
-        'formatJson(false);'
+        'if(formatJson(false))raw.defaultValue=raw.value;'
     )
     return portal_ui.shell('IoT-MD modules', 'modules', body, csrf, script)
 

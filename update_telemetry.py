@@ -72,6 +72,9 @@ class UpdateTelemetry:
             'application_status': app.get('status', 'idle'),
             'firmware_status': core.get('status', 'idle'),
             'universal_status': pair.get('status', 'idle'),
+            'application_sequence': int(app.get('release_sequence', 0)),
+            'firmware_sequence': int(core.get('release_sequence', 0)),
+            'universal_sequence': int(pair.get('release_sequence', 0)),
             'confirmation_phase': str(pair.get('confirmation_phase', ''))[:40],
         })
         if any(value.get(name) in ('trial', 'activating', 'committing') for name in (

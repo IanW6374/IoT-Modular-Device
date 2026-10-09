@@ -7,7 +7,7 @@ are configured under **Device > MQTT**.
 ## Connection and security
 
 Enable MQTT, enter the broker host and TLS port, and install the broker CA under
-**Maintenance > Certificates > CA & signing trust**. TLS is mandatory and
+**Device > Settings > Certificates > CA & signing trust**. TLS is mandatory and
 authenticates the broker;
 IoT-MD does not currently present an MQTT client certificate. Username and
 password are optional only when the broker deliberately permits a client

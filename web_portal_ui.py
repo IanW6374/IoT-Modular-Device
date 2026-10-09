@@ -674,7 +674,7 @@ CERTIFICATE_NAVIGATION = (
 CERTIFICATE_ACTIVE_KEYS = tuple(item[0] for item in CERTIFICATE_NAVIGATION)
 
 LOGGING_NAVIGATION = (
-    ('update_activity', '/update-activity', 'Update activity'),
+    ('update_activity', '/update-activity', 'Update log'),
     ('audit_logging', '/audit-log', 'Audit log'),
     ('logging', '/logging', 'Device log'),
 )
@@ -689,23 +689,27 @@ QUALIFICATION_NAVIGATION = (
 )
 
 
+DEVICE_SETTINGS_NAVIGATION = (
+    ('certificates', '/certificates', 'Certificates', CERTIFICATE_NAVIGATION),
+    ('update_settings', '/update-settings', 'Updates'),
+    ('logging_settings', '/logging-settings', 'Logging'),
+    ('ntp_settings', '/ntp-settings', 'Time & Date'),
+)
+
 NAVIGATION = (
+    ('overview', '/', 'Overview', ()),
     ('device', '/device-api', 'Device', (
-        ('overview', '/', 'Overview'),
         ('device_api', '/device-api', 'API'),
-        ('logging_settings', '/logging-settings', 'Logging'),
         ('messaging', '/messaging', 'MQTT'),
         ('settings', '/settings', 'Network'),
         ('portal_settings', '/portal-settings', 'Portal'),
-        ('ntp_settings', '/ntp-settings', 'Time / Date'),
-        ('update_settings', '/update-settings', 'Update settings'),
+        ('device_settings', '/update-settings', 'Settings', DEVICE_SETTINGS_NAVIGATION),
     )),
     ('module', '/module-settings', 'Module', (
         ('modules', '/module-settings', 'Configuration'),
         ('module_diagnostics', '/diagnostics', 'Diagnostics'),
     )),
-    ('maintenance', '/certificates', 'Maintenance', (
-        ('certificates', '/certificates', 'Certificates', CERTIFICATE_NAVIGATION),
+    ('maintenance', '/updates', 'Maintenance', (
         ('configuration_backup', '/configuration-backup', 'Configuration backup'),
         ('health_history', '/health-history', 'Health history'),
         ('maintenance_logging', '/logging', 'Logging', LOGGING_NAVIGATION),
@@ -713,8 +717,8 @@ NAVIGATION = (
         ('device_qualification', '/release-qualification', 'Device qualification',
          QUALIFICATION_NAVIGATION),
         ('updates', '/updates', 'Update'),
-        ('user_settings', '/user', 'Users'),
     )),
+    ('user_settings', '/user', 'Users', ()),
 )
 
 
@@ -931,51 +935,35 @@ def personalise_page(page, username, role, status=None, session_timeout_ms=0):
     return restrict_actions(page, role)
 
 
+def _navigation_link(item, active, top=False):
+    key, path, label = item[:3]
+    children = item[3] if len(item) > 3 else ()
+    current = key == active or active in _navigation_keys(children)
+    if not children:
+        return ('<a class="nav-link"' + ('' if top else ' role="menuitem"') +
+                ' href="' + escape(path) + '"' +
+                (' aria-current="page"' if current else '') + '>' +
+                escape(label) + '</a>')
+    expanded = current and not top
+    return (
+        '<div class="' + ('nav-group' if top else 'nav-subgroup') +
+        (' open' if expanded else '') + '"><button class="nav-link ' +
+        ('nav-menu-trigger' if top else 'nav-submenu-trigger') +
+        '" type="button" aria-haspopup="true" aria-expanded="' +
+        ('true' if expanded else 'false') + '"' +
+        (' aria-current="page"' if top and current else '') + '>' +
+        escape(label) + '</button><div class="' +
+        ('nav-dropdown' if top else 'nav-submenu') +
+        '" role="menu" aria-label="' + escape(label) + ' submenu">' +
+        ''.join(_navigation_link(child, active) for child in children) +
+        '</div></div>'
+    )
+
+
 def navigation(active, csrf):
     links = []
-    for key, path, label, children in NAVIGATION:
-        child_keys = _navigation_keys(children)
-        current = ' aria-current="page"' if (
-            key == active or active in child_keys
-        ) else ''
-        child_links = []
-        for child in children:
-            child_key, child_path, child_label = child[:3]
-            nested = child[3] if len(child) > 3 else ()
-            if nested:
-                nested_active = active in _navigation_keys(nested)
-                submenu_links = []
-                for nested_key, nested_path, nested_label in nested:
-                    nested_current = ' aria-current="page"' if nested_key == active else ''
-                    submenu_links.append(
-                        '<a class="nav-link" role="menuitem" href="' +
-                        escape(nested_path) + '"' + nested_current + '>' +
-                        escape(nested_label) + '</a>'
-                    )
-                child_links.append(
-                    '<div class="nav-subgroup' + (' open' if nested_active else '') + '">'
-                    '<button class="nav-link nav-submenu-trigger" type="button" '
-                    'aria-haspopup="true" aria-expanded="' +
-                    ('true' if nested_active else 'false') + '">' +
-                    escape(child_label) + '</button>'
-                    '<div class="nav-submenu" role="menu" aria-label="' +
-                    escape(child_label) + ' submenu">' +
-                    ''.join(submenu_links) + '</div></div>'
-                )
-                continue
-            child_current = ' aria-current="page"' if child_key == active else ''
-            child_links.append(
-                '<a class="nav-link" role="menuitem" href="' +
-                escape(child_path) + '"' + child_current + '>' +
-                escape(child_label) + '</a>'
-            )
-        links.append(
-            '<div class="nav-group"><button class="nav-link nav-menu-trigger" type="button" '
-            'aria-haspopup="true" aria-expanded="false"' + current + '>' +
-            escape(label) + '</button>'
-            '<div class="nav-dropdown" role="menu" aria-label="' + escape(label) +
-            ' submenu">' + ''.join(child_links) + '</div></div>'
-        )
+    for item in NAVIGATION:
+        links.append(_navigation_link(item, active, True))
     account_actions = (
         '<button id="change-password-open" class="secondary compact identity-action" '
         'type="button">Change password</button>'
@@ -1008,33 +996,27 @@ def navigation(active, csrf):
     )
 
 
+def _navigation_trail(items, active):
+    for item in items:
+        if item[0] == active:
+            return [item]
+        trail = _navigation_trail(item[3], active) if len(item) > 3 else []
+        if trail:
+            return [item] + trail
+    return []
+
+
 def breadcrumb(active):
-    for _key, path, label, children in NAVIGATION:
-        for child in children:
-            child_key, child_path, child_label = child[:3]
-            nested = child[3] if len(child) > 3 else ()
-            for nested_key, nested_path, nested_label in nested:
-                if nested_key != active:
-                    continue
-                return (
-                    '<div class="breadcrumb" role="navigation" aria-label="Breadcrumb">'
-                    '<a href="' + escape(path) + '">' + escape(label) + '</a>'
-                    '<span class="breadcrumb-separator" aria-hidden="true">\\</span>'
-                    '<a href="' + escape(child_path) + '">' + escape(child_label) + '</a>'
-                    '<span class="breadcrumb-separator" aria-hidden="true">\\</span>'
-                    '<a href="' + escape(nested_path) + '" aria-current="page">' +
-                    escape(nested_label) + '</a></div>'
-                )
-            if child_key != active:
-                continue
-            return (
-                '<div class="breadcrumb" role="navigation" aria-label="Breadcrumb">'
-                '<a href="' + escape(path) + '">' + escape(label) + '</a>'
-                '<span class="breadcrumb-separator" aria-hidden="true">\\</span>'
-                '<a href="' + escape(child_path) + '" aria-current="page">' +
-                escape(child_label) + '</a></div>'
-            )
-    return ''
+    trail = _navigation_trail(NAVIGATION, active)
+    if len(trail) < 2:
+        return ''
+    separator = '<span class="breadcrumb-separator" aria-hidden="true">\\</span>'
+    return (
+        '<div class="breadcrumb" role="navigation" aria-label="Breadcrumb">' +
+        separator.join('<a href="' + escape(item[1]) + '"' +
+                       (' aria-current="page"' if item[0] == active else '') +
+                       '>' + escape(item[2]) + '</a>' for item in trail) + '</div>'
+    )
 
 
 def shell(title, active, body, csrf='', script='', extra_css='', authenticated=True,

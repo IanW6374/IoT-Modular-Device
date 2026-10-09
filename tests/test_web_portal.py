@@ -46,6 +46,12 @@ from web_portal import (
 
 
 class WebPortalTests(unittest.TestCase):
+    def test_login_return_destination_rejects_external_and_unrecognized_urls(self):
+        for value in ('https://example.com/', '//example.com/', '/user', '/updates\r\nInjected: yes'):
+            self.assertEqual(portal_http.login_destination({'return_to': value}), '/')
+            self.assertIn('name="return_to" value="/"', render_login_page(return_to=value))
+        self.assertEqual(portal_http.login_destination({'return': 'updates'}), '/updates')
+
     def test_html_escape_order_is_stable_for_certificate_names(self):
         self.assertEqual(
             portal_http.html_escape("C=US, O=Let's Encrypt, CN=E2"),
@@ -627,7 +633,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('class="status-spinner"', status)
         self.assertIn('class="status-text">Checking…', status)
         self.assertNotIn('<progress', status)
-        self.assertIn('aria-label="Breadcrumb"', pages[-1])
+        self.assertNotIn('aria-label="Breadcrumb"', pages[-1])
+        self.assertIn('<a class="nav-link" href="/" aria-current="page">Overview</a>', pages[-1])
 
     def test_password_change_requires_current_password(self):
         html = web_portal.render_password_change_page('csrf')
@@ -837,7 +844,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('href="/settings" aria-current="page">Network</a>', html)
         self.assertIn('href="/portal-settings">Portal</a>', html)
         self.assertNotIn('href="/wifi-settings">Wi-Fi</a>', html)
-        self.assertIn('href="/ntp-settings">Time / Date</a>', html)
+        self.assertIn('href="/ntp-settings">Time &amp; Date</a>', html)
         self.assertIn('href="/logging-settings">Logging</a>', html)
         self.assertIn('href="/messaging">MQTT</a>', html)
         self.assertNotIn('href="/mqtt"', html)
@@ -856,7 +863,9 @@ class WebPortalTests(unittest.TestCase):
         self.assertLess(primary.index('>Device</button>'), primary.index('>Module</button>'))
         self.assertLess(primary.index('>Module</button>'), primary.index('>Maintenance</button>'))
         self.assertNotIn('aria-label="User submenu"', html)
-        self.assertIn('href="/user">Users</a>', primary)
+        self.assertIn('<a class="nav-link" href="/user">Users</a>', primary)
+        self.assertIn('<a class="nav-link" href="/">Overview</a>', primary)
+        self.assertIn('aria-label="Settings submenu"', primary)
         self.assertNotIn('/change-password', html)
         self.assertIn('id="change-password-open"', html)
         self.assertIn('id="change-password-dialog"', html)
@@ -952,8 +961,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('id="change-password-dialog"', user)
         self.assertNotIn('/change-password', user)
         self.assertNotIn('/user/password', user)
-        self.assertIn('<a href="/certificates">Maintenance</a>', user)
-        self.assertIn('<a href="/user" aria-current="page">Users</a>', user)
+        self.assertNotIn('aria-label="Breadcrumb"', user)
+        self.assertIn('<a class="nav-link" href="/user" aria-current="page">Users</a>', user)
         two_administrators = web_portal.render_user_settings_page(
             'csrf', settings, users=(
                 {'username': 'admin', 'role': 'administrator', 'enabled': True},
@@ -987,7 +996,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('href="/module-settings" aria-current="page">Configuration</a>', html)
         self.assertIn('href="/diagnostics">Diagnostics</a>', html)
 
-    def test_log_viewer_and_certificate_groups_are_visible_under_maintenance(self):
+    def test_logs_are_under_maintenance_and_certificates_under_device_settings(self):
         html = web_portal.render_logging_page(
             'csrf', 'INFO', ('ERROR', 'INFO', 'DEBUG'), ['hello']
         )
@@ -1000,20 +1009,21 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('href="/updates">Update</a>', maintenance_menu)
         self.assertNotIn('href="/update-install">Install upgrade</a>', maintenance_menu)
         self.assertNotIn('href="/update-settings"', maintenance_menu)
-        self.assertIn('href="/update-settings">Update settings</a>', html)
-        self.assertIn('href="/update-activity">Update activity</a>', maintenance_menu)
+        self.assertIn('href="/update-settings">Updates</a>', html)
+        self.assertIn('href="/update-activity">Update log</a>', maintenance_menu)
         self.assertNotIn('/updates?check=1', maintenance_menu)
-        self.assertIn('class="nav-subgroup">', maintenance_menu)
-        self.assertIn('aria-expanded="false">Certificates</button>', maintenance_menu)
-        self.assertIn('aria-label="Certificates submenu"', maintenance_menu)
+        self.assertIn('class="nav-subgroup open">', maintenance_menu)
+        self.assertNotIn('aria-label="Certificates submenu"', maintenance_menu)
+        self.assertIn('aria-expanded="false">Certificates</button>', html)
+        self.assertIn('aria-label="Certificates submenu"', html)
         self.assertIn('.nav-subgroup.open>.nav-submenu,', portal_ui.PORTAL_CSS)
         self.assertNotIn('.nav-subgroup:hover>.nav-submenu', portal_ui.PORTAL_CSS)
         self.assertIn('hoverDelay=260', portal_ui.PORTAL_JS)
         self.assertIn('closest(".nav-menu-trigger,.nav-submenu-trigger")', portal_ui.PORTAL_JS)
-        self.assertIn('href="/certificates">Certificate enrollment</a>', maintenance_menu)
-        self.assertIn('href="/certificate-authorities">CA &amp; signing trust</a>', maintenance_menu)
-        self.assertIn('href="/api-client-trust">API client trust</a>', maintenance_menu)
-        self.assertIn('href="/device-certificates">Device certificates</a>', maintenance_menu)
+        self.assertIn('href="/certificates">Certificate enrollment</a>', html)
+        self.assertIn('href="/certificate-authorities">CA &amp; signing trust</a>', html)
+        self.assertIn('href="/api-client-trust">API client trust</a>', html)
+        self.assertIn('href="/device-certificates">Device certificates</a>', html)
         self.assertIn('href="/logging" aria-current="page">Device log</a>', maintenance_menu)
         self.assertIn('<h1>Device log</h1>', html)
         self.assertIn('href="/audit-log">Audit log</a>', maintenance_menu)
@@ -1044,8 +1054,8 @@ class WebPortalTests(unittest.TestCase):
             '/certificate-authorities', 'csrf'
         )
         certificate_menu = certificates.split(
-            'aria-label="Maintenance submenu"', 1
-        )[1].split('<div class="nav-group identity-menu"', 1)[0]
+            'aria-label="Settings submenu"', 1
+        )[1].split('aria-label="Maintenance submenu"', 1)[0]
         self.assertIn('class="nav-subgroup open">', certificate_menu)
         self.assertIn('aria-expanded="true">Certificates</button>', certificate_menu)
         self.assertIn('aria-label="Certificates submenu"', certificates)
@@ -1101,7 +1111,7 @@ class WebPortalTests(unittest.TestCase):
         })
         system_menu = settings.split(
             'aria-label="Device submenu"', 1
-        )[1].split('</div>', 1)[0]
+        )[1].split('aria-label="Module submenu"', 1)[0]
         self.assertIn('href="/logging-settings" aria-current="page">Logging</a>', system_menu)
         self.assertIn('name="log_buffer_lines"', settings)
         self.assertIn('name="syslog_enabled"', settings)
@@ -1589,10 +1599,10 @@ class WebPortalTests(unittest.TestCase):
                 for route, heading in (
                     ('/portal-settings', 'Portal'),
                     ('/wifi-settings', 'Network'),
-                    ('/ntp-settings', 'Time / Date'),
+                    ('/ntp-settings', 'Time &amp; Date'),
                     ('/logging-settings', 'Logging'),
                     ('/update-install', 'Update'),
-                    ('/update-settings', 'Update settings'),
+                    ('/update-settings', 'Updates'),
                 ):
                     page = await request(
                         ('GET ' + route + ' HTTP/1.1\r\nCookie: iotmd_session=' +
@@ -1703,11 +1713,14 @@ class WebPortalTests(unittest.TestCase):
                 )
                 self.assertIn('401 Unauthorized', background_expired)
 
-                relogin_body = b'username=admin&password=New-Secure-Cedar-48%21'
+                update_login = await request(b'GET /login?return=updates HTTP/1.1\r\n\r\n')
+                self.assertIn('name="return_to" value="/updates"', update_login)
+                relogin_body = b'username=admin&password=New-Secure-Cedar-48%21&return_to=%2Fupdates'
                 relogin = await request(
                     b'POST /login HTTP/1.1\r\nContent-Length: ' +
                     str(len(relogin_body)).encode() + b'\r\n\r\n' + relogin_body
                 )
+                self.assertIn('Location: /updates\r\n', relogin)
                 session_id = next(
                     line for line in relogin.split('\r\n')
                     if line.startswith('Set-Cookie: iotmd_session=')
@@ -1730,6 +1743,22 @@ class WebPortalTests(unittest.TestCase):
                 self.assertIn('303 See Other', logout)
                 self.assertIn('Location: /login', logout)
                 self.assertIn('Max-Age=0', logout)
+
+                for route in ('/activate-update', '/activate-firmware', '/activate-universal'):
+                    activation_login = await request(
+                        b'POST /login HTTP/1.1\r\nContent-Length: ' +
+                        str(len(relogin_body)).encode() + b'\r\n\r\n' + relogin_body
+                    )
+                    activation_session = next(line for line in activation_login.split('\r\n')
+                        if line.startswith('Set-Cookie: iotmd_session=')).split('iotmd_session=', 1)[1].split(';', 1)[0]
+                    login_redirect = await request(('GET /login?return=updates HTTP/1.1\r\nCookie: iotmd_session=' + activation_session + '\r\n\r\n').encode())
+                    self.assertIn('Location: /updates\r\n', login_redirect)
+                    activation_page = await request(('GET / HTTP/1.1\r\nCookie: iotmd_session=' + activation_session + '\r\n\r\n').encode())
+                    activation_csrf = activation_page.split('name="csrf" value="', 1)[1].split('"', 1)[0]
+                    activation_body = ('csrf=' + activation_csrf).encode()
+                    activation = await request(('POST ' + route + ' HTTP/1.1\r\nCookie: iotmd_session=' + activation_session + '\r\nContent-Length: ' + str(len(activation_body)) + '\r\n\r\n').encode() + activation_body)
+                    self.assertIn('href="/login?return=updates"', activation)
+                    self.assertIn('Max-Age=0', activation)
 
                 reset_login = await request(
                     b'POST /login HTTP/1.1\r\nContent-Length: ' +
@@ -2380,7 +2409,7 @@ class WebPortalTests(unittest.TestCase):
         )
         self.assertNotIn('Universal .iotuni updates are recommended;', updates)
         self.assertNotIn('name="release_channel"', updates)
-        self.assertIn('<h1>Update settings</h1>', update_settings)
+        self.assertIn('<h1>Updates</h1>', update_settings)
         self.assertIn('name="release_channel"', update_settings)
         self.assertIn('<option value="alpha">Alpha</option>', update_settings)
         self.assertNotIn('id="update-progress"', manual_update)
@@ -3010,7 +3039,7 @@ class WebPortalTests(unittest.TestCase):
             'update_history': [{'time': 200, 'event': 'confirmed', 'kind': 'universal', 'version': '3.0.0-alpha.34'}],
             'release_check_history': [{'time': 300, 'event': 'Check failed: <offline>', 'kind': 'automatic check'}],
         })
-        self.assertIn('<h1>Update activity</h1>', page)
+        self.assertIn('<h1>Update log</h1>', page)
         self.assertIn('Check failed: &lt;offline&gt;', page)
         self.assertIn('automatic check', page)
         self.assertIn('class="history-timeline"', page)

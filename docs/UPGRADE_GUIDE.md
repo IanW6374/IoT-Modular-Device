@@ -104,10 +104,10 @@ reason.
 
 ### Automatic release checks
 
-**Maintenance > Upgrade > Automatic upgrade** separates an immediate manual
-check from saved scheduling preferences. A schedule can be disabled, daily at
+**Device > Settings > Updates** contains saved scheduling preferences;
+**Maintenance > Update** runs an immediate manual check. A schedule can be disabled, daily at
 the selected device-local time, or weekly at the selected weekday and local
-time. The device time zone is configured under **Device > Time / Date**.
+time. The device time zone is configured under **Device > Settings > Time & Date**.
 
 After a check, **Install upgrade** presents Automatic and Manual as explicit
 methods in one workflow. Automatic offers up to eight newer compatible versions
