@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.0-alpha.111 - 2026-10-09
+
+- Use one bounded, responsive certificate-panel width across enrollment,
+  device identities, service trust and API client trust, instead of mixed
+  full-width sections and multi-column certificate cards.
+- Keep Restart and install as a status-only milestone without percentages;
+  retain measured transfer/verification percentages and completion ticks.
+- Keep Discard before the primary update action throughout manual selection,
+  automatic staging, reconnectable tasks and staged-install views.
+- Advance runtime generation to 207 and signed release sequence to 2816.
+
 ## 3.0.0-alpha.110 - 2026-10-09
 
 - Share one HTTPS hostname and certificate/key between portal and API. API access
