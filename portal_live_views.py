@@ -1161,8 +1161,24 @@ def update_preferences_script():
         'event.detail.form.action.indexOf("/update-preferences")>=0)syncReleaseSchedule();});}'
     )
 
-def update_upload_script():
+def _upgrade_ring_script():
+    # Restart is a discrete action, not a measurable transfer or verification step.
     return (
+        'function setUpgradeRing(li,state,percent){var ring=li.querySelector(".upgrade-stage-ring"),'
+        'name=li.querySelector(".upgrade-stage-name").textContent,value=li.querySelector(".upgrade-stage-percent"),'
+        'action=name==="Restart and install";if(action){ring.setAttribute("role","img");'
+        '["aria-valuemin","aria-valuemax","aria-valuenow","aria-valuetext"].forEach(function(a){ring.removeAttribute(a);});'
+        'ring.setAttribute("aria-label",name+": "+(state==="complete"?"Complete":(state==="active"?"Ready":"Pending")));'
+        'value.textContent=state==="complete"?"✓":"";li.style.setProperty("--step-progress",state==="complete"?"100%":"0%");'
+        '}else{ring.setAttribute("role","progressbar");ring.setAttribute("aria-label",name+" progress");'
+        'ring.setAttribute("aria-valuemin","0");ring.setAttribute("aria-valuemax","100");'
+        'ring.setAttribute("aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",'
+        'state==="complete"?"Complete":percent+"%");value.textContent=state==="complete"?"✓":percent+"%";}}'
+    )
+
+
+def update_upload_script():
+    return _upgrade_ring_script() + (
         'var uploadForm=document.getElementById("update-upload-form"),csrfToken=uploadForm.dataset.csrf,'
         'cancelButton=document.getElementById("update-cancel"),primaryButton=document.getElementById('
         '"update-primary"),fileSelection=document.getElementById("update-file-selection"),'
@@ -1189,16 +1205,13 @@ def update_upload_script():
         'function setMilestone(li,state,percent){percent=Math.max(0,Math.min(100,Math.round(Number(percent)||0)));'
         'var ring=li.querySelector(".upgrade-stage-ring");if(!ring){li.className=(state?state+" ":"")+'
         '"upgrade-stage-action";if(state==="active")li.setAttribute("aria-current","step");else li.removeAttribute('
-        '"aria-current");return;}li.className=state;li.style.setProperty("--step-progress",percent+"%");var value='
-        'li.querySelector(".upgrade-stage-percent");ring.setAttribute('
-        '"aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",state==="complete"?"Complete":percent+"%");value.textContent=state==="complete"?"✓":percent+"%";if(state==="active")li.setAttribute('
+        '"aria-current");return;}li.className=state;li.style.setProperty("--step-progress",percent+"%");'
+        'setUpgradeRing(li,state,percent);if(state==="active")li.setAttribute('
         '"aria-current","step");else li.removeAttribute("aria-current");}'
         'function milestone(item,index,active){var li=document.createElement("li"),name=document.createElement('
         '"span"),ring=document.createElement("span"),value=document.createElement("span");name.className='
         '"upgrade-stage-name";name.textContent=item[1];li.appendChild(name);li.dataset.stage=item[0];'
-        'ring.className="upgrade-stage-ring";ring.setAttribute('
-        '"role","progressbar");ring.setAttribute("aria-label",item[1]+" progress");ring.setAttribute('
-        '"aria-valuemin","0");ring.setAttribute("aria-valuemax","100");value.className="upgrade-stage-percent";'
+        'ring.className="upgrade-stage-ring";value.className="upgrade-stage-percent";'
         'ring.appendChild(value);li.appendChild(ring);if(item[0]==="select"&&uploadForm){var control='
         'document.createElement("div");control.className="upgrade-stage-step-control";control.appendChild('
         'uploadForm);li.appendChild(control);}setMilestone('
@@ -1411,16 +1424,23 @@ def _upgrade_step_list(steps, active=0, completed=0, identifier='', step_control
             ('active' if index == active else '')
         )
         percent = 100 if state == 'complete' else 0
+        action = label == 'Restart and install'
+        ring_attributes = (
+            'role="img" aria-label="' + html_escape(label) + ': ' +
+            ('Complete' if state == 'complete' else 'Ready' if state == 'active' else 'Pending') + '"'
+            if action else
+            'role="progressbar" aria-label="' + html_escape(label) +
+            ' progress" aria-valuemin="0" aria-valuemax="100" '
+            'aria-valuenow="' + str(percent) + '" aria-valuetext="' +
+            ('Complete' if state == 'complete' else str(percent) + '%') + '"'
+        )
         items.append(
             '<li class="' + state + '"' +
             (' aria-current="step"' if state == 'active' else '') + '>'
             '<span class="upgrade-stage-name">' + html_escape(label) + '</span>'
-            '<span class="upgrade-stage-ring" role="progressbar" aria-label="' +
-            html_escape(label) + ' progress" aria-valuemin="0" aria-valuemax="100" '
-            'aria-valuenow="' + str(percent) + '" aria-valuetext="' +
-            ('Complete' if state == 'complete' else str(percent) + '%') +
-            '"><span class="upgrade-stage-percent">' +
-            ('✓' if state == 'complete' else str(percent) + '%') + '</span></span>' +
+            '<span class="upgrade-stage-ring" ' + ring_attributes +
+            '><span class="upgrade-stage-percent">' +
+            ('✓' if state == 'complete' else '' if action else str(percent) + '%') + '</span></span>' +
             ('<div class="upgrade-stage-step-control">' + step_controls[index] + '</div>'
              if index in step_controls else '') + '</li>'
         )
@@ -1570,9 +1590,9 @@ def _manual_upgrade_workspace(token):
             identifier='update-stage-list', step_controls={1: selection}
         ) + '</aside><div class="upgrade-operation">'
         '<p id="update-result" class="portal-status" role="status" aria-live="polite"></p>'
-        '<div class="actions manual-upgrade-buttons"><button id="update-primary" '
-        'form="update-upload-form" type="submit" disabled>Start update</button>'
-        '<button id="update-cancel" class="danger" type="button" hidden>Discard</button></div>'
+        '<div class="actions manual-upgrade-buttons">'
+        '<button id="update-cancel" class="danger" type="button" hidden>Discard</button>'
+        '<button id="update-primary" form="update-upload-form" type="submit" disabled>Start update</button></div>'
         '</div></div></section>'
     )
 
@@ -1628,18 +1648,18 @@ def _automatic_upgrade_workspace(token, status):
         ) +
         '</aside><div class="upgrade-operation"><p id="automatic-update-status" class="portal-status" '
         'role="status" aria-live="polite"></p><div class="actions manual-upgrade-buttons">'
-        '<button form="automatic-download-form" type="submit">Start update</button>'
         '<form data-portal-async data-portal-refresh-target="#upgrade-page-content" '
         'data-portal-refresh-url="/updates" data-portal-status="Discarding update…" '
         'action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
         html_escape(token) + '"><button class="danger" type="submit" '
         'data-busy-label="Discarding…">Discard</button></form>'
+        '<button form="automatic-download-form" type="submit">Start update</button>'
         '</div></div></div></section>'
     )
 
 
 def automatic_upgrade_selection_script():
-    return (
+    return _upgrade_ring_script() + (
         'function bindAutomaticSelection(){var automaticSelect=document.getElementById("automatic-release-version-select"),automaticSteps='
         'document.getElementById("automatic-stage-list"),automaticControl=document.getElementById('
         '"automatic-release-control");'
@@ -1658,10 +1678,8 @@ def automatic_upgrade_selection_script():
         'value=document.createElement("span"),complete=index<1,active=index===1,percent=complete?100:0;li.className='
         'complete?"complete":(active?"active":"");li.style.setProperty("--step-progress",percent+"%");if(active)'
         'li.setAttribute("aria-current","step");name.className="upgrade-stage-name";name.textContent=label;ring.className='
-        '"upgrade-stage-ring";ring.setAttribute("role","progressbar");ring.setAttribute("aria-label",label+" progress");'
-        'ring.setAttribute("aria-valuemin","0");ring.setAttribute("aria-valuemax","100");ring.setAttribute('
-        '"aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",complete?"Complete":percent+"%");value.className="upgrade-stage-percent";value.textContent=complete?"✓":percent+"%";'
-        'ring.appendChild(value);li.appendChild(name);li.appendChild(ring);if(index===1&&automaticControl){var control='
+        '"upgrade-stage-ring";value.className="upgrade-stage-percent";'
+        'ring.appendChild(value);li.appendChild(name);li.appendChild(ring);setUpgradeRing(li,li.className,percent);if(index===1&&automaticControl){var control='
         'document.createElement("div");control.className="upgrade-stage-step-control";control.appendChild('
         'automaticControl);li.appendChild(control);}automaticSteps.appendChild(li);});}'
         'if(automaticSelect){automaticSelect.onchange=renderAutomaticFlow;renderAutomaticFlow();}}'
@@ -1671,7 +1689,7 @@ def automatic_upgrade_selection_script():
 
 
 def automatic_upgrade_download_script():
-    return (
+    return _upgrade_ring_script() + (
         'function bindAutomaticDownload(){var form=document.getElementById("automatic-download-form"),'
         'out=document.getElementById("automatic-update-status"),steps=Array.from(document.querySelectorAll('
         '"#automatic-stage-list li")),button=document.querySelector('
@@ -1681,8 +1699,7 @@ def automatic_upgrade_download_script():
         'Math.min(100,Math.round(Number(percent)||0)));var ring=x.querySelector(".upgrade-stage-ring");if(!ring){'
         'x.className=(state?state+" ":"")+"upgrade-stage-action";if(state==="active")x.setAttribute('
         '"aria-current","step");else x.removeAttribute("aria-current");return;}x.className=state;x.style.setProperty('
-        '"--step-progress",percent+"%");ring.setAttribute("aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",state==="complete"?"Complete":percent+"%");x.querySelector('
-        '".upgrade-stage-percent").textContent=state==="complete"?"✓":percent+"%";if(state==="active")x.setAttribute('
+        '"--step-progress",percent+"%");setUpgradeRing(x,state,percent);if(state==="active")x.setAttribute('
         '"aria-current","step");else x.removeAttribute("aria-current");}var position=1;function stage(message,percent){'
         'var m=String(message||"").toLowerCase().replace(/_/g," "),n=2;if(m.indexOf("writing")>=0)n=4;else if('
         'm.indexOf("verif")>=0&&(m.indexOf("core")>=0||m.indexOf("firmware")>=0))n=5;else if('
@@ -1896,13 +1913,13 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         ) +
         '</aside><div class="upgrade-operation">' +
         '<p id="upgrade-task-status" class="portal-status" role="status" aria-live="polite"></p>' +
-        '<div class="actions manual-upgrade-buttons"><a id="upgrade-task-return" '
-        'class="button secondary" href="' + html_escape(return_url) + '" hidden>'
-        'Return to updates</a><form action="/discard-update" method="post">'
+        '<div class="actions manual-upgrade-buttons"><form action="/discard-update" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
-        '<button class="danger" type="submit">Discard</button></form></div></div></div></section>'
+        '<button class="danger" type="submit">Discard</button></form><a id="upgrade-task-return" '
+        'class="button secondary" href="' + html_escape(return_url) + '" hidden>'
+        'Return to updates</a></div></div></div></section>'
     )
-    script = (
+    script = _upgrade_ring_script() + (
         'var i=' + repr(str(task_id)) + ',b=document.getElementById("upgrade-task-status"),'
         'r=document.getElementById("upgrade-task-return"),'
         'steps=Array.from(document.querySelectorAll("#upgrade-task-steps li"));'
@@ -1910,8 +1927,7 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         'var ring=x.querySelector(".upgrade-stage-ring");if(!ring){x.className=(state?state+" ":"")+'
         '"upgrade-stage-action";if(state==="active")x.setAttribute("aria-current","step");else x.removeAttribute('
         '"aria-current");return;}x.className=state;x.style.setProperty("--step-progress",percent+"%");'
-        'ring.setAttribute("aria-valuenow",String(percent));ring.setAttribute("aria-valuetext",state==="complete"?"Complete":percent+"%");x.querySelector('
-        '".upgrade-stage-percent").textContent=state==="complete"?"✓":percent+"%";if(state==="active")x.setAttribute('
+        'setUpgradeRing(x,state,percent);if(state==="active")x.setAttribute('
         '"aria-current","step");else x.removeAttribute("aria-current");}'
         'var stagePosition=2;function stage(message,percent){var m=String(message||"").toLowerCase().replace(/_/g," "),n=2;'
         'if(m.indexOf("writing")>=0)n=4;else if(m.indexOf("verif")>=0&&'

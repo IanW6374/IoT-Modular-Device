@@ -103,7 +103,84 @@ test('staged application, core and universal updates share a primary install but
     assert.equal(doc.querySelector('.upgrade-stage-list form[action^="/activate-"]'),null);
     assert.equal(doc.querySelectorAll('#update-primary').length,1);
     assert.equal(doc.querySelector('#update-primary').closest('.upgrade-operation')!==null,true);
-    assert.equal(steps.at(-1).querySelector('[role=progressbar]').getAttribute('aria-valuenow'),'0');
+    const ring=steps.at(-1).querySelector('.upgrade-stage-ring');
+    assert.equal(ring.getAttribute('role'),'img');
+    assert.equal(ring.getAttribute('aria-label'),'Restart and install: Ready');
+    assert.equal(ring.hasAttribute('aria-valuenow'),false);assert.equal(ring.textContent,'');
+    assert.deepEqual([...doc.querySelectorAll('.manual-upgrade-buttons button')].map(button=>button.textContent),['Discard','Restart and install']);
     dom.window.close();
   }
+});
+
+test('certificate pages share a bounded responsive width and single-column certificate cards',()=>{
+  for(const route of ['/certificates','/certificate-authorities','/api-client-trust','/device-certificates']){
+    const html=python(`import web_portal; print(web_portal.render_certificate_route(${JSON.stringify(route)},'csrf',certificates={}))`);
+    const dom=new JSDOM(html),doc=dom.window.document;
+    const stylesheet=doc.createElement('style');stylesheet.textContent=python('import web_portal_ui; print(web_portal_ui.PORTAL_CSS)');doc.head.append(stylesheet);
+    const workspace=doc.getElementById('certificate-workspace'),style=dom.window.getComputedStyle(workspace);
+    assert.equal(style.width,'100%');assert.equal(style.maxWidth,'720px');
+    assert.equal(workspace.querySelector('.module-grid'),null);
+    for(const grid of workspace.querySelectorAll('.certificate-grid')){
+      assert.equal(dom.window.getComputedStyle(grid).gridTemplateColumns,'minmax(0,1fr)');
+    }
+    dom.window.close();
+  }
+});
+
+test('manual file selection keeps restart percentage-free and Discard before the primary action',()=>{
+  const html=python("from portal_live_views import render_update_install_page; print(render_update_install_page('csrf',{},source='manual'))");
+  const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://device.local'}),doc=dom.window.document;
+  dom.window.eval(python('from portal_live_views import update_upload_script; print(update_upload_script())'));
+  for(const extension of ['iotapp','iotcore','iotuni']){
+    const input=doc.getElementById('update-bundle');Object.defineProperty(input,'files',{configurable:true,value:[new dom.window.File(['signed'],`test.${extension}`)]});
+    input.dispatchEvent(new dom.window.Event('change'));
+    const steps=[...doc.querySelectorAll('#update-stage-list li')],ring=steps.at(-1).querySelector('.upgrade-stage-ring');
+    assert.equal(ring.getAttribute('role'),'img');assert.equal(ring.textContent,'');assert.equal(ring.hasAttribute('aria-valuenow'),false);
+    assert.equal(steps[2].querySelector('[role=progressbar]').textContent,'0%');
+    dom.window.eval('setMilestone(document.querySelector("#update-stage-list li:last-child"),"active",75)');
+    assert.equal(ring.textContent,'');assert.equal(ring.getAttribute('aria-label'),'Restart and install: Ready');
+    dom.window.eval('setMilestone(document.querySelector("#update-stage-list li:last-child"),"complete",100)');assert.equal(ring.textContent,'✓');
+    assert.deepEqual([...doc.querySelectorAll('.manual-upgrade-buttons button')].map(button=>button.textContent),['Discard','Start update']);
+  }
+  dom.window.close();
+});
+
+test('automatic release selection and polling keep restart percentage-free and button order stable',async()=>{
+  const status={release_checks_enabled:true,release_available_type:'universal',release_available_version:'3.0.0-alpha.110'};
+  const html=python(`import json; from portal_live_views import render_update_install_page; print(render_update_install_page('csrf',json.loads(${JSON.stringify(JSON.stringify(status))}),source='automatic'))`);
+  const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://device.local'}),doc=dom.window.document;
+  dom.window.eval(python('from portal_live_views import automatic_upgrade_selection_script; print(automatic_upgrade_selection_script())'));
+  const select=doc.getElementById('automatic-release-version-select');
+  for(const kind of ['application','firmware','universal']){
+    select.options[0].dataset.kind=kind;select.dispatchEvent(new dom.window.Event('change'));
+    const ring=doc.querySelector('#automatic-stage-list li:last-child .upgrade-stage-ring');
+    assert.equal(ring.getAttribute('role'),'img');assert.equal(ring.textContent,'');assert.equal(ring.hasAttribute('aria-valuenow'),false);
+  }
+  assert.deepEqual([...doc.querySelectorAll('.upgrade-operation .manual-upgrade-buttons button')].map(button=>button.textContent),['Discard','Start update']);
+  const responses=[{task_id:'job'},{phase:'complete',percent:100}];
+  dom.window.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify(responses.shift()),json:async()=>responses.shift()});
+  let refreshed=false;dom.window.portalRefreshTarget=()=>{refreshed=true;};
+  dom.window.eval(python('from portal_live_views import automatic_upgrade_download_script; print(automatic_upgrade_download_script())'));
+  doc.getElementById('automatic-download-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+  await new Promise(resolve=>dom.window.setTimeout(resolve,30));
+  assert.equal(refreshed,true);
+  const ring=doc.querySelector('#automatic-stage-list li:last-child .upgrade-stage-ring');
+  assert.equal(ring.textContent,'');assert.equal(ring.getAttribute('aria-label'),'Restart and install: Ready');
+  dom.window.close();
+});
+
+test('reconnected update tasks retain status-only restart circles through polling',async()=>{
+  const html=python("from portal_live_views import render_upgrade_task_page; print(render_upgrade_task_page('csrf','job','Updating',{'release_available_type':'universal'}))");
+  const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://device.local'}),doc=dom.window.document;
+  dom.window.fetch=async()=>({ok:true,status:200,json:async()=>({phase:'writing',message:'Writing core firmware',percent:42})});
+  for(const script of doc.querySelectorAll('script:not([src])'))dom.window.eval(script.textContent);
+  await new Promise(resolve=>dom.window.setTimeout(resolve,30));
+  const steps=[...doc.querySelectorAll('#upgrade-task-steps li')],ring=steps.at(-1).querySelector('.upgrade-stage-ring');
+  assert.equal(ring.getAttribute('role'),'img');assert.equal(ring.textContent,'');assert.equal(ring.hasAttribute('aria-valuenow'),false);
+  assert.equal(steps[4].querySelector('.upgrade-stage-ring').textContent,'42%');
+  dom.window.setStep(steps.at(-1),'active',80);
+  assert.equal(ring.textContent,'');assert.equal(ring.getAttribute('aria-label'),'Restart and install: Ready');
+  const controls=doc.querySelector('.manual-upgrade-buttons');
+  assert.equal(controls.firstElementChild.action,'https://device.local/discard-update');
+  dom.window.close();
 });

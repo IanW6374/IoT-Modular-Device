@@ -2418,8 +2418,8 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('id="update-cancel"', manual_update)
         self.assertIn('id="update-cancel" class="danger" type="button" hidden>Discard', manual_update)
         self.assertLess(
-            manual_update.index('id="update-primary"'),
             manual_update.index('id="update-cancel"'),
+            manual_update.index('id="update-primary"'),
         )
         self.assertNotIn('>Cancel</button>', manual_update)
         self.assertNotIn('Working…</button>', manual_update)
@@ -2435,7 +2435,8 @@ class WebPortalTests(unittest.TestCase):
             manual_update,
         )
         self.assertNotIn('upgrade-stage-manual', manual_update)
-        self.assertIn('Restart and install progress', manual_update)
+        self.assertIn('Restart and install: Pending', manual_update)
+        self.assertNotIn('Restart and install progress', manual_update)
         self.assertNotIn('--upgrade-step-count', manual_update)
         self.assertIn('Manual update selected', manual_update)
         self.assertIn('<li class="complete">', manual_update)
@@ -2986,7 +2987,10 @@ class WebPortalTests(unittest.TestCase):
         self.assertNotIn('<span class="badge good">Verified</span>', universal)
         final_step = universal.rsplit('<li ', 1)[1].split('</li>', 1)[0]
         self.assertNotIn('action="/activate-universal"', final_step)
-        self.assertIn('role="progressbar"', final_step)
+        self.assertIn('role="img"', final_step)
+        self.assertIn('aria-label="Restart and install: Ready"', final_step)
+        self.assertNotIn('aria-valuenow', final_step)
+        self.assertNotIn('0%', final_step)
         self.assertIn('upgrade-stage-percent', final_step)
         self.assertIn('<button id="update-primary"', universal)
         self.assertNotIn('action="/activate-update"', universal)

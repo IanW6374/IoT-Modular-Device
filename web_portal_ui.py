@@ -372,6 +372,8 @@ PORTAL_CSS = (
     '.certificate-group{margin-top:18px;padding-top:2px}.certificate-group+.certificate-group{'
     'border-top:1px solid var(--line);padding-top:18px}.certificate-group-head{margin-bottom:10px}'
     '.certificate-group-head h3{font-size:1.05rem}.certificate-group-head p{margin:3px 0 0}'
+    '.certificate-workspace{width:100%;max-width:48rem}'
+    '.certificate-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:13px}'
     '.certificate-card{display:flex;flex-direction:column}.certificate-card>form{margin-top:auto}'
     '.certificate-card>form .actions,.certificate-renew-form .actions{margin-top:12px}'
     '@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;'

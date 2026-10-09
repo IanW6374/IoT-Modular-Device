@@ -216,7 +216,7 @@ def render_certificate_page(csrf, message='', certificates=None):
     manual_upload, manual_script = _identity_upload_widget(csrf, '/certificates')
     body = (portal_ui.page_heading('Maintenance', 'Certificate enrollment',
             'Review the active enrollment method and change how device identities are issued and renewed.') +
-            '<div id="certificate-workspace">' + _notice(message) + operation_notice +
+            '<div id="certificate-workspace" class="certificate-workspace">' + _notice(message) + operation_notice +
             '<section class="card"><div class="section-title"><h2>Current enrollment</h2>' +
             render_badge(label, 'good' if method != 'manual' else 'warn') +
             '</div><p>' + html_escape(description) + '</p>' + _renew_action(csrf, certificates) + '</section>'
@@ -287,8 +287,8 @@ def render_certificate_authorities_page(csrf, message='', certificates=None):
         ('management-suite-key', 'Management policy and catalog verification key', 'Verifies fleet policy and format-3 release catalogs.'),
     ), '/certificate-authorities')
     body = (portal_ui.page_heading('Maintenance', 'CA & signing trust',
-            'Manage outbound service trust anchors and the Management policy and catalog verification key.') + '<div id="certificate-workspace">' + _notice(message) +
-            '<section class="card"><div class="module-grid">' + ''.join(cards) + '</div></section>'
+            'Manage outbound service trust anchors and the Management policy and catalog verification key.') + '<div id="certificate-workspace" class="certificate-workspace">' + _notice(message) +
+            '<section class="card"><div class="certificate-grid">' + ''.join(cards) + '</div></section>'
             '<section class="card"><div class="section-title"><h2>Install trust</h2></div>' + upload + '</section></div>')
     return portal_ui.shell('IoT-MD CA and signing trust', 'certificate_authorities', body, csrf, script)
 
@@ -314,10 +314,10 @@ def render_api_client_trust_page(csrf, message='', certificates=None):
         ('api-client-cert', 'API caller certificate', 'Enrolls one client identity with the selected permission preset.'),
     ), '/api-client-trust', api_scope_presets=True)
     body = (portal_ui.page_heading('Maintenance', 'API client trust',
-            'Manage who may authenticate to the mutual-TLS Device API.') + '<div id="certificate-workspace">' + _notice(message) +
-            '<div id="api-client-workspace"><section class="card"><div class="section-title"><h2>Trusted client issuers</h2></div><div class="module-grid">' +
+            'Manage who may authenticate to the mutual-TLS Device API.') + '<div id="certificate-workspace" class="certificate-workspace">' + _notice(message) +
+            '<div id="api-client-workspace"><section class="card"><div class="section-title"><h2>Trusted client issuers</h2></div><div class="certificate-grid">' +
             (''.join(ca_cards) or '<p class="muted">No Device API client issuer CA is installed.</p>') + '</div></section>'
-            '<section class="card"><div class="section-title"><h2>Enrolled API callers</h2></div><div class="module-grid">' +
+            '<section class="card"><div class="section-title"><h2>Enrolled API callers</h2></div><div class="certificate-grid">' +
             (''.join(clients) or '<p class="muted">No Device API caller certificate is enrolled.</p>') + '</div></section>'
             '<section class="card"><div class="section-title"><h2>Install API trust</h2></div>' + upload + '</section></div></div>')
     return portal_ui.shell('IoT-MD API client trust', 'api_client_trust', body, csrf, script)
@@ -328,11 +328,11 @@ def render_device_certificates_page(csrf, message='', certificates=None):
     method_label = METHODS.get(_method(certificates), ('Unknown certificate method', ''))[0]
     body = (portal_ui.page_heading('Maintenance', 'Device certificates',
             'Inspect the identities currently presented by this device. Install or replace identities through Certificate enrollment.') +
-            '<div id="certificate-workspace">' + _notice(message) +
+            '<div id="certificate-workspace" class="certificate-workspace">' + _notice(message) +
             '<section class="card"><div class="section-title"><h2>Installed device identities</h2></div>'
             '<p class="muted">The same device HTTPS identity is presented by the portal and API; the API additionally requires an enrolled client certificate and scopes. '
             'MQTT, upgrade and syslog connections instead validate their remote servers using the trust anchors under CA &amp; signing trust.</p>'
-            '<div class="module-grid">' +
+            '<div class="certificate-grid">' +
             _card(certificates.get('portal'), 'Device HTTPS identity (portal and API)') + '</div></section>'
             '<section class="card"><div class="section-title"><h2>Certificate renewal</h2></div>'
             '<p>Current enrollment method: <strong>' + html_escape(method_label) + '</strong></p>'
