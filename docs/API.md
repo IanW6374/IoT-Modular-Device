@@ -21,26 +21,20 @@ and `error.retryable`. Do not infer mutation success from a timeout or retry an
 ambiguous write. Durable reservations suppress duplicate mutations, while
 interrupted outcomes require reconciliation; see the operation contract below.
 
-Its server certificate is stored independently from the web portal identity
-and is expected to chain to the private IoT CA. A public portal renewal never
-changes the Device API/fleet server identity.
+From Alpha 110, API and portal share one HTTPS certificate/key and canonical
+hostname. Renewing/replacing it reloads both listeners.
 
 ## TLS identities and trust
 
-Mutual TLS performs two independent checks:
+Mutual TLS performs independent checks: the device verifies the private client
+issuer, enrolled fingerprint and scopes; the client verifies the server's public
+or private issuer and exact DNS/IP SAN. Use the canonical device HTTPS hostname,
+for example iot-md-001.iot.example.com, not an uncovered .local alias.
 
-- IoT-MD authenticates the client certificate against an installed API-client
-  CA, then applies the fingerprint registration and scopes described below.
-- The API client authenticates IoT-MD against its private IoT CA. The API
-  server certificate must contain the exact device hostname, such as
-  `iot-md-001.local`, in a DNS Subject Alternative Name (SAN).
-
-The client certificate and key supplied to `curl` prove the caller's identity;
-they do not make the workstation trust the server. Supply the private IoT CA
-root, plus any required intermediate, with `--cacert`. IoT-MD installs its API
-server identity as a leaf-plus-intermediate chain, but using a complete CA
-bundle on the client also supports diagnostic and older installations. Do not
-use `-k` to bypass verification.
+For privately issued server certificates, supply the root with --cacert. Public
+server certificates can use system roots. The device presents leaf plus required
+intermediates. Clients still need their enrolled private certificate/key; public
+server issuance does not grant API access. Never use -k to bypass verification.
 
 ## Authentication and authorization
 

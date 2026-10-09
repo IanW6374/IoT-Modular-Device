@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.0-alpha.110 - 2026-10-09
+
+- Share one HTTPS hostname and certificate/key between portal and API. API access
+  still requires trusted, enrolled client certificates and permission scopes.
+- Remove independent API server identity upload, profile and backup fields and the
+  legacy split-identity migration. Reload both listeners after identity renewal.
+- Use IoT CA enrollment/renewal protocol v2 with one HTTPS CSR and a separate
+  renewal-client CSR. Requires Certificate Authority 0.6.0; re-enroll existing
+  managed identities rather than retaining protocol-v1 compatibility.
+- Advertise the canonical HTTPS hostname for Management portal links and clarify
+  the Management policy and catalog verification key label.
+- Advance runtime generation to 206 and signed release sequence to 2815.
+
 ## 3.0.0-alpha.109 - 2026-10-09
 
 - Format module configuration on opening and keep its formatted baseline when

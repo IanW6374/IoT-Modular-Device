@@ -63,7 +63,7 @@ class SettingsLoaderTests(unittest.TestCase):
             settings_loader.api_server_cert_path,
             device_config.API_SERVER_CERT_PATH
         )
-        self.assertNotEqual(
+        self.assertEqual(
             settings_loader.api_server_cert_path,
             settings_loader.web_portal_cert_path
         )

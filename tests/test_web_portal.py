@@ -277,7 +277,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('accept="application/json,.json" required', backup)
         self.assertIn('portalInvalid(confirmField', backup)
         self.assertIn('portalRequire(identityCert', certificates)
-        self.assertIn('value="api-server"', certificates)
+        self.assertNotIn('value="api-server"', certificates)
         self.assertIn('kind+"-cert"', certificates)
         self.assertIn('kind+"-key"', certificates)
         self.assertIn('.field[hidden],.conditional-fields[hidden]{display:none}', portal_ui.PORTAL_CSS)

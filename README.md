@@ -65,7 +65,8 @@ The wizard configures:
 4. signed application installation and restart.
 
 After setup, open the configured portal DNS name on port 8443. The device also
-retains its `.local` mDNS name for private services. The Device API uses port
+retains its `.local` discovery alias. From Alpha 110, portal and API share one
+HTTPS hostname and server certificate. The Device API uses port
 8444 by default and requires an enrolled client CA and certificate.
 
 ## Portal

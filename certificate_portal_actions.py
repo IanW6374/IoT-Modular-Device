@@ -16,8 +16,6 @@ def _paths():
         'trust-ca': device_config.MQTT_CA_PATH,
         'portal-cert': device_config.WEB_PORTAL_CERT_PATH,
         'portal-key': device_config.WEB_PORTAL_KEY_PATH,
-        'api-server-cert': device_config.API_SERVER_CERT_PATH,
-        'api-server-key': device_config.API_SERVER_KEY_PATH,
     }
 
 

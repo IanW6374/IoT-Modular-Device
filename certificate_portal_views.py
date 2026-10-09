@@ -14,7 +14,7 @@ METHODS = {
     ),
     'iot_ca_auto': (
         'Automatic IoT CA enrollment',
-        'Requests a managed public portal and private Device API/fleet identity during an enabled IoT CA window.'
+        'Requests a shared portal/API HTTPS identity during an enabled IoT CA window.'
     ),
     'iot_ca_file': (
         'IoT CA enrollment authorization (.iotenroll)',
@@ -146,9 +146,7 @@ def _upload_widget(csrf, choices, return_label, api_scope_presets=False):
 
 
 def _identity_upload_widget(csrf, return_to='/certificates'):
-    body = ('<label class="field">Device identity<select id="identity-type">'
-            '<option value="portal">Portal HTTPS identity</option>'
-            '<option value="api-server">Device API and fleet server identity</option></select></label>'
+    body = ('<input id="identity-type" type="hidden" value="portal"><span>Device HTTPS identity (portal and API)</span>'
             '<div class="grid"><label id="identity-cert-label" class="field">Certificate chain'
             '<input id="identity-cert" type="file" accept=".der,.pem,application/pkix-cert,application/x-pem-file" required></label>'
             '<label class="field">Matching private key<input id="identity-key" type="file" accept=".der,application/octet-stream" required></label></div>'
@@ -159,9 +157,7 @@ def _identity_upload_widget(csrf, return_to='/certificates'):
     script = (
         'function bindIdentityUpload(){var identityType=document.getElementById("identity-type"),identityCert='
         'document.getElementById("identity-cert"),identityKey=document.getElementById("identity-key"),identityCsrf=' +
-        repr(str(csrf)) + ';if(!identityType||!identityCert||!identityKey)return;identityType.onchange=function(){'
-        'document.getElementById("identity-cert-label").firstChild.nodeValue=this.value==="portal"?'
-        '"Portal certificate chain":"Device API and fleet server certificate";};function uploadIdentity(file,kind){'
+        repr(str(csrf)) + ';if(!identityType||!identityCert||!identityKey)return;function uploadIdentity(file,kind){'
         'return fetch("/certificate-upload",{method:"POST",credentials:"same-origin",headers:{"Content-Type":'
         '"application/octet-stream","X-CSRF-Token":identityCsrf,"X-Certificate-Kind":kind},body:file});}'
         'var button=document.getElementById("identity-upload");if(!button)return;button.onclick=async function(){var out='
@@ -280,7 +276,7 @@ def render_certificate_authorities_page(csrf, message='', certificates=None):
         ('mqtt-ca', 'mqtt_ca', 'MQTT broker CA'),
         ('release-ca', 'release_ca', 'Release server CA'),
         ('syslog-ca', 'syslog_ca', 'Syslog server CA'),
-        ('management-suite-key', 'management_suite_key', 'Management Suite signing key'),
+        ('management-suite-key', 'management_suite_key', 'Management policy and catalog verification key'),
     ):
         details = certificates.get(detail_key, {}) or {}
         cards.append(_card(details, label, _remove_form(csrf, key) if details.get('installed') else ''))
@@ -288,10 +284,10 @@ def render_certificate_authorities_page(csrf, message='', certificates=None):
         ('mqtt-ca', 'MQTT broker CA', 'Authenticates the configured MQTT broker.'),
         ('release-ca', 'Release server CA', 'Authenticates the release and Management Suite endpoint.'),
         ('syslog-ca', 'Syslog server CA', 'Authenticates the encrypted remote syslog server.'),
-        ('management-suite-key', 'Management Suite signing key', 'Verifies fleet policy and format-3 release catalogs.'),
+        ('management-suite-key', 'Management policy and catalog verification key', 'Verifies fleet policy and format-3 release catalogs.'),
     ), '/certificate-authorities')
     body = (portal_ui.page_heading('Maintenance', 'CA & signing trust',
-            'Manage outbound service trust anchors and the Management Suite signing key.') + '<div id="certificate-workspace">' + _notice(message) +
+            'Manage outbound service trust anchors and the Management policy and catalog verification key.') + '<div id="certificate-workspace">' + _notice(message) +
             '<section class="card"><div class="module-grid">' + ''.join(cards) + '</div></section>'
             '<section class="card"><div class="section-title"><h2>Install trust</h2></div>' + upload + '</section></div>')
     return portal_ui.shell('IoT-MD CA and signing trust', 'certificate_authorities', body, csrf, script)
@@ -334,11 +330,10 @@ def render_device_certificates_page(csrf, message='', certificates=None):
             'Inspect the identities currently presented by this device. Install or replace identities through Certificate enrollment.') +
             '<div id="certificate-workspace">' + _notice(message) +
             '<section class="card"><div class="section-title"><h2>Installed device identities</h2></div>'
-            '<p class="muted">The Device API/fleet identity is presented by the inbound mutual-TLS endpoint. '
+            '<p class="muted">The same device HTTPS identity is presented by the portal and API; the API additionally requires an enrolled client certificate and scopes. '
             'MQTT, upgrade and syslog connections instead validate their remote servers using the trust anchors under CA &amp; signing trust.</p>'
             '<div class="module-grid">' +
-            _card(certificates.get('portal'), 'Portal HTTPS identity') +
-            _card(certificates.get('api_server'), 'Device API and fleet server identity') + '</div></section>'
+            _card(certificates.get('portal'), 'Device HTTPS identity (portal and API)') + '</div></section>'
             '<section class="card"><div class="section-title"><h2>Certificate renewal</h2></div>'
             '<p>Current enrollment method: <strong>' + html_escape(method_label) + '</strong></p>'
             '<p class="muted">Request immediate renewal of every identity managed by the current enrollment method.</p>' +

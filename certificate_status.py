@@ -18,13 +18,9 @@ def _file_status(path, include_fingerprint=False):
         return {'installed': False, 'size': 0}
 
 
-def installed_details(manager, paths, api_ca_store, client_registry, config,
-                      migration_pending=False):
-    api_server = manager.certificate_lifecycle(paths['api_server'])
-    api_server['migration_pending'] = bool(migration_pending)
+def installed_details(manager, paths, api_ca_store, client_registry, config):
     return {
         'portal': manager.certificate_lifecycle(paths['portal']),
-        'api_server': api_server,
         'trusted_ca': manager.certificate_lifecycle(paths['mqtt_ca']),
         'mqtt_ca': manager.certificate_lifecycle(paths['mqtt_ca']),
         'release_ca': manager.certificate_lifecycle(paths['release_ca']),

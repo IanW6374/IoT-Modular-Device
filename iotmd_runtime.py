@@ -202,7 +202,6 @@ device_api_config = runtime_credentials.get('api', {
 })
 device_api_enabled = device_api_config.get('enabled') is True
 device_api_port = int(device_api_config.get('port', device_settings.device_api_port))
-API_SERVER_MIGRATION_MARKER = '/certs/api-server.identity-migrated'
 api_client_registry = api_security.ClientRegistry(
     device_settings.api_client_registry_path
 )
@@ -1039,8 +1038,6 @@ def _complete_backup_files():
     paths = {
         'portal_certificate': web_portal_cert_path,
         'portal_private_key': web_portal_key_path,
-        'api_server_certificate': api_server_cert_path,
-        'api_server_private_key': api_server_key_path,
         'mqtt_ca': mqtt_ca_cert_path,
         'release_ca': release_ca_cert_path,
         'syslog_ca': device_settings.syslog_ca_path,
@@ -1089,8 +1086,6 @@ def _secure_restore_targets(files):
     fixed = {
         'portal_certificate': web_portal_cert_path,
         'portal_private_key': web_portal_key_path,
-        'api_server_certificate': api_server_cert_path,
-        'api_server_private_key': api_server_key_path,
         'mqtt_ca': mqtt_ca_cert_path,
         'release_ca': release_ca_cert_path,
         'syslog_ca': device_settings.syslog_ca_path,
@@ -1104,7 +1099,7 @@ def _secure_restore_targets(files):
     for name, payload in files.items():
         if (
             name in (
-                'portal_certificate', 'api_server_certificate',
+                'portal_certificate',
                 'mqtt_ca', 'release_ca', 'syslog_ca'
             ) or
             name.startswith('api_client_ca_')
@@ -1164,11 +1159,6 @@ def preview_secure_configuration_import(request):
     )
     if any(portal_payloads) and not all(portal_payloads):
         raise ValueError('encrypted backup must contain both portal identity files')
-    api_server_payloads = (
-        targets.get(api_server_cert_path), targets.get(api_server_key_path)
-    )
-    if any(api_server_payloads) and not all(api_server_payloads):
-        raise ValueError('encrypted backup must contain both API server identity files')
     try:
         with open(moduleSettingsFile, 'r') as stream:
             current_modules = json.load(stream)
@@ -1225,15 +1215,6 @@ def apply_secure_configuration_import(token):
     if staged_portal_certificate and staged_portal_key:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(staged_portal_certificate, staged_portal_key)
-    staged_api_certificate = next(
-        (source for source, target in staged_pairs if target == api_server_cert_path), None
-    )
-    staged_api_key = next(
-        (source for source, target in staged_pairs if target == api_server_key_path), None
-    )
-    if staged_api_certificate and staged_api_key:
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain(staged_api_certificate, staged_api_key)
     if pending['modules'] is not None:
         update_support.commit_file_with_backup(module_temporary, moduleSettingsFile)
     if staged_pairs:
@@ -1323,18 +1304,13 @@ def portal_settings():
     return settings
 
 def installed_certificate_details():
-    try:
-        migration_pending = os.stat(API_SERVER_MIGRATION_MARKER)[6] >= 0
-    except OSError:
-        migration_pending = False
     details = certificate_status.installed_details(
         certificate_manager, {
             'portal': web_portal_cert_path, 'api_server': api_server_cert_path,
             'mqtt_ca': mqtt_ca_cert_path, 'release_ca': release_ca_cert_path,
             'syslog_ca': device_settings.syslog_ca_path, 'management_suite_key':
             fleet_management.FLEET_VERIFICATION_KEY_PATH,
-        }, api_client_ca_store, api_client_registry, certificate_config,
-        migration_pending)
+        }, api_client_ca_store, api_client_registry, certificate_config)
     renewal = certificate_renewal_service.operation()
     if renewal:
         details['enrollment_operation'] = dict(renewal)
@@ -1530,8 +1506,6 @@ def certificate_upload_paths():
         'syslog-ca': device_settings.syslog_ca_path,
         'portal-cert': web_portal_cert_path,
         'portal-key': web_portal_key_path,
-        'api-server-cert': api_server_cert_path,
-        'api-server-key': api_server_key_path,
     }
 
 
@@ -1571,9 +1545,14 @@ async def reload_device_api_listener(delay_s=1):
 
 
 def schedule_portal_certificate_reload():
-    start_task('portal_certificate_reload', reload_portal_listener())
+    schedule_certificate_identity_reload()
 
 def schedule_certificate_identity_reload():
+    global portal_certificate_hostname
+    latest = credential_store.load(require_provisioned=True).get('certificate', {})
+    certificate_config.clear()
+    certificate_config.update(latest)
+    portal_certificate_hostname = latest.get('portal_hostname') or latest.get('hostname', '')
     start_task('portal_certificate_reload', reload_portal_listener())
     if device_api_enabled:
         start_task('device_api_certificate_reload', reload_device_api_listener())
@@ -1582,8 +1561,7 @@ def schedule_certificate_identity_reload():
 certificate_renewal_service = CertificateRenewalService(
     certificate_config, {
         'trust-ca': mqtt_ca_cert_path, 'portal-cert': web_portal_cert_path,
-        'portal-key': web_portal_key_path, 'api-server-cert': api_server_cert_path,
-        'api-server-key': api_server_key_path,
+        'portal-key': web_portal_key_path,
     }, certificate_lifecycle.renew_now, qualification_service.record_renewal,
     runtime_health, schedule_portal_certificate_reload,
     schedule_certificate_identity_reload, start_portal_task, portal_tasks)
@@ -1598,8 +1576,6 @@ def validate_uploaded_certificates():
     staged_ca = mqtt_ca_cert_path + '.manual'
     staged_cert = web_portal_cert_path + '.manual'
     staged_key = web_portal_key_path + '.manual'
-    staged_api_cert = api_server_cert_path + '.manual'
-    staged_api_key = api_server_key_path + '.manual'
     pairs = []
     def exists(path):
         try:
@@ -1615,16 +1591,6 @@ def validate_uploaded_certificates():
         pairs.extend((
             (staged_cert, web_portal_cert_path),
             (staged_key, web_portal_key_path),
-        ))
-    api_server_staged = [exists(path) for path in (staged_api_cert, staged_api_key)]
-    if any(api_server_staged):
-        if not all(api_server_staged):
-            raise ValueError('API server certificate and key must be uploaded together')
-        server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        server.load_cert_chain(staged_api_cert, staged_api_key)
-        pairs.extend((
-            (staged_api_cert, api_server_cert_path),
-            (staged_api_key, api_server_key_path),
         ))
     mqtt_target = getattr(__import__('device_config'), 'MQTT_CA_PATH', mqtt_ca_cert_path)
     ca_stages = (
@@ -1678,11 +1644,6 @@ def validate_uploaded_certificates():
         update_security.commit_staged_verification_key(
             fleet_management.FLEET_VERIFICATION_KEY_PATH, exists,
             update_support.commit_file_with_backup)
-    if all(api_server_staged):
-        try:
-            os.remove(API_SERVER_MIGRATION_MARKER)
-        except OSError:
-            pass
     for staged, payload in api_ca_payloads:
         api_client_ca_store.add(payload)
         try:
@@ -1704,10 +1665,10 @@ def validate_uploaded_certificates():
     if all(portal_staged):
         start_task('portal_certificate_reload', reload_portal_listener())
         reloaded.append('portal HTTPS')
-    if api_ca_payloads or all(api_server_staged):
+    if api_ca_payloads or all(portal_staged):
         start_task('api_trust_reload', reload_device_api_listener())
         reloaded.append(
-            'Device API/fleet identity' if all(api_server_staged) else 'Device API trust'
+            'API HTTPS identity' if all(portal_staged) else 'API client trust'
         )
     if reloaded:
         return {
@@ -1742,6 +1703,7 @@ device_inventory = DeviceInventory({
     'module_settings_file': lambda: moduleSettingsFile, 'release_channel': lambda: release_channel, 'release_check_schedule': lambda: release_check_schedule, 'release_check_time': lambda: release_check_time, 'release_check_weekday': lambda: release_check_weekday, 'release_auto_download': lambda: release_auto_download, 'release_auto_activate': lambda: release_auto_activate,
     'portal_enabled': lambda: web_portal_enabled, 'portal_port': lambda: web_portal_port,
     'portal_transport': lambda: 'https' if web_portal_https else 'http',
+    'https_hostname': lambda: portal_certificate_hostname,
     'support_builder': support_bundle.build_support_bundle, 'health': lambda: event_service.health,
     'modules': module_summaries, 'product_version': lambda: component_versions.PRODUCT_VERSION,
     'network_trial_pending': credential_store.network_trial_pending,
@@ -1784,11 +1746,6 @@ async def start_module_api():
         operations=open_native_journal(logOutput),
     )
     try:
-        migrated = certificate_manager.ensure_server_identity(
-            api_server_cert_path, api_server_key_path,
-            web_portal_cert_path, web_portal_key_path,
-            API_SERVER_MIGRATION_MARKER
-        )
         settings = {
             'enabled': True,
             'host': device_settings.device_api_host,
@@ -1802,12 +1759,6 @@ async def start_module_api():
     except Exception as exc:
         logOutput('API', 'Start', {'log': 'Failed - ' + str(exc)}, 'ERROR')
         return None
-    if migrated:
-        logOutput(
-            'API', 'Certificate migration',
-            {'log': 'Portal identity copied to the independent API identity path; '
-                    'replace it with a private-CA API server certificate'}, 'ERROR'
-        )
     logOutput(
         'API', 'Start',
         {'log': 'mTLS API listening on port ' + str(device_api_port)}, 'INFO'
@@ -3149,7 +3100,6 @@ async def main(client):
     start_task('certificate_lifecycle', certificate_lifecycle.monitor(
         certificate_config, {
             'trust-ca': mqtt_ca_cert_path, 'portal-cert': web_portal_cert_path, 'portal-key': web_portal_key_path,
-            'api-server-cert': api_server_cert_path, 'api-server-key': api_server_key_path,
         }, logOutput, schedule_portal_certificate_reload,
         schedule_certificate_identity_reload,
         qualification_service.record_renewal

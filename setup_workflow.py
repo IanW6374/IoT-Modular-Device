@@ -36,8 +36,6 @@ CERTIFICATE_PATHS = {
     'trust-ca': 'certs/trust/home-rca-root.der',
     'portal-cert': 'certs/web.crt.der',
     'portal-key': 'certs/web.key.der',
-    'api-server-cert': 'certs/api-server.crt.der',
-    'api-server-key': 'certs/api-server.key.der',
 }
 DEFAULT_ACME_DIRECTORY_URL = (
     'https://iot-ca.home.arpa:9000/acme/acme/directory'
@@ -93,19 +91,15 @@ def _install_manual_certificates(parts):
         CERTIFICATE_PATHS['trust-ca'] + '.manual',
         CERTIFICATE_PATHS['portal-cert'] + '.manual',
         CERTIFICATE_PATHS['portal-key'] + '.manual',
-        CERTIFICATE_PATHS['api-server-cert'] + '.manual',
-        CERTIFICATE_PATHS['api-server-key'] + '.manual',
     ]
     try:
         for kind, field in (
             ('trust-ca', 'trust_ca'), ('portal-cert', 'portal_cert'),
-            ('portal-key', 'portal_key'), ('api-server-cert', 'api_server_cert'),
-            ('api-server-key', 'api_server_key'),
+            ('portal-key', 'portal_key'),
         ):
             _write_certificate(kind, parts.get(field, b''), '.manual')
         _validate_certificates(
             True, staged_paths[1], staged_paths[2], staged_paths[0],
-            staged_paths[3], staged_paths[4]
         )
     except Exception:
         for staged_path in staged_paths:
@@ -117,8 +111,7 @@ def _install_manual_certificates(parts):
     certificate_manager.commit_certificate_files(
         zip(staged_paths, (
             CERTIFICATE_PATHS['trust-ca'], CERTIFICATE_PATHS['portal-cert'],
-            CERTIFICATE_PATHS['portal-key'], CERTIFICATE_PATHS['api-server-cert'],
-            CERTIFICATE_PATHS['api-server-key'],
+            CERTIFICATE_PATHS['portal-key'],
         )),
         validator=lambda: _validate_certificate_files('manual')
     )
@@ -187,18 +180,12 @@ def _write_certificate(kind, payload, suffix=''):
 
 def _validate_certificates(
     require_trust=True, portal_cert=None, portal_key=None, trust_ca=None,
-    api_server_cert=None, api_server_key=None,
 ):
     portal_cert = portal_cert or CERTIFICATE_PATHS['portal-cert']
     portal_key = portal_key or CERTIFICATE_PATHS['portal-key']
     trust_ca = trust_ca or CERTIFICATE_PATHS['trust-ca']
     server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     server.load_cert_chain(portal_cert, portal_key)
-    if api_server_cert or api_server_key:
-        if not api_server_cert or not api_server_key:
-            raise ValueError('Device API server certificate and key must be provided together')
-        api_server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        api_server.load_cert_chain(api_server_cert, api_server_key)
     if not require_trust:
         return True
     client = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -236,12 +223,6 @@ def _validate_certificate_files(certificate_mode):
             raise ValueError(
                 'trusted CA certificate could not be decoded: ' + str(trusted_ca['error'])
             )
-    if certificate_mode in ('manual', 'iot_ca'):
-        _validate_certificates(
-            False,
-            api_server_cert=CERTIFICATE_PATHS['api-server-cert'],
-            api_server_key=CERTIFICATE_PATHS['api-server-key'],
-        )
     return True
 
 def _validate_certificate_selection(config, selected_mode):

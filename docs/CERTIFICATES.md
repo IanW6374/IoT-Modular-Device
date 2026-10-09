@@ -1,196 +1,97 @@
 # Certificate identities and provisioning
 
-IoT-MD deliberately separates browser-facing and service-facing trust.
+From Alpha 110, IoT-MD presents one HTTPS certificate/key on portal and API.
+Use the same canonical DNS hostname for both ports (portal 8443, API 8444 by
+default). The .local mDNS name is only a discovery alias. Configure Management
+with the HTTPS name covered by the certificate SAN; DNS must resolve it.
 
-| Purpose | Identity or trust | Expected issuer |
+| Purpose | Identity or trust | Issuer |
 | --- | --- | --- |
-| Web portal HTTPS | `web.crt.pem` / `web.key.der` | Selected setup method: public ACME, private CA, self-signed or manual |
-| Device API and fleet server | `api-server.crt.der` / `api-server.key.der` | Private IoT CA for the device `.local` name |
-| MQTT server authentication | `mqtt-ca.der` trust anchor | Broker leaf must chain to the installed CA |
-| Release server authentication | `update-ca.der` | Private CA used by the release service |
-| Syslog server authentication | Dedicated Syslog trusted CA | Private CA used by IoT Syslog |
-| API/fleet clients | One or more API client CAs and enrolled client certificates | Private IoT CA |
+| Portal and API HTTPS | web.crt.pem / web.key.der | Public ACME, private CA, self-signed or manual |
+| API callers | API client CAs and enrolled caller certificates | Private IoT CA |
+| Renewal caller | Device-generated renewal key/certificate | Private IoT CA |
+| MQTT, release, Syslog servers | Corresponding outbound CA trust anchors | Remote server's issuing CA |
+| Management authorization | Management policy and catalog verification key | Management signing identity |
 
-The public certificate is limited to the human-facing portal. The private
-Device API/fleet identity is presented only by the inbound mutual-TLS Device API
-endpoint. MQTT, release/upgrade and Syslog are outbound TLS clients: they do not
-present the Device API/fleet identity and instead validate their remote servers
-using the corresponding installed CA trust anchors.
+Sharing server identity does not share authentication. Portal access uses the
+administrator login. API access always requires mTLS, an enrolled client
+fingerprint and permission scopes. Publicly issuing the server certificate
+does not allow anonymous API access. Outbound service trust remains separate.
 
-## TLS names and certificate chains
+## TLS names and chains
 
-A trusted issuer and a matching service identity are both required. IoT-MD
-verifies the exact configured hostname against a certificate DNS SAN, or an IP
-literal against an IP SAN. When a SAN extension exists, a matching Common Name
-alone is not sufficient. For example, a broker configured as
-`homeassistant.local` needs that DNS SAN even if its certificate Common Name is
-`mqtt-broker.home.arpa`; alternatively configure the broker using the latter
-name and ensure DNS resolves it.
+Trusted issuance and matching DNS/IP SANs are both required. A matching Common
+Name cannot override a mismatched SAN. Servers must present the leaf and required
+intermediates; trusting a root does not repair a missing intermediate. Never
+disable certificate verification. Management trusts its configured private root
+and system public roots while still supplying its private client certificate.
+Open portal uses the device's advertised HTTPS hostname, not its discovery alias.
 
-Servers must present their leaf certificate and required intermediate
-certificates. The IoT-MD trust file normally contains the issuing root; adding
-that root does not repair a missing intermediate or bypass hostname checks.
-After replacing a broker, syslog, release or API certificate, reload the
-service and inspect the certificate actually presented on its network port.
+## First-run certificate choices
 
-Public portal names such as `iot-md-001.iot.example.com` and private service names
-such as `iot-md-001.local` are intentionally separate. A public portal certificate
-does not replace the private Device API/fleet identity or any outbound service trust
-anchor.
-
-## Initial setup choices
-
-The first-boot wizard starts with a certificate-route selector and displays
-only the fields for the selected route:
-
-1. **Automatic IoT CA enrollment** obtains a browser-trusted portal
-   certificate and a private-CA Device API/fleet identity through a short-lived,
+1. Automatic IoT CA enrollment: shared HTTPS identity through a time-limited
    trusted-LAN enrollment window.
-2. **IoT CA enrollment authorization (`.iotenroll`)** obtains the same identity
-   set from a one-time, host-bound authorization downloaded by the admin.
-3. **Private CA ACME enrollment** uses the device's `.local` name and HTTP-01 against
-   the private IoT CA.
-4. **Manual certificate package** uploads an existing public portal chain/key
-   and private Device API/fleet certificate/key.
-5. **Self-signed device certificate** keeps the device-generated local fallback.
+2. IoT CA authorization (.iotenroll): the same identity from a one-time,
+   hostname-bound authorization downloaded by an administrator.
+3. Private CA ACME: local DNS name with HTTP-01 against the private IoT CA.
+4. Manual certificate package: shared HTTPS chain/key and private IoT root.
+5. Self-signed certificate: the device-generated local fallback; clients must
+   explicitly trust it. No certificate files are required for this choice.
 
-No route is silently applied. Selecting **Self-signed device certificate** requires no
-certificate fields and continues with the identity created during the network
-step.
+No route is silently applied. Only the selected route's controls are displayed.
 
-## Maintenance certificate pages
+## Device / Settings / Certificates
 
-The authenticated portal separates certificate material by role so that a
-trust anchor is not mistaken for a device or client identity:
+- Certificate enrollment shows the method, renewal behaviour and replacement
+  controls. Certificate/key installation is validated and committed atomically.
+- Device certificates shows the single Device HTTPS identity (portal and API).
+  Renew now invokes the active managed method.
+- API client trust manages issuer CAs, registered callers and scopes. Standard,
+  Management Suite, Qualification automation and Custom presets remain available.
+  Edit API scopes updates an existing caller; profile writes require
+  configuration:write. Revoking a caller does not change the server identity.
+- CA & signing trust manages outbound service CAs and the Management policy and
+  catalog verification key. Removing trust prevents the corresponding service
+  from authenticating until replacement trust is installed.
 
-- **Certificate enrollment** shows the active enrollment method and its renewal
-  behaviour. An administrator can change to **Self-signed device certificate**,
-  **Automatic IoT CA enrollment**, **IoT CA enrollment authorization
-  (`.iotenroll`)**, **Private CA ACME enrollment**, or **Manual certificate
-  package**. Only the controls for the selected method are displayed.
-- **CA & signing trust** contains the outbound **MQTT broker CA**, **Release
-  server CA**, **Syslog server CA**, and **Management Suite signing key**. Each
-  installed item can be removed explicitly. Removing a CA prevents the related
-  TLS client from reconnecting until replacement trust is installed.
-- **API client trust** contains **Device API client issuer CA** anchors and
-  enrolled **API caller certificates**. Enrol each client identity once and
-  choose the Standard, Management Suite, Qualification automation or Custom
-  permission preset. Removing an issuer CA reloads Device API trust; revoking
-  a caller removes only that enrolled caller. Use **Edit API scopes** on an
-  enrolled caller to change its permissions in place without installing a
-  duplicate certificate. Management Suite profile pushes require the dedicated
-  `configuration:write` scope.
-- **Device certificates** inventories identities currently
-  presented by the device: **Portal HTTPS identity** and **Device API and fleet
-  server identity**. It also exposes **Renew now** for the current managed
-  enrollment method. Identities are installed or replaced from **Certificate
-  enrollment**. **Manual certificate package** remains the only method without
-  automatic renewal and therefore requires an explicit replacement package.
+The Management verification key is a public signing key, not an X.509 CA or a
+private key on the device. It authorizes policies, commands and format-3 catalogs.
+Update artifacts are independently verified by the immutable offline update key.
+Secure boot and flash encryption do not replace caller authorization/signatures.
 
-The Management Suite verification key is a signing key rather than an X.509
-CA certificate. It verifies fleet policy and format-3 release catalogs; update
-artifacts remain independently verified by the immutable offline update key.
+## Enrollment and renewal
 
-## V3 identity boundary
+Use Certificate Authority 0.6.0 with Alpha 110. Enrollment/renewal protocol v2
+accepts only HTTPS-server and renewal-client CSRs. Existing protocol-v1 managed
+devices must re-enroll through Certificate enrollment. No split-identity
+compatibility or migration path is provided. Updating firmware does not erase
+configuration or API caller trust.
 
-The v3 Alpha 5 runtime keeps the same user-facing enrollment methods and split
-identity model, but does not move certificate or private-key bytes through the
-application kernel. Platform adapters return opaque integer handles plus
-bounded subject, issuer, fingerprint and validity metadata. The identity domain
-orchestrates enrollment and renewal; the platform owns protected material and
-cryptographic operations. Trust anchors are removed by identifier and observed
-generation to prevent a stale portal operation from deleting newer trust.
+Configure a resolvable IoT CA name (iot-ca.home.arpa by default) and mapped
+provisioning port (9010 by default). Open the time-limited enrollment window in
+CA Overview. This bootstrap route is disabled by default, private-LAN restricted,
+rate-limited and audited. The returned authorization pins subsequent traffic to
+the private root. On an untrusted setup LAN, download .iotenroll instead. It
+expires after 30 minutes and cannot be claimed with different certificate requests.
 
-This is currently an alpha contract. The v2.5 certificate implementation
-remains the active product path until real issuance, renewal, power interruption
-and trust-removal HIL tests qualify the native adapter.
+The authorization binds the discovery name and canonical HTTPS hostname. The
+device creates independent P-256 HTTPS and renewal-client keys locally and sends
+only signed CSRs over pinned HTTPS. CA validates exact names/usages, performs
+Cloudflare DNS-01 for the HTTPS CSR and privately signs the renewal CSR. Only
+certificates and public trust are returned; private keys and Cloudflare credentials
+never leave their owner.
 
-### Renewal coverage
+The private renewal credential authorizes rotating these two certificates after
+two-thirds of the HTTPS lifetime. It is not a second API server identity.
+Renewal reloads both listeners without rebooting. Private ACME and self-signed
+routes also renew the shared identity; manual packages need explicit replacement.
 
-Renewal depends on the selected route and is shown beside every choice in the
-wizard:
+## Manual public provisioning
 
-- **Private CA ACME enrollment** automatically renews its local portal certificate
-  after two-thirds of its lifetime. It does not install or rotate a separate
-  Device API/fleet identity.
-- **Automatic IoT CA enrollment** and **IoT CA enrollment authorization (`.iotenroll`)**
-  install the public portal, private Device API and renewal identities together.
-  The device uses the renewal identity to rotate the complete set automatically
-  after two-thirds of either server certificate lifetime.
-- **Manual certificate package** certificates are replaced manually; neither the public nor
-  private identity is auto-renewed.
-- **Self-signed device certificate** mode regenerates its local identity automatically
-  after two-thirds of its lifetime.
-
-## Automatic IoT CA enrollment
-
-For one-step provisioning, configure IoT CA with a server name the device can
-resolve (by default `iot-ca.home.arpa`) and ensure its Home Assistant network
-mapping matches the configured provisioning port (9010 by default). Open the
-automatic IoT-MD enrollment window from the CA Overview; it closes after the
-configured interval, five minutes by default. In the device wizard, leave the
-server and port blank to use those defaults or enter the matching values, then
-choose **Request and install certificates**. The CA accepts only private-LAN
-requests, rate-limits them, audits each authorization and derives both
-identities from the device's `<host>.local` name.
-
-The private-CA ACME route similarly treats a blank directory URL as
-`https://iot-ca.home.arpa:9000/acme/acme/directory`. If the CA/ACME port is
-remapped from 9000 in Home Assistant, enter the corresponding URL instead.
-
-The first automatic exchange is a trusted-LAN bootstrap because the device
-does not yet possess the private root. The returned authorization pins all
-subsequent enrollment traffic to that root. On an untrusted setup LAN, choose
-**Authorize IoT-MD** in IoT CA, enter the portal host label and download the
-resulting `.iotenroll` file instead. That authorization expires after 30
-minutes and can be claimed only once with the same certificate requests.
-
-Select **IoT CA enrollment authorization (`.iotenroll`)** and upload that one
-file. The device pins HTTPS to the private root embedded in the file,
-generates independent P-256 keys for the portal, Device API and renewal
-identity, and submits only their CSRs. IoT CA completes Cloudflare DNS-01 for
-the portal CSR and signs the API and renewal CSRs with its private authority.
-The returned response contains certificates and public trust only. It never
-contains a private key or Cloudflare token.
-
-The Device API and fleet server identity is installed as a leaf-plus-intermediate PEM
-chain (the filename remains the established API certificate path), allowing
-clients that trust the private root to validate the complete chain.
-
-The device checks that the authorization's `.local` API hostname matches the
-name selected earlier in setup, verifies each certificate/key pair, and
-commits the complete set with rollback protection.
-
-## Manual public profile provisioning
-
-Issue an **IoT-MD public portal** profile in IoT Certificate Authority before
-starting device provisioning. The CA performs Cloudflare DNS-01 and returns a
-one-time ZIP. Unzip it on the administrator workstation; do not copy the ZIP or
-Cloudflare credentials to the device.
-
-On the first-boot **Install device certificates** page, select:
-
-1. the private IoT root as **Home IoT trusted CA**;
-2. the public portal DNS hostname;
-3. `web.crt.pem` (leaf plus intermediate chain) and `web.key.der` for the public portal;
-4. `api-server.crt.der` and `api-server.key.der` for private API/fleet service.
-
-The device validates both key pairs before committing the certificate set. Its
-`.local` mDNS hostname remains separate from the public portal DNS name, so API
-clients can continue to use private name resolution and private CA validation.
-
-The manual route installs an already-issued profile package. The automated
-route contacts IoT CA, not Cloudflare, and neither route stores a Cloudflare
-token on the device. An unprovisioned field device never receives DNS-edit
-authority.
-
-## Upgrades from 2.1.1
-
-When the independent Device API/fleet identity files are absent, the first boot after
-upgrade copies the existing portal identity once so that the API remains
-reachable. The Certificates page marks this as an upgrade identity. Install a
-private-CA Device API and fleet server certificate and key to clear the warning. Future
-portal certificate changes never update the API identity.
-
-Complete encrypted backups include both identities. Restore validates each
-certificate/key pair before activation.
+Issue a device public certificate package in CA 0.6.0, unzip on the administrator
+workstation and select the private IoT root, canonical HTTPS DNS hostname,
+web.crt.pem (leaf and intermediate chain) and web.key.der in first-run setup.
+There are no api-server.* files. Validate one key pair before committing.
+Complete encrypted backups contain the shared identity once; restore validates
+its certificate/key pair before activation. No provisioning route gives a device
+DNS-edit credentials.

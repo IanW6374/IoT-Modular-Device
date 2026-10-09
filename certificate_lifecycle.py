@@ -25,8 +25,8 @@ async def monitor(config, paths, log_output, reload_portal,
     elif mode == 'manual':
         log_output(
             'Local', 'Manual certificate package',
-            {'log': 'Automatic renewal is unavailable. Replace the public portal and '
-                    'private Device API/fleet certificates before either identity expires.',
+            {'log': 'Automatic renewal is unavailable. Replace the shared portal/API '
+                    'HTTPS certificate before it expires.',
              'force': True},
             'INFO'
         )

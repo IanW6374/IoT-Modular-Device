@@ -90,11 +90,13 @@ class DeviceInventory:
             'device_api': {
                 'enabled': self._value('api_enabled', False),
                 'port': self._value('api_port', 8444),
+                'hostname': self._value('https_hostname', ''),
             },
             'web_portal': {
                 'enabled': self._value('portal_enabled', False),
                 'port': self._value('portal_port', 8443),
                 'transport': self._value('portal_transport', 'https'),
+                'hostname': self._value('https_hostname', ''),
             },
         }
 
