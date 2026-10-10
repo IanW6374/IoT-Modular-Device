@@ -7,6 +7,101 @@ const require=createRequire(import.meta.url);
 const {JSDOM}=require(process.env.IOT_UI_NODE_MODULES ? `${process.env.IOT_UI_NODE_MODULES}/jsdom` : 'jsdom');
 const root=fileURLToPath(new URL('../..',import.meta.url));
 const python=code=>execFileSync(process.env.PYTHON || 'python3',['-c',code],{cwd:root,encoding:'utf8'});
+function taskPollFixture(hidden=false){
+  const dom=new JSDOM('<main><div id="active-device-task" hidden><a id="active-device-task-link"></a></div><section class="card">Settings</section></main>',{runScripts:'outside-only',url:'https://device.local/api-settings',pretendToBeVisual:true});
+  const {window:w}=dom,doc=w.document,requests=[],timers=new Map();let nextTimer=0;
+  Object.defineProperty(doc,'hidden',{get:()=>hidden,configurable:true});
+  w.setTimeout=(callback,delay)=>{timers.set(++nextTimer,{callback,delay});return nextTimer;};
+  w.clearTimeout=id=>timers.delete(id);
+  w.fetch=(path,options)=>new Promise((resolve,reject)=>{
+    const request={path,resolve,reject,signal:options.signal};requests.push(request);
+    options.signal.addEventListener('abort',()=>reject(new w.DOMException('Read timed out','AbortError')),{once:true});
+  });
+  w.eval(python('import web_portal_ui;print(web_portal_ui.PORTAL_JS)'));
+  return {dom,doc,requests,timers,
+    async settle(){for(let i=0;i<20;i++)await Promise.resolve();},
+    respond(index,tasks){requests[index].resolve({ok:true,status:200,json:async()=>({tasks})});},
+    visibility(value){hidden=value;doc.dispatchEvent(new w.Event('visibilitychange'));},
+    fire(delay){const entry=[...timers].find(([,timer])=>timer.delay===delay);assert.ok(entry,`Expected ${delay} ms timer`);timers.delete(entry[0]);entry[1].callback();}
+  };
+}
+test('shared task reads stay single-flight and schedule only after completion',async()=>{
+  const f=taskPollFixture();try{
+    assert.equal(f.requests.length,1);assert.equal(f.requests[0].path,'/api/tasks');
+    assert.equal([...f.timers.values()].filter(t=>t.delay===3000).length,0);
+    for(let i=0;i<5;i++)f.visibility(false);
+    assert.equal(f.requests.length,1);
+    f.respond(0,[]);await f.settle();
+    assert.equal(f.requests.length,2); // All forced refreshes coalesce into one follow-up.
+    f.respond(1,[]);await f.settle();
+    assert.equal([...f.timers.values()].filter(t=>t.delay===3000).length,1);
+    f.fire(3000);assert.equal(f.requests.length,3);
+    assert.equal([...f.timers.values()].filter(t=>t.delay===3000).length,0);
+    f.respond(2,[]);await f.settle();
+    assert.equal(f.doc.getElementById('portal-poll-tasks'),null);
+  }finally{f.dom.window.close();}
+});
+test('superseded task failure cannot recreate a warning while a current refresh is queued',async()=>{
+  const f=taskPollFixture();try{
+    f.visibility(true);f.visibility(false);
+    assert.equal(f.requests.length,1);
+    f.requests[0].reject(Error('Delayed stale failure'));await f.settle();
+    assert.equal(f.requests.length,2);assert.equal(f.doc.getElementById('portal-poll-tasks'),null);
+    f.respond(1,[{id:'release_download_1',phase:'running',message:'Writing core',percent:35}]);await f.settle();
+    assert.equal(f.doc.getElementById('portal-poll-tasks'),null);
+    assert.match(f.doc.getElementById('active-device-task-link').textContent,/Writing core.*35%/);
+  }finally{f.dom.window.close();}
+});
+test('real task failures retain last data until a valid response recovers',async()=>{
+  const f=taskPollFixture();try{
+    f.respond(0,[{id:'release_download_1',phase:'running',message:'Writing core',percent:35}]);await f.settle();
+    const retained=f.doc.getElementById('active-device-task-link').textContent;
+    f.fire(3000);f.requests[1].reject(Error('Offline'));await f.settle();
+    assert.match(f.doc.getElementById('portal-poll-tasks').textContent,/Showing last data/);
+    assert.equal(f.doc.getElementById('active-device-task-link').textContent,retained);
+    assert.equal(f.doc.getElementById('active-device-task').hidden,false);
+    f.fire(3000);f.respond(2,null);await f.settle();
+    assert.ok(f.doc.getElementById('portal-poll-tasks'));
+    f.fire(3000);f.respond(3,[]);await f.settle();
+    assert.equal(f.doc.getElementById('portal-poll-tasks'),null);
+    assert.equal(f.doc.getElementById('active-device-task').hidden,true);
+  }finally{f.dom.window.close();}
+});
+test('task read timeout aborts before scheduling the next request',async()=>{
+  const f=taskPollFixture();try{
+    f.fire(15000);await f.settle();
+    assert.equal(f.requests[0].signal.aborted,true);assert.equal(f.requests.length,1);
+    assert.ok(f.doc.getElementById('portal-poll-tasks'));
+    assert.equal([...f.timers.values()].filter(t=>t.delay===15000).length,0);
+    f.fire(3000);assert.equal(f.requests.length,2);
+    f.respond(1,[]);await f.settle();assert.equal(f.doc.getElementById('portal-poll-tasks'),null);
+  }finally{f.dom.window.close();}
+});
+test('hidden tabs do not poll and return refreshes without a duplicate timer',async()=>{
+  const f=taskPollFixture(true);try{
+    assert.equal(f.requests.length,0);assert.equal(f.timers.size,0);
+    f.visibility(false);assert.equal(f.requests.length,1);
+    f.visibility(true);f.respond(0,[]);await f.settle();assert.equal(f.timers.size,0);
+    f.visibility(false);assert.equal(f.requests.length,2);
+    f.respond(1,[]);await f.settle();
+    f.visibility(true);assert.equal(f.timers.size,0);
+    f.visibility(false);assert.equal(f.requests.length,3);
+    f.respond(2,[]);await f.settle();
+    assert.equal([...f.timers.values()].filter(t=>t.delay===3000).length,1);
+  }finally{f.dom.window.close();}
+});
+test('page exit stops task reads and back-forward restoration resumes them safely',async()=>{
+  const f=taskPollFixture();try{
+    f.dom.window.dispatchEvent(new f.dom.window.Event('pagehide'));
+    f.requests[0].reject(Error('Page left'));await f.settle();
+    assert.equal(f.timers.size,0);assert.equal(f.doc.getElementById('portal-poll-tasks'),null);
+    f.dom.window.dispatchEvent(new f.dom.window.Event('pageshow'));
+    assert.equal(f.requests.length,2);
+    f.respond(1,[]);await f.settle();
+    assert.equal([...f.timers.values()].filter(t=>t.delay===3000).length,1);
+    f.dom.window.dispatchEvent(new f.dom.window.Event('pagehide'));assert.equal(f.timers.size,0);
+  }finally{f.dom.window.close();}
+});
 test('accepted background work stays informational rather than claiming completion',async()=>{
   const dom=new JSDOM('<main><form data-portal-async action="/start"><div class="actions"><button type="submit">Start</button></div></form></main>',{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
   dom.window.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify({task_id:'task',message:'Work requested'}),json:async()=>({})});

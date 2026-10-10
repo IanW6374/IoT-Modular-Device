@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.0-alpha.114 - 2026-10-10
+
+- Make the shared portal task-status poll single-flight. Schedule the next read
+  three seconds after completion rather than starting overlapping requests while
+  a previous read is still pending or timing out.
+- Coalesce refresh requests during an active read and ignore its superseded
+  result. Pause polling in hidden tabs, resume on return and stop on page exit.
+- Retain the last task data and the existing warning for genuine failed reads;
+  clear the warning only after a valid, current task-status response.
+- Add browser regression coverage for slow reads, visibility changes, stale
+  failures, read timeouts, retained data and page lifecycle recovery.
+- Advance runtime generation to 210 and signed release sequence to 2819.
+
 ## 3.0.0-alpha.113 - 2026-10-10
 
 - Reclaim only older, CRC-verified transaction snapshots in the bounded native
