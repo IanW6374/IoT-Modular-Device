@@ -68,7 +68,7 @@ class PortalTaskRegistryTests(unittest.TestCase):
             )
 
         self.assertEqual(reports, [])
-        self.assertEqual(discarded, [True, True])
+        self.assertEqual(discarded, [True])
 
 
 if __name__ == '__main__':

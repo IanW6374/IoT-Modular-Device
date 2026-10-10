@@ -1135,7 +1135,7 @@ async def start_web_portal(portal):
                 message = result.get('message', '') if isinstance(result, dict) else str(result or '')
                 await action_response.send(
                     '200 OK', message or 'Staged update discarded',
-                    redirect='/updates'
+                    redirect='/updates', severity=result.get('severity', 'success') if isinstance(result, dict) else 'success'
                 )
             elif method == 'POST' and path.startswith('/rollback-application'):
                 result = apply_portal_action(

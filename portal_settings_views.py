@@ -9,16 +9,11 @@ import web_portal_ui as portal_ui
 import timezone_rules
 from portal_http import html_escape, js_escape, configuration_backup_filename
 from portal_presenters import (
-    render_badge, render_certificate_badge, render_label,
+    render_badge, render_certificate_badge, render_label, render_notice,
 )
 
 def _notice(message='', error=False):
-    if not message:
-        return ''
-    return (
-        '<p class="' + ('error' if error else 'notice') + '" role="' + ('alert' if error else 'status') + '">' +
-        html_escape(message) + '</p>'
-    )
+    return render_notice(message, error)
 
 
 def operational_renderer(route, logging_renderer=None):

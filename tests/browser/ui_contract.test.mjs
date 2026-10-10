@@ -7,6 +7,83 @@ const require=createRequire(import.meta.url);
 const {JSDOM}=require(process.env.IOT_UI_NODE_MODULES ? `${process.env.IOT_UI_NODE_MODULES}/jsdom` : 'jsdom');
 const root=fileURLToPath(new URL('../..',import.meta.url));
 const python=code=>execFileSync(process.env.PYTHON || 'python3',['-c',code],{cwd:root,encoding:'utf8'});
+test('accepted background work stays informational rather than claiming completion',async()=>{
+  const dom=new JSDOM('<main><form data-portal-async action="/start"><div class="actions"><button type="submit">Start</button></div></form></main>',{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
+  dom.window.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify({task_id:'task',message:'Work requested'}),json:async()=>({})});
+  dom.window.eval(python('import web_portal_ui;print(web_portal_ui.PORTAL_JS)'));
+  doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,20));
+  const out=doc.querySelector('[data-portal-form-status]');assert.match(out.className,/info/);assert.doesNotMatch(out.className,/success/);dom.window.close();
+});
+test('task page exposes interrupted reads and clears the warning on recovery',async()=>{
+  const dom=new JSDOM(python("import web_portal_ui;print(web_portal_ui.task_page('task','Checking'))"),{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
+  dom.window.fetch=async()=>{throw Error('Offline')};
+  dom.window.eval(python('import web_portal_ui;print(web_portal_ui.PORTAL_JS)'));
+  for(const script of doc.querySelectorAll('script:not([src])'))dom.window.eval(script.textContent);
+  await new Promise(resolve=>setTimeout(resolve,20));
+  assert.match(doc.getElementById('task-progress').className,/warning/);
+  assert.match(doc.querySelector('#task-progress .status-text').textContent,/interrupted/);
+  dom.window.fetch=async()=>({ok:true,status:200,json:async()=>({phase:'running',message:'Recovered',percent:30})});
+  dom.window.poll();await new Promise(resolve=>setTimeout(resolve,20));
+  assert.doesNotMatch(doc.getElementById('task-progress').className,/warning/);assert.match(doc.querySelector('#task-progress .status-text').textContent,/Recovered/);
+  dom.window.fetch=async()=>({ok:true,status:200,json:async()=>({phase:'failed',message:'Rejected'})});
+  dom.window.poll();await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(doc.getElementById('task-progress').getAttribute('role'),'alert');assert.equal(doc.getElementById('task-progress').getAttribute('aria-live'),'assertive');dom.window.close();
+});
+test('log-level rejection uses a red notice and restores the confirmed choice',async()=>{
+  const dom=new JSDOM(python("from portal_live_views import render_logging_page;print(render_logging_page('csrf','INFO',['INFO','DEBUG'],[]))"),{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
+  dom.window.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify({ok:false,error:'Permission denied'}),json:async()=>({})});
+  dom.window.eval(python('import web_portal_ui;print(web_portal_ui.PORTAL_JS)'));dom.window.portalAdaptivePoll=()=>{};
+  for(const script of doc.querySelectorAll('script:not([src])'))dom.window.eval(script.textContent);
+  const level=doc.getElementById('log-level'),initial=level.value;level.value=initial==='DEBUG'?'INFO':'DEBUG';
+  doc.getElementById('log-level-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(level.value,initial);assert.match(doc.getElementById('log-level-error').className,/error/);assert.equal(doc.getElementById('log-level-error').textContent,'Permission denied');dom.window.close();
+});
+test('warnings and errors have consistent severity and occupy their own row above action buttons',async()=>{
+  const html=python("from portal_live_views import render_updates_page; print(render_updates_page('csrf',{'universal_upload_status':'prepared'}))");
+  const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
+  dom.window.fetch=async()=>({ok:true,status:200,json:async()=>({})});
+  const style=doc.createElement('style');style.textContent=python('import web_portal_ui;print(web_portal_ui.PORTAL_CSS)');doc.head.append(style);
+  const warning=doc.querySelector('.upgrade-operation .portal-status.warning'),controls=doc.querySelector('.manual-upgrade-buttons');
+  assert.ok(warning);assert.ok(warning.compareDocumentPosition(controls)&dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(controls.parentElement.className,'card');
+  dom.window.eval(python('import web_portal_ui;print(web_portal_ui.PORTAL_JS)'));
+  const actions=doc.createElement('div');actions.className='actions';
+  const out=doc.createElement('span');out.className='portal-status error';actions.append(out);doc.querySelector('main').append(actions);
+  dom.window.portalStatus(out,'error','Rejected action');
+  assert.equal(out.getAttribute('role'),'alert');assert.equal(out.getAttribute('aria-live'),'assertive');
+  assert.equal(dom.window.getComputedStyle(out).flexBasis,'100%');assert.equal(dom.window.getComputedStyle(out).order,'-1');
+  dom.window.portalStatus(out,'warning','Retrying status read');assert.equal(out.getAttribute('role'),'status');
+  assert.equal(out.getAttribute('aria-live'),'polite');
+  dom.window.close();
+});
+test('overview read failures show stale warning and recover without replacing retained values with errors',async()=>{
+  const html=python("from portal_live_views import render_overview_page;print(render_overview_page('csrf',{},[]))");
+  const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
+  let poll;dom.window.fetch=async()=>{throw Error('Offline')};
+  dom.window.eval(python('import web_portal_ui;print(web_portal_ui.PORTAL_JS)'));
+  dom.window.portalAdaptivePoll=callback=>{poll=callback};
+  for(const script of doc.querySelectorAll('script:not([src])'))dom.window.eval(script.textContent);
+  poll();await new Promise(resolve=>setTimeout(resolve,20));
+  assert.match(doc.getElementById('portal-poll-overview').textContent,/Showing last data/);
+  assert.match(doc.getElementById('overview-refresh').className,/warn/);
+  dom.window.fetch=async()=>({ok:true,status:200,json:async()=>({status:'<div id="overview-status">Fresh</div>',modules:'<div id="overview-modules">Fresh modules</div>'})});
+  poll();await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(doc.getElementById('portal-poll-overview'),null);assert.equal(doc.getElementById('overview-status').textContent,'Fresh');
+  assert.match(doc.getElementById('overview-refresh').className,/good/);dom.window.close();
+});
+test('HTTP 200 with an explicit rejected action cannot show success or discard unsaved values',async()=>{
+  const dom=new JSDOM('<main><form data-portal-async data-portal-dirty action="/save"><input name="description" value="Original"><div class="actions"><button type="submit">Save</button></div></form></main>',{runScripts:'outside-only',url:'https://device.local',pretendToBeVisual:true}),doc=dom.window.document;
+  dom.window.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify({ok:false,error:'Permission denied'})});
+  dom.window.eval(python('import web_portal_ui;print(web_portal_ui.PORTAL_JS)'));
+  const input=doc.querySelector('input');input.value='Unsaved';input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,20));
+  const out=doc.querySelector('[data-portal-form-status]');assert.match(out.className,/error/);assert.equal(out.textContent,'Permission denied');
+  assert.equal(input.defaultValue,'Original');assert.equal(input.value,'Unsaved');assert.equal(doc.querySelector('form').dataset.portalDirty,'1');
+  dom.window.close();
+});
 test('module configuration is readable immediately, discard stays formatted and invalid JSON cannot submit',()=>{
   const html=python(`from portal_settings_views import render_module_settings_page
 print(render_module_settings_page('csrf','{"devices":[{"name":"Probe","entities":{"0":{"unit":"C"}}}]}'))`);

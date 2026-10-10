@@ -32,9 +32,8 @@ METHODS = {
 
 
 def _notice(message='', error=False):
-    if not message:
-        return ''
-    return '<p class="' + ('error' if error else 'notice') + '">' + html_escape(message) + '</p>'
+    from portal_presenters import render_notice
+    return render_notice(message, error)
 
 
 def _method(certificates):

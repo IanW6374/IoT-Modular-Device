@@ -211,6 +211,7 @@ class FleetService:
         self.state['policy'] = dict(policy)
         self.state['rollout_paused'] = False
         self.state['command_chain_failed'] = False
+        self.state.pop('update_cancelled', None)
         self._save()
         return self.snapshot()
 
@@ -227,7 +228,8 @@ class FleetService:
         return weekday in window['weekdays'] and start <= minute < start + duration
 
     def pending_commands(self):
-        if self.state.get('rollout_paused') or self.state.get('command_chain_failed'):
+        if (self.state.get('rollout_paused') or self.state.get('command_chain_failed')
+                or self.state.get('update_cancelled')):
             return []
         completed = set(self.state.get('completed_commands', ()))
         policy = self.state.get('policy') or {}
@@ -246,6 +248,8 @@ class FleetService:
 
     def complete_command(self, identifier, result='complete', detail=''):
         identifier = str(identifier)
+        if self.state.get('update_cancelled'):
+            return self.snapshot()
         if identifier not in [item.get('id') for item in self.pending_commands()]:
             raise ValueError('fleet command is not pending')
         completed = self.state.setdefault('completed_commands', [])
@@ -255,6 +259,14 @@ class FleetService:
             'complete', 'confirmed', 'healthy'
         )
         self.record_result(result, detail)
+        return self.snapshot()
+
+    def cancel_updates(self, sequence=0, release_type=''):
+        """Persist local cancellation without modifying the signed policy."""
+        self.state['update_cancelled'] = {
+            'release_sequence': int(sequence), 'release_type': str(release_type),
+        }
+        self._save()
         return self.snapshot()
 
     def record_result(self, result, detail=''):

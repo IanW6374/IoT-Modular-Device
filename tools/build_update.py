@@ -21,6 +21,7 @@ CORE_FILES = (
     'iotmd.py',
     'iotmd_runtime.py',
     'update_telemetry.py',
+    'update_cancellation.py',
     'release_selection.py',
     'application_upload.py',
     'alpha_qualification.py',

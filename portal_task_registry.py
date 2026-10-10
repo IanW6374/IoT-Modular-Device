@@ -6,6 +6,7 @@ except ImportError:
     time = None
 
 _DOWNLOAD_CONTROL = {'active': False, 'discard': False}
+from update_cancellation import UpdateCancelled
 
 
 def _now():
@@ -24,12 +25,13 @@ def start(tasks, name, coroutine, message, start_task, log_output):
             result = await coroutine
         except Exception as exc:
             tasks[name].update({
-                'phase': 'failed', 'message': str(exc) or exc.__class__.__name__,
+                'phase': 'cancelled' if isinstance(exc, UpdateCancelled) else 'failed',
+                'message': str(exc) or exc.__class__.__name__,
                 'updated_s': _now(),
             })
             log_output(
                 'Local', 'Task', {'log': name + ' stopped - ' + str(exc)},
-                'ERROR'
+                'INFO' if isinstance(exc, UpdateCancelled) else 'ERROR'
             )
         else:
             tasks[name].update({
@@ -82,7 +84,7 @@ def cancellable_progress(control, report=None):
     """Wrap an optional progress reporter with a shared cancellation flag."""
     async def notify(*values):
         if control.get('discard'):
-            raise ValueError('update was discarded')
+            raise UpdateCancelled('update was discarded')
         if report:
             result = report(*values)
             if result is not None:
@@ -94,13 +96,19 @@ def discard_update(discard):
     """Request cancellation and discard any already staged update state."""
     active = bool(_DOWNLOAD_CONTROL.get('active'))
     _DOWNLOAD_CONTROL['discard'] = active
-    discarded = discard()
     if active:
         return 'Update discard requested'
+    discarded = discard()
     return 'Staged upgrade discarded' if discarded else 'No staged upgrade to discard'
 
 
+def download_active():
+    return bool(_DOWNLOAD_CONTROL.get('active'))
+
+
 def begin_cancellable(report=None):
+    if download_active():
+        raise ValueError('another update is already in progress')
     _DOWNLOAD_CONTROL.update({'active': True, 'discard': False})
     return cancellable_progress(_DOWNLOAD_CONTROL, report)
 
@@ -110,4 +118,4 @@ def finish_cancellable(discard):
     _DOWNLOAD_CONTROL.update({'active': False, 'discard': False})
     if cancelled:
         discard()
-        raise ValueError('update was discarded')
+        raise UpdateCancelled('update was discarded')

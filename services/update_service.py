@@ -1,4 +1,5 @@
 """Transport-neutral update upload and installer coordination."""
+from update_cancellation import UpdateCancelled
 
 try:
     import uasyncio as asyncio
@@ -162,7 +163,7 @@ class UpdateService:
         reader = None
         async def progress(*values):
             if self._discard_requested:
-                raise ValueError('update was discarded')
+                raise UpdateCancelled('update was discarded')
             if progress_callback:
                 result = progress_callback(*values)
                 if result is not None:
@@ -179,7 +180,7 @@ class UpdateService:
                 {'_progress': progress}
             )
             if self._discard_requested:
-                raise ValueError('update was discarded')
+                raise UpdateCancelled('update was discarded')
             return result
         finally:
             if reader is not None:
@@ -205,6 +206,16 @@ class UpdateService:
         for handler in self.discard_handlers:
             discarded = bool(handler()) or discarded
         return discarded
+
+    def cancel(self):
+        """Signal an installer; never remove files while it is using them."""
+        if self._installing:
+            self._discard_requested = True
+            return True
+        return False
+
+    def installing(self):
+        return self._installing
 
     def snapshot(self):
         return dict(self._status_getter() or {}) if self._status_getter else {}

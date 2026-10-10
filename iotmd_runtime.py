@@ -938,6 +938,7 @@ def portal_status():
         device_settings.ha_device_info.get('sw', ''))
     status['base_version'] = hardware_platform.runtime_version()
     status['update_status'] = update.get('status', 'idle')
+    status['update_staging_active'] = update_service.installing() or portal_task_registry.download_active()
     status['update_version'] = update.get('version', '')
     status['update_options'] = update.get('optional_groups', [])
     firmware = firmware_update.update_status()
@@ -1744,6 +1745,7 @@ async def start_module_api():
         configuration_restore_preview=preview_secure_configuration_import,
         configuration_restore_apply=apply_secure_configuration_import,
         operations=open_native_journal(logOutput),
+        update_cancellation=update_cancellation,
     )
     try:
         settings = {
@@ -1861,6 +1863,9 @@ def module_health_payload(driver):
 
 
 def portal_action(action, params):
+    if str(action).startswith('activate-') and (
+            update_service.installing() or portal_task_registry.download_active()):
+        raise ValueError('Staging is still active; wait for verification or cancel the update before installation')
     global release_available
     if action == 'discover':
         request_homeassistant_discovery()
@@ -2030,7 +2035,10 @@ def portal_action(action, params):
         schedule_hardware_reset('universal_update_reboot', 8000)
         return 'Universal core and application update staged; rebooting into trial versions'
     if action == 'discard-update':
-        return portal_task_registry.discard_update(update_service.discard_staged)
+        result = update_cancellation.cancel()
+        return {'message': ('Cancellation requested; waiting for staging to stop safely' if
+                result['status'] == 'cancelling' else 'Update cancelled; staged data discarded'),
+                'severity': 'info' if result['status'] == 'cancelling' else 'success'}
     if action == 'rollback-application':
         try:
             result = app_update.rollback_to_previous()
@@ -2107,6 +2115,7 @@ def fleet_activation_allowed():
     return bool(
         updates.get('automatic_activation') and
         not snapshot.get('rollout_paused') and
+        not snapshot.get('update_cancelled') and
         snapshot.get('within_maintenance_window')
     )
 
@@ -2115,6 +2124,8 @@ async def fleet_policy_monitor():
     """Execute only bounded commands carried by a verified fleet policy."""
     while True:
         for command in fleet_service.pending_commands():
+            if not any(item.get('id') == command.get('id') for item in fleet_service.pending_commands()):
+                break
             identifier = command.get('id', '')
             action = command.get('action', '')
             policy_channel, target_sequence, target_type = fleet_service.command_release(command, release_channel)
@@ -2142,6 +2153,8 @@ async def fleet_policy_monitor():
                 else:
                     raise RuntimeError('unsupported fleet command')
             except Exception as exc:
+                if not any(item.get('id') == identifier for item in fleet_service.pending_commands()):
+                    break
                 fleet_service.complete_command(identifier, 'failed', str(exc))
                 runtime_health.record_event(
                     'fleet_command_failed', str(exc),
@@ -2151,6 +2164,8 @@ async def fleet_policy_monitor():
                 )
                 break
             else:
+                if not any(item.get('id') == identifier for item in fleet_service.pending_commands()):
+                    break
                 fleet_service.complete_command(identifier, 'complete', action)
                 runtime_health.record_event(
                     'fleet_command_complete', action,
@@ -2230,6 +2245,12 @@ update_service = UpdateService(
     discard_handlers=(universal_upload.discard, update_orchestrator.clear,
                       universal_update.discard_all_ready))
 application_context.register('updates', update_service)
+from update_cancellation import UpdateCancellation, UpdateCancelled
+update_cancellation = UpdateCancellation(
+    update_service, portal_task_registry, fleet_service,
+    (app_update, firmware_update, universal_update), update_orchestrator,
+    update_telemetry,
+)
 
 async def complete_portal_update(identifier, progress_callback=None):
     """Include upload-store and installer failures in persistent history."""
@@ -2240,6 +2261,9 @@ async def complete_portal_update(identifier, progress_callback=None):
             kind = status.get('kind', kind)
         return universal_upload.completed_result(identifier, kind,
             await update_service.complete(identifier, progress_callback))
+    except UpdateCancelled:
+        update_support.record_update_event(kind, 'discarded', detail='Cancelled by operator')
+        raise
     except Exception as exc:
         record_upgrade_failure(kind, 'verification or staging', exc)
         raise
@@ -2373,6 +2397,10 @@ async def download_release_once(progress_callback=None, managed=False):
             report, universal_update.receive_bundle,
             max(web_portal_update_max_bytes, web_portal_firmware_update_max_bytes)
         )
+    except UpdateCancelled:
+        update_support.record_update_event(release.get('type', 'release'), 'discarded',
+            release.get('version', ''), 'Cancelled by operator')
+        raise
     except Exception as exc:
         update_telemetry.failed()
         record_upgrade_failure(

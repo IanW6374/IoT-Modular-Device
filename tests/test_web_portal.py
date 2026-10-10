@@ -1104,7 +1104,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('portal login', audit)
         self.assertIn('API connection', audit)
         self.assertIn('href="/download-audit-logs"', audit)
-        self.assertIn('fetch("/audit-logs"', audit)
+        self.assertIn('portalRead("/audit-logs"', audit)
 
         settings = web_portal.render_logging_settings_page('csrf', {
             'log_buffer_lines': 200, 'syslog_transport': 'udp'
@@ -2125,7 +2125,7 @@ class WebPortalTests(unittest.TestCase):
             {'device_name': 'ESP32-S3'}, [], '', 3000
         )
 
-        self.assertIn('fetch("/api/overview"', html)
+        self.assertIn('portalRead("/api/overview"', html)
         self.assertIn('portalAdaptivePoll(refreshOverview,3000)', html)
         self.assertNotIn('id="logs"', html)
         self.assertNotIn('id="update-upload-form"', html)
@@ -2345,7 +2345,7 @@ class WebPortalTests(unittest.TestCase):
 
         self.assertIn('<h1>Overview</h1>', overview)
         self.assertIn('Probe', overview)
-        self.assertIn('fetch("/api/overview"', overview)
+        self.assertIn('portalRead("/api/overview"', overview)
         self.assertNotIn('id="logs"', overview)
         self.assertNotIn('id="update-upload-form"', overview)
 
@@ -2354,7 +2354,7 @@ class WebPortalTests(unittest.TestCase):
         self.assertIn('Read duration (ms)', diagnostics)
         self.assertIn('action="/ems-debug"', diagnostics)
         self.assertIn('Calibration set to 712.5 for module 0001', calibrated)
-        self.assertIn('fetch("/api/module-diagnostics"', diagnostics)
+        self.assertIn('portalRead("/api/module-diagnostics"', diagnostics)
 
         self.assertIn('<h1>Device log</h1>', logging)
         self.assertIn('id="logs"', logging)

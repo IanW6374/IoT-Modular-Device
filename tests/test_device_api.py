@@ -135,6 +135,22 @@ class DeviceAPITests(unittest.TestCase):
         return APIRequest('POST', '/api/v3/configuration/restart', body, self.cert,
             headers={'Idempotency-Key': key})
 
+    def test_update_cancellation_requires_fleet_write_and_replays_durably(self):
+        control = mock.Mock()
+        control.cancel.return_value = {'status': 'cancelling'}
+        self.api.update_cancellation = control
+        self.registry.enrol(self.cert, 'manager', ('fleet:read',))
+        request = APIRequest('POST', '/api/v3/fleet/update-cancel', b'{}', self.cert,
+                            headers={'Idempotency-Key': '1.0123456789abcdef'})
+        self.assertEqual(self.api.handle(request).status, 403)
+        control.cancel.assert_not_called()
+        self.registry.enrol(self.cert, 'manager', ('fleet:read', 'fleet:write'))
+        response = self.api.handle(request)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.payload['status'], 'cancelling')
+        self.assertEqual(self.api.handle(request).status, 200)
+        control.cancel.assert_called_once_with({})
+
     def test_mutation_replay_after_restart_never_calls_device_again(self):
         self.registry.enrol(self.cert, 'writer', ('read', 'configuration:write'))
         self.api.configuration_restarter = mock.Mock(return_value={'scheduled': True})

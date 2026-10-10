@@ -884,12 +884,14 @@ def render_overview_page(token, status=None, modules=None, value_refresh_ms=5000
     )
     interval = max(1000, int(value_refresh_ms or 5000))
     script = (
-        'function refreshOverview(){fetch("/api/overview",{cache:"no-store",credentials:"same-origin"})'
-        '.then(function(r){if(r.status===401){location.replace("/login?reason=expired");return null;}return r.json();})'
-        '.then(function(p){if(!p)return;document.getElementById("overview-status").outerHTML=p.status;'
+        'function refreshOverview(){portalRead("/api/overview")'
+        '.then(function(p){if(!p||typeof p.status!=="string"||typeof p.modules!=="string")throw new Error("Invalid overview response");'
+        'document.getElementById("overview-status").outerHTML=p.status;'
         'document.getElementById("overview-modules").outerHTML=p.modules;var updated=document.getElementById('
-        '"overview-refresh");if(updated)updated.textContent="Live · "+new Date().toLocaleTimeString();})'
-        '.catch(function(){});}portalAdaptivePoll(refreshOverview,' + str(interval) + ');'
+        '"overview-refresh");if(updated){updated.className="badge good";updated.textContent="Live · "+new Date().toLocaleTimeString();}'
+        'portalPollState("overview","");})'
+        '.catch(function(){portalPollState("overview","Overview could not be refreshed. Showing last data; retrying automatically.","overview-refresh");});}'
+        'portalAdaptivePoll(refreshOverview,' + str(interval) + ');'
     )
     return portal_ui.shell('IoT-MD overview', 'overview', body, token, script)
 
@@ -916,7 +918,7 @@ def render_logging_page(token, current_loglevel, levels, logs,
         '<form id="log-level-form" action="/set-loglevel" method="post" class="log-toolbar">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<label>Log level <select id="log-level" name="level">' + options + '</select></label>'
-        '<span id="log-level-error" class="portal-status action-form-status" role="alert"></span></form>'
+        '<span id="log-level-error" class="portal-status error action-form-status" role="alert"></span></form>'
         '<label class="log-filter">Filter displayed logs '
         '<input id="log-filter" type="search" value="' + html_escape(filter_text) + '" '
         'placeholder="Filter text"></label>'
@@ -935,7 +937,8 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'credentials:"same-origin",headers:{"Accept":"application/json","Content-Type":'
         '"application/x-www-form-urlencoded"},body:payload}).then(function(response){'
         'return response.text().then(function(text){if(response.status===401){location.replace("/login?reason=expired");'
-        'throw new Error("Session expired");}if(!response.ok)throw new Error(text||"Unable to change log level");});'
+        'throw new Error("Session expired");}var result={};try{result=JSON.parse(text);}catch(ignore){}'
+        'if(!response.ok||result.ok===false)throw new Error(result.error||result.message||"Unable to change log level");});'
         '}).then(function(){confirmedLogLevel=selected;}).catch(function(error){logLevel.value='
         'confirmedLogLevel;if(error.message!=="Session expired")logLevelError.textContent=error.message;'
         '}).finally(function(){logLevel.disabled=false;});};'
@@ -953,10 +956,11 @@ def render_logging_page(token, current_loglevel, levels, logs,
         'if(!logRefreshPaused)refreshLogs();};'
         'function nearBottom(e){return e.scrollHeight-e.scrollTop-e.clientHeight<48;}'
         'function refreshLogs(){if(logRefreshPaused)return;var e=document.getElementById("logs"),b=nearBottom(e);'
-        'fetch("/logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
-        'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
-        'if(t!==null&&t!==undefined){if(latestLogs!==t)showLogs(t,b);logLastUpdated=new Date();updateLogRefresh();}})'
-        '.catch(function(){});}showLogs(latestLogs,true);portalAdaptivePoll(refreshLogs,' +
+        'portalRead("/logs","text").then(function(t){'
+        'if(t!==null&&t!==undefined){if(latestLogs!==t)showLogs(t,b);logLastUpdated=new Date();updateLogRefresh();portalPollState("logs","");}})'
+        '.catch(function(){portalPollState("logs","Device log could not be refreshed. Showing last data; retrying automatically.");'
+        'logRefreshState.className="badge warn refresh-status";logRefreshState.textContent="Refresh interrupted · showing last data";});}'
+        'showLogs(latestLogs,true);portalAdaptivePoll(refreshLogs,' +
         str(interval) + ');updateLogRefresh();'
     )
     return portal_ui.shell('IoT-MD device log', 'logging', body, token, script)
@@ -969,7 +973,7 @@ def render_request_error_page(token):
             'Portal', 'Request could not be completed',
             'The device remains available, but this request failed.'
         ) +
-        '<section class="card"><div class="warning"><strong>Request failed.</strong> '
+        '<section class="card"><div class="error" role="alert"><strong>Request failed.</strong> '
         'Review the device log for the recorded cause, then return and retry.'
         '</div><div class="actions request-error-actions">'
         '<button id="request-error-back" class="secondary" type="button">Go back</button>'
@@ -1004,11 +1008,12 @@ def render_audit_logging_page(token, logs, log_refresh_ms=5000):
         'if(!auditRefreshPaused)refreshAuditLogs();};'
         'function auditNearBottom(e){return e.scrollHeight-e.scrollTop-e.clientHeight<48;}'
         'function refreshAuditLogs(){if(auditRefreshPaused)return;var e=document.getElementById("audit-logs"),'
-        'b=auditNearBottom(e);fetch("/audit-logs",{cache:"no-store",credentials:"same-origin"}).then(function(r){'
-        'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.text();}).then(function(t){'
+        'b=auditNearBottom(e);portalRead("/audit-logs","text").then(function(t){'
         'if(t!==null&&t!==undefined){if(e.textContent!==t){e.textContent=t;if(b)e.scrollTop=e.scrollHeight;}'
-        'auditLastUpdated=new Date();updateAuditRefresh();}})'
-        '.catch(function(){});}portalAdaptivePoll(refreshAuditLogs,' + str(interval) + ');updateAuditRefresh();'
+        'auditLastUpdated=new Date();updateAuditRefresh();portalPollState("audit","");}})'
+        '.catch(function(){portalPollState("audit","Audit log could not be refreshed. Showing last data; retrying automatically.");'
+        'auditRefreshState.className="badge warn refresh-status";auditRefreshState.textContent="Refresh interrupted · showing last data";});}'
+        'portalAdaptivePoll(refreshAuditLogs,' + str(interval) + ');updateAuditRefresh();'
     )
     return portal_ui.shell(
         'IoT-MD audit log', 'audit_logging', body, token, script
@@ -1080,11 +1085,11 @@ def render_module_diagnostics_page(token, modules, value_refresh_ms=5000,
     )
     interval = max(1000, int(value_refresh_ms or 5000))
     script = (
-        'function refreshModuleDiagnostics(){fetch("/api/module-diagnostics",'
-        '{cache:"no-store",credentials:"same-origin"}).then(function(r){'
-        'if(r.status===401){location.replace("/login?reason=expired");return null;}return r.json();})'
-        '.then(function(p){if(!p)return;document.getElementById("module-diagnostics").innerHTML='
-        'p.modules;}).catch(function(){});}portalAdaptivePoll(refreshModuleDiagnostics,' +
+        'function refreshModuleDiagnostics(){portalRead("/api/module-diagnostics")'
+        '.then(function(p){if(!p||typeof p.modules!=="string")throw new Error("Invalid diagnostics response");'
+        'document.getElementById("module-diagnostics").innerHTML=p.modules;portalPollState("modules","");})'
+        '.catch(function(){portalPollState("modules","Module diagnostics could not be refreshed. Showing last data; retrying automatically.");});}'
+        'portalAdaptivePoll(refreshModuleDiagnostics,' +
         str(interval) + ');'
     )
     return portal_ui.shell(
@@ -1231,14 +1236,20 @@ def update_upload_script():
         'fileSelection.classList.toggle("has-selection",!!selected);'
         'fileGuidance.hidden=!!selected;'
         'if(selected){out.className="portal-status";out.textContent="";}};'
-        'cancelButton.onclick=function(){updateCancelled=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";if(pollTimer)clearTimeout(pollTimer);'
+        'cancelButton.onclick=function(){var remote=uploadInProgress||cancelButton.dataset.remoteCancel==="1";updateCancelled=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";if(pollTimer)clearTimeout(pollTimer);'
         'if(activeRequest)activeRequest.abort();discardSessions();uploadForm.reset();document.getElementById("update-file-name").textContent='
         '"No file selected";cancelButton.disabled=true;cancelButton.hidden=true;primaryButton.hidden=false;primaryButton.disabled=true;'
         'primaryButton.textContent="Start update";fileSelection.classList.remove("busy");'
         'fileSelection.classList.remove("has-selection");'
         'fileGuidance.hidden=false;'
         'renderWorkflow("");document.getElementById("update-result").className="portal-status";'
-        'document.getElementById("update-result").textContent="";};'
+        'document.getElementById("update-result").textContent="";if(remote){var result=document.getElementById("update-result");'
+        'result.textContent="Requesting safe cancellation…";fetch("/discard-update",{method:"POST",credentials:"same-origin",'
+        'headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},'
+        'body:new URLSearchParams({csrf:csrfToken}).toString()}).then(function(response){return response.json().then(function(value){'
+        'if(!response.ok||!value.ok)throw new Error(value.error||value.message||"Cancellation not confirmed");return value;});})'
+        '.then(function(value){result.className="portal-status";result.textContent=value.message;cancelButton.dataset.remoteCancel="0";})'
+        '.catch(function(error){result.className="portal-status error";result.textContent=error.message;});}};'
         'window.addEventListener("beforeunload",function(e){if(!uploadInProgress)return;e.preventDefault();e.returnValue="";});'
         'uploadForm.onsubmit=function(e){e.preventDefault();uploadForm.dataset.portalDirty="0";updateCancelled=false;uploadInProgress=true;primaryButton.disabled=true;'
         'primaryButton.hidden=false;primaryButton.textContent="Staging…";cancelButton.disabled=false;cancelButton.hidden=false;fileSelection.classList.add("busy");var input='
@@ -1262,7 +1273,8 @@ def update_upload_script():
         'function terminalFailure(text){finished=true;uploadInProgress=false;if(pollTimer)clearTimeout(pollTimer);'
         'discardSessions();failure(text);'
         'input.value="";document.getElementById("update-file-name").textContent="No file selected";'
-        'fileGuidance.hidden=false;fileSelection.classList.remove("busy");cancelButton.disabled=true;cancelButton.hidden=true;'
+        'fileGuidance.hidden=false;fileSelection.classList.remove("busy");var existing=/another update.*(progress|install)/i.test(text);'
+        'cancelButton.disabled=!existing;cancelButton.hidden=!existing;cancelButton.dataset.remoteCancel=existing?"1":"0";'
         'fileSelection.classList.remove("has-selection");'
         'primaryButton.hidden=false;primaryButton.disabled=true;primaryButton.textContent="Start update";}'
         'if(!firmware&&!application&&!universal){terminalFailure("Choose a .iotapp, .iotcore or .iotuni update bundle.");'
@@ -1276,7 +1288,7 @@ def update_upload_script():
         'html,"text/html"),fresh=parsed.querySelector("main .card"),current=uploadForm.closest(".card");if(!fresh||!current)'
         'throw new Error("Staged update view is unavailable");history.replaceState(null,"","/updates?source=staged");'
         'current.replaceWith(fresh);var restart=fresh.querySelector("#update-primary");if(restart)restart.focus();'
-        '}).catch(function(){out.className="portal-status success";out.textContent="Update staged. You can leave this page and restart later.";});}'
+        '}).catch(function(){out.className="portal-status warning";out.textContent="Update staged, but install controls could not be loaded. Return to updates to continue.";});}'
         'function schedulePoll(){if(!finished&&!updateCancelled)pollTimer=setTimeout(poll,1000);}'
         'function startPolling(){if(polling)return;polling=true;poll();}function poll(){fetch("/update-progress?id="+encodeURIComponent(id),'
         '{cache:"no-store",credentials:"same-origin"}).then(function(r){if(r.status===401){location.replace('
@@ -1292,8 +1304,10 @@ def update_upload_script():
         'setStage("verify_application",(s.percent||0)/100);}'
         'else if(s.phase==="complete"){finished=true;uploadInProgress=false;uploadForm.dataset.portalDirty="0";'
         'showStaged();return;}else if(s.phase==="failed"){'
-        'terminalFailure(s.message||"Verification failed");return;}'
-        'schedulePoll();}).catch(function(){schedulePoll();});}'
+        'terminalFailure(s.message||"Verification failed");return;}else if(s.phase==="cancelled"){'
+        'finished=true;uploadInProgress=false;out.className="portal-status warning";out.textContent=s.message||"Update cancelled";return;}'
+        'schedulePoll();}).catch(function(){out.className="portal-status warning";'
+        'out.textContent="Update status connection interrupted. Retrying; completed milestones are retained.";schedulePoll();});}'
         'function jsonPost(url,value){return fetch(url,{method:"POST",credentials:"same-origin",headers:{'
         '"Content-Type":"application/json","X-CSRF-Token":csrfToken},body:JSON.stringify(value)}).then(function(r){'
         'if(r.status===401){location.replace("/login?reason=expired");throw new Error("Session expired");}if(!r.ok)return r.text().then(function(t){'
@@ -1567,7 +1581,7 @@ def _upgrade_method_workspace(status):
     )
 
 
-def _manual_upgrade_workspace(token):
+def _manual_upgrade_workspace(token, active=False):
     selection = (
         '<form id="update-upload-form" class="upgrade-file-selection" data-csrf="' +
         html_escape(token) + '"><div id="update-file-selection" class="upgrade-file-selection-fields">'
@@ -1591,7 +1605,8 @@ def _manual_upgrade_workspace(token):
         ) + '</aside><div class="upgrade-operation">'
         '<p id="update-result" class="portal-status" role="status" aria-live="polite"></p>'
         '<div class="actions manual-upgrade-buttons">'
-        '<button id="update-cancel" class="danger" type="button" hidden>Discard</button>'
+        '<button id="update-cancel" class="danger" type="button"' +
+        (' data-remote-cancel="1">Cancel update</button>' if active else ' hidden>Discard</button>') +
         '<button id="update-primary" form="update-upload-form" type="submit" disabled>Start update</button></div>'
         '</div></div></section>'
     )
@@ -1714,10 +1729,12 @@ def automatic_upgrade_download_script():
         'location.replace("/login?reason=expired");throw new Error("Session expired");}if(!r.ok)throw new Error('
         '"Unable to read update status");return r.json();}).then(function(s){var message=s.message||s.phase||'
         '"Working…",percent=typeof s.percent==="number"?s.percent:0;stage(message,percent);if(s.phase==="failed")'
-        '{failed(message);return;}if(s.phase==="complete"){steps.forEach(function(x,k){setStep(x,k<steps.length-1?'
+        '{failed(message);return;}if(s.phase==="cancelled"){status("warning",message||"Update cancelled");if(button)button.disabled=false;return;}'
+        'if(s.phase==="complete"){steps.forEach(function(x,k){setStep(x,k<steps.length-1?'
         '"complete":(k===steps.length-1?"active":""),k<steps.length-1?100:0);});portalRefreshTarget('
         '"#upgrade-page-content","/updates?source=staged");return;}setTimeout(function(){poll(id);},600);}).catch('
-        'function(error){if(error.message!=="Session expired")setTimeout(function(){poll(id);},1200);});}'
+        'function(error){if(error.message!=="Session expired"){status("warning","Update status connection interrupted. Retrying; completed milestones are retained.");'
+        'setTimeout(function(){poll(id);},1200);}});}'
         'form.onsubmit=function(event){event.preventDefault();if(!form.reportValidity())return;steps=Array.from('
         'document.querySelectorAll("#automatic-stage-list li"));position=1;if(button)button.disabled=true;'
         'status("","Starting update…");fetch(form.action,{method:"POST",credentials:"same-origin",headers:{'
@@ -1738,7 +1755,8 @@ def upgrade_check_script():
         'checkForm.onsubmit=function(e){e.preventDefault();var button=checkForm.querySelector("button"),'
         'result=document.getElementById("upgrade-check-result");button.disabled=true;'
         'result.className="badge";result.textContent="Checking…";function failed(message){result.className="badge warn";'
-        'result.textContent="Check failed";result.title=message;'
+        'result.textContent="Check failed";result.title=message;var out=document.getElementById("automatic-update-status");'
+        'if(out)portalStatus(out,"error",message);'
         'button.disabled=false;}function checked(s){result.textContent=s.message||"Check complete";'
         'if(s.phase==="failed"){failed(s.message||"Update check failed");return;}'
         'if(s.phase==="complete"){portalRefreshTarget("#upgrade-page-content","/updates?source=automatic",'
@@ -1817,14 +1835,14 @@ def _interrupted_update_workspace(token, status):
         _upgrade_step_list(
             ('Update method selected', 'Release selected', 'Verification interrupted'),
             active=2, completed=2, step_controls={1: selected_release}
-        ) + '</aside><div class="upgrade-operation"><p class="muted">'
+        ) + '</aside><div class="upgrade-operation"><p class="portal-status warning" role="status">'
         'A rejected or interrupted universal update left recoverable staging data on this device.'
-        '</p><div class="actions manual-upgrade-buttons"><form data-portal-async '
+        '</p></div></div><div class="actions manual-upgrade-buttons"><form data-portal-async '
         'data-portal-refresh-target="#upgrade-page-content" data-portal-refresh-url="/updates" '
         'data-portal-status="Discarding incomplete update…" action="/discard-update" method="post">'
         '<input type="hidden" name="csrf" value="' + html_escape(token) + '">'
         '<button class="danger" type="submit" data-busy-label="Discarding…">Discard</button>'
-        '</form></div></div></div></section>'
+        '</form></div></section>'
     )
 
 
@@ -1866,7 +1884,7 @@ def render_update_install_page(token, status=None, message='', error=False, sour
         source = 'staged'
         workspace = _staged_update_workspace(token, status)
     elif source == 'manual':
-        workspace = _manual_upgrade_workspace(token)
+        workspace = _manual_upgrade_workspace(token, status.get('update_staging_active', False))
         script = update_upload_script()
     elif source == 'automatic':
         workspace = _automatic_upgrade_workspace(token, status)
@@ -1875,6 +1893,14 @@ def render_update_install_page(token, status=None, message='', error=False, sour
     else:
         workspace = _upgrade_method_workspace(status)
         source = ''
+    if status.get('update_staging_active') and source == '':
+        workspace += ('<section class="card"><p class="portal-status" role="status">'
+                      'An update is currently being staged. You can cancel before installation begins.</p>'
+                      '<div class="actions"><form data-portal-async '
+                      'data-portal-refresh-target="#upgrade-page-content" data-portal-refresh-url="/updates" '
+                      'action="/discard-update" method="post"><input type="hidden" name="csrf" value="' +
+                      html_escape(token) + '"><button class="danger" type="submit">Cancel update</button>'
+                      '</form></div></section>')
     workspace = workspace.replace(
         '</h2></div>', '</h2></div>' + _upgrade_method_choices(status, source), 1
     )
@@ -1950,9 +1976,9 @@ def render_upgrade_task_page(token, task_id, title, status=None, return_url='/up
         'function poll(){fetch("/task-status?id="+encodeURIComponent(i),{cache:"no-store",credentials:'
         '"same-origin"}).then(function(x){if(x.status===401){location.replace("/login");return null;}'
         'if(!x.ok)throw new Error("Task status unavailable");return x.json();}).then(function(s){if(!s)return;var message=s.message||s.phase||"Working…",'
-        'percent=typeof s.percent==="number"?s.percent:0,done=s.phase==="complete"||s.phase==="failed";'
+        'percent=typeof s.percent==="number"?s.percent:0,done=s.phase==="complete"||s.phase==="failed"||s.phase==="cancelled";'
         'stage(message,percent);b.className="portal-status";b.textContent=message;if(done){if(s.phase==="failed"){b.className="portal-status error";b.textContent='
-        'message;r.hidden=false;}if(s.phase==="complete"){'
+        'message;r.hidden=false;}if(s.phase==="cancelled"){b.className="portal-status warning";r.hidden=false;}if(s.phase==="complete"){'
         'steps.forEach(function(x,k){setStep(x,k<steps.length-1?"complete":(k===steps.length-1?'
         '"active":""),k<steps.length-1?100:0);});showReady();}return;}setTimeout(poll,600);}).catch(function(){'
         'b.className="portal-status warning";b.textContent="Device connection interrupted. Retrying; completed milestones are retained.";'

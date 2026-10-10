@@ -547,7 +547,7 @@ class AppUpdateTests(unittest.TestCase):
             'portal_task_registry.py',
             'resumable_upload.py', 'support_bundle.py',
             'message_broker.py', 'runtime_health.py', 'remote_logging.py',
-            'timezone_rules.py', 'update_orchestrator.py',
+            'timezone_rules.py', 'update_orchestrator.py', 'update_cancellation.py',
             'update_telemetry.py', 'release_selection.py',
             'universal_upload.py',
             'device_modules/__init__.py', 'device_modules/loader.py',

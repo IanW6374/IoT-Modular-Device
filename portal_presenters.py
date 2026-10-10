@@ -3,6 +3,16 @@
 from portal_http import html_escape
 
 
+def render_notice(message='', error=False, severity=''):
+    """One escaped, accessible notice contract for every portal workspace."""
+    if not message:
+        return ''
+    tone = 'error' if error else (severity if severity in ('warning', 'info', 'success') else 'notice')
+    role = 'alert' if tone == 'error' else 'status'
+    return '<p class="' + tone + '" role="' + role + '" aria-live="' + (
+        'assertive' if error else 'polite') + '">' + html_escape(message) + '</p>'
+
+
 API_SCOPE_CHOICES = (
     ('read', 'Read device state'),
     ('write', 'Run device commands'),

@@ -210,6 +210,28 @@ paths:
       responses:
         '200': {description: Fleet state, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v3/fleet/update-cancel:
+    get:
+      summary: Read staging cancellation acknowledgement (fleet:read)
+      responses:
+        '200': {description: Idle, cancelling, or cancelled; does not modify update state}
+    post:
+      summary: Cancel update staging cooperatively (fleet:write)
+      description: Requires an Idempotency-Key. Supply release_sequence and release_type to prevent cancelling a different release. Revokes pending policy commands, defers artifact cleanup until the installer stops, and rejects cancellation after activation or trial begins. An accepted request is not proof of completed cancellation; read acknowledgement until cancelled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                release_sequence: {type: integer, minimum: 1}
+                release_type: {type: string, enum: [application, firmware, universal]}
+      responses:
+        '200': {description: Cancelling or cancelled, with durable operation result}
+        '400': {description: Different release or installation already started}
+        '403': {description: Missing fleet write scope}
+        '503': {description: Outcome uncertain; reconcile rather than replaying the mutation}
   /api/v3/fleet/policy:
     post:
       parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]

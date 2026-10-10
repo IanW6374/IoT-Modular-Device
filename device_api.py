@@ -86,7 +86,8 @@ class DeviceAPI:
                  certificate_applier=None, network_confirmer=None,
                  configuration_restarter=None, configuration_backup=None,
                  configuration_restore_preview=None,
-                 configuration_restore_apply=None, operations=None):
+                 configuration_restore_apply=None, operations=None,
+                 update_cancellation=None):
         self.broker = broker
         self.health = health
         self.registry = registry
@@ -108,6 +109,7 @@ class DeviceAPI:
         self.configuration_restore_preview = configuration_restore_preview
         self.configuration_restore_apply = configuration_restore_apply
         self.operations = operations
+        self.update_cancellation = update_cancellation
         self._operation_id = ''
         if operations and hasattr(broker, 'add_listener'):
             previous = getattr(operations, '_broker_listener', None)
@@ -269,6 +271,7 @@ class DeviceAPI:
                     'qualification': bool(self.qualification_getter),
                     'module_operations': True,
                     'persistent_idempotency': bool(self.operations),
+                    'update_cancellation': bool(self.update_cancellation),
                 },
                 'next_request_sequence': self.operations.next_sequence(client['fingerprint']) if self.operations else None,
                 'limits': {
@@ -433,6 +436,13 @@ class DeviceAPI:
             if not self.fleet:
                 raise RuntimeError('fleet management is unavailable')
             return 200, self.fleet.snapshot()
+        if route == '/api/v3/fleet/update-cancel' and method in ('GET', 'POST'):
+            if not self.update_cancellation:
+                raise RuntimeError('update cancellation is unavailable')
+            if method == 'GET':
+                return 200, self.update_cancellation.status()
+            value = json.loads(body.decode() if isinstance(body, bytes) else body)
+            return 200, self.update_cancellation.cancel(value)
         if method == 'POST' and route == '/api/v3/fleet/policy':
             if not self.fleet:
                 raise RuntimeError('fleet management is unavailable')

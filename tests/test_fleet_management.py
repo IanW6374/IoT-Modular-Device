@@ -77,6 +77,20 @@ class FleetManagementTests(unittest.TestCase):
         service.complete_command('command-1', 'complete')
         self.assertEqual(service.pending_commands(), [])
 
+    def test_cancelled_policy_is_persistently_revoked_without_altering_signature(self):
+        service = self.service()
+        policy = self.policy()
+        service.apply_policy(policy)
+        service.cancel_updates(123, 'universal')
+        self.assertEqual(service.state['policy'], policy)
+        self.assertEqual(service.pending_commands(), [])
+        self.assertEqual(self.service().pending_commands(), [])
+        service.complete_command('command-1', 'complete')  # Late coroutine cannot revive it.
+        self.assertEqual(service.pending_commands(), [])
+        service.apply_policy(self.policy(2))
+        self.assertNotIn('update_cancelled', service.state)
+        self.assertTrue(service.pending_commands())
+
     def test_format_two_command_targets_an_update_type(self):
         policy = self.policy()
         policy['format_version'] = 2

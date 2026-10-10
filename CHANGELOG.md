@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Add cooperative staging cancellation from the device portal and durable,
+  release-scoped API cancellation for Management. Revoke pending activation
+  commands; defer cleanup while a writer is active; refuse cancellation after
+  activation begins. Record intentional cancellation separately from failure.
+- Put incomplete-update warnings in a full-width notice above action controls.
+- Standardize warning/error accessibility and action-row placement. Reject
+  explicit failed action payloads even on HTTP 200; retain unsaved form values.
+- Surface interrupted overview, device/audit log, diagnostics and update-status
+  refreshes instead of silently leaving a green Live badge on stale data.
+- Show update-check failures inline and warn when staged install controls cannot
+  be loaded, without marking those failures as success.
+- Expose task/restart status read failures and rejected log-level changes;
+  keep accepted background tasks informational until completion is confirmed.
+
 ## 3.0.0-alpha.111 - 2026-10-09
 
 - Use one bounded, responsive certificate-panel width across enrollment,
