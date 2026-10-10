@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.0.0-alpha.112 - 2026-10-10
 
 - Add cooperative staging cancellation from the device portal and durable,
   release-scoped API cancellation for Management. Revoke pending activation
@@ -15,6 +15,7 @@
   be loaded, without marking those failures as success.
 - Expose task/restart status read failures and rejected log-level changes;
   keep accepted background tasks informational until completion is confirmed.
+- Advance runtime generation to 208 and signed release sequence to 2817.
 
 ## 3.0.0-alpha.111 - 2026-10-09
 
