@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.0.0-alpha.113 - 2026-10-10
+
+- Reclaim only older, CRC-verified transaction snapshots in the bounded native
+  qualification/API-operation namespaces. Preserve the latest generation,
+  credentials, network trials and API anti-replay watermarks. Probe existing
+  namespaces read-only so reclamation cannot create new ones.
+- Verify a newly committed snapshot before retiring its predecessor; retain
+  the previous generation if the write fails. Reject invalid generation/parity
+  records and leave corrupt unrelated namespaces untouched.
+- This reduces duplicate occupancy in the shared 24 KiB encrypted NVS store;
+  it does not expand the partition or erase existing device configuration.
+- Advance runtime generation to 209 and signed release sequence to 2818.
+- Document a manual signed-core-first bootstrap for devices whose full API
+  operation journal prevents a Management update from starting.
+
 ## 3.0.0-alpha.112 - 2026-10-10
 
 - Add cooperative staging cancellation from the device portal and durable,

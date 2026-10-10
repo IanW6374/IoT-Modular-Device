@@ -27,6 +27,7 @@
 #include "freertos/task.h"
 #include "nvs.h"
 #include "sdkconfig.h"
+#include "iotmd_nvs_retention.h"
 
 #define IOTMD_PLATFORM_V3_ABI_VERSION (7)
 #define IOTMD_V3_STORAGE_HANDLES (4)
@@ -1074,6 +1075,12 @@ static bool iotmd_v3_storage_read_slot(nvs_handle_t nvs, const char *key,
         return false;
     }
     *generation = iotmd_v3_u32_read(buffer + 4);
+    if (*generation == 0 ||
+            (strcmp(key, "snapshot_a") == 0 && (*generation & 1)) ||
+            (strcmp(key, "snapshot_b") == 0 && !(*generation & 1))) {
+        m_del(uint8_t, buffer, length);
+        return false;
+    }
     *payload = mp_obj_new_bytes(
         buffer + IOTMD_V3_STORAGE_HEADER_BYTES, payload_length
     );
@@ -1243,6 +1250,10 @@ static mp_obj_t iotmd_platform_v3_storage_commit(size_t n_args,
             MP_ERROR_TEXT("storage generation exhausted")
         );
     }
+    // Old copies in other namespaces can occupy almost the entire 24 KiB NVS
+    // partition even when this writer's inactive slot has already been erased.
+    // Reclaim only obsolete verified copies, never the selected generations.
+    iotmd_nvs_reclaim_obsolete_transactions();
     uint32_t next = current + 1;
     size_t length = IOTMD_V3_STORAGE_HEADER_BYTES + source.len;
     uint8_t *buffer = m_new(uint8_t, length);
@@ -1272,6 +1283,16 @@ static mp_obj_t iotmd_platform_v3_storage_commit(size_t n_args,
     if (error != ESP_OK) {
         mp_raise_OSError(error);
     }
+    uint32_t verified = 0;
+    error = iotmd_nvs_snapshot_generation(handle->nvs, key, &verified);
+    if (error != ESP_OK || verified != next) {
+        mp_raise_OSError(MP_EIO);
+    }
+    // Keep two copies only during replacement. Once the new generation has
+    // committed and read back correctly, its predecessor is no longer needed
+    // for power-loss recovery. A cleanup failure must not undo acknowledgement
+    // of a committed generation; the next writer can attempt reclamation.
+    (void)iotmd_nvs_reclaim_snapshot(handle->nvs);
     return mp_obj_new_int_from_uint(next);
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(
