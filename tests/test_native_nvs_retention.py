@@ -121,7 +121,9 @@ static uint32_t latest(int n) {
     uint32_t a=0,b=0;
     int ea=iotmd_nvs_snapshot_generation(n,"snapshot_a",&a);
     int eb=iotmd_nvs_snapshot_generation(n,"snapshot_b",&b);
-    if(ea!=ESP_OK)a=0;if(eb!=ESP_OK)b=0;return a>b?a:b;
+    if (ea != ESP_OK) { a = 0; }
+    if (eb != ESP_OK) { b = 0; }
+    return a > b ? a : b;
 }
 
 // Minimal MicroPython ABI stubs; compile the unmodified native commit body.
