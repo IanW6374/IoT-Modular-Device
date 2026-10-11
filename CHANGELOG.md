@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.0-alpha.115 - 2026-10-11
+
+- Signed universal test release for exercising Management's scalable action
+  progress view on real devices. No functional firmware changes from Alpha 114;
+  this runs the normal core/application write, verification and restart workflow.
+- Advance runtime generation to 211 and signed release sequence to 2820 so the
+  test is a genuine newer release, not a same-version reinstall or simulation.
+- Preserve configuration and hardware security. Factory images, passwords and
+  signing keys remain private; no devices are upgraded automatically.
+
 ## 3.0.0-alpha.114 - 2026-10-10
 
 - Make the shared portal task-status poll single-flight. Schedule the next read
