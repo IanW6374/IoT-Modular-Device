@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.0-alpha.117 - 2026-10-11
+
+- Publish a signed, version-only universal test release for Management 3.2.7's
+  bounded handlers and live-progress polling. No functional changes from Alpha
+  116; exercise normal core/application writes, verification and restart.
+- Advance runtime generation to 213 and signed release sequence to 2822 so
+  devices already running Alpha 116 can accept a genuinely newer release.
+- Preserve configuration and existing hardware security. Factory images,
+  setup passwords and signing keys remain private. No device is upgraded
+  automatically by creating or publishing this release.
+
 ## 3.0.0-alpha.116 - 2026-10-11
 
 - Restore full-width, responsive certificate grids across certificate pages.
