@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.0-alpha.116 - 2026-10-11
+
+- Restore full-width, responsive certificate grids across certificate pages.
+  Keep equal-width cards and aligned actions; increase the column count with
+  available browser width and collapse to one column on narrow screens.
+- Advance runtime generation to 212 and signed release sequence to 2821.
+  Publish a matched signed core/application universal update for testing with
+  Management 3.2.5; retain existing configuration and hardware security.
+
 ## 3.0.0-alpha.115 - 2026-10-11
 
 - Signed universal test release for exercising Management's scalable action

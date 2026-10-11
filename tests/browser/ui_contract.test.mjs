@@ -284,16 +284,16 @@ test('staged application, core and universal updates share a primary install but
   }
 });
 
-test('certificate pages share a bounded responsive width and single-column certificate cards',()=>{
+test('certificate pages share full available width and a responsive equal-width card grid',()=>{
   for(const route of ['/certificates','/certificate-authorities','/api-client-trust','/device-certificates']){
     const html=python(`import web_portal; print(web_portal.render_certificate_route(${JSON.stringify(route)},'csrf',certificates={}))`);
     const dom=new JSDOM(html),doc=dom.window.document;
     const stylesheet=doc.createElement('style');stylesheet.textContent=python('import web_portal_ui; print(web_portal_ui.PORTAL_CSS)');doc.head.append(stylesheet);
     const workspace=doc.getElementById('certificate-workspace'),style=dom.window.getComputedStyle(workspace);
-    assert.equal(style.width,'100%');assert.equal(style.maxWidth,'720px');
+    assert.equal(style.width,'100%');assert.notEqual(style.maxWidth,'720px');
     assert.equal(workspace.querySelector('.module-grid'),null);
     for(const grid of workspace.querySelectorAll('.certificate-grid')){
-      assert.equal(dom.window.getComputedStyle(grid).gridTemplateColumns,'minmax(0,1fr)');
+      assert.equal(dom.window.getComputedStyle(grid).gridTemplateColumns,'repeat(auto-fill,minmax(min(100%,22rem),1fr))');
     }
     dom.window.close();
   }
