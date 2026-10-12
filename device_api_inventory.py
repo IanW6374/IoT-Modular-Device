@@ -37,6 +37,15 @@ class DeviceInventory:
             ),
         }
 
+    def update_status(self):
+        """Hot-path projection: no catalog, credentials or qualification reads."""
+        return {
+            'device_id': self._value('device_id', ''),
+            'release_sequence': self._value('release_sequence', 0),
+            'firmware_release_sequence': self._value('firmware_release_sequence', 0),
+            'update_progress': self._value('update_progress', {}),
+        }
+
     def qualification(self):
         value = self._value('qualification', {}) or {}
         evidence = value.get('evidence') or {}

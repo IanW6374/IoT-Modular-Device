@@ -124,11 +124,22 @@ handshake is substantially more expensive than a JSON request on ESP32-S3.
 | GET | `/api/v3/operations` | `read` | This client's bounded retained operations |
 | GET | `/api/v3/operations/{id}/result` | `read` | This client's last durable operation result |
 | GET | `/api/v3/fleet` | `fleet:read` | Fleet enrollment and policy state |
+| GET | `/api/v3/fleet/update-status` | `fleet:read` | Small live update projection, boot identity, command evidence and cancellation acknowledgement |
 | POST | `/api/v3/fleet/policy` | `fleet:write` | Apply a monotonic signed policy |
 | POST | `/api/v3/fleet/commands/{id}/result` | `fleet:write` | Complete a fleet command |
 | GET | `/api/v3/qualification` | `read` | Full on-device qualification status and evidence |
 | POST | `/api/v3/qualification/events` | `qualification:write` | Append one observed controlled-test outcome |
 | POST | `/api/v3/qualification/scenarios/{name}` | `qualification:execute` | Start an allowlisted disruptive Alpha-only test |
+
+The `live_update_status` discovery capability advertises the dedicated live
+endpoint. Its response contains `boot_id`, `device` (immutable identity, installed
+application/core sequences and `update_progress`), a bounded `fleet` projection
+(at most sixteen command identities, pending commands, failure/window state and
+last result), and `cancellation`. It does not build the module catalog, read
+credentials, hash verification keys, or collect qualification/runtime inventory.
+The endpoint remains authenticated and read-only. It does not by itself prove
+installation healthy: a manager must reconcile its dispatched command/release
+identity, reject active trials, then obtain fresh `/api/v3/health` confirmation.
 
 Configuration profiles may contain standard operational settings such as time,
 logging, Home Assistant discovery, MQTT routing, Wi-Fi and remote syslog.

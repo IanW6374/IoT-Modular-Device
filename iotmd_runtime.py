@@ -1746,6 +1746,7 @@ async def start_module_api():
         configuration_restore_apply=apply_secure_configuration_import,
         operations=open_native_journal(logOutput),
         update_cancellation=update_cancellation,
+        update_status_getter=device_inventory.update_status,
     )
     try:
         settings = {

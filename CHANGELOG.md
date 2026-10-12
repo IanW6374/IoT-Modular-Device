@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.0.0-alpha.118 - 2026-10-12
+
+- Add the authenticated, read-only `/api/v3/fleet/update-status` projection for
+  Management 3.2.9. Return boot identity, installed component sequences, update
+  telemetry, bounded policy/command evidence and cancellation acknowledgement
+  without collecting the module catalog, credentials or qualification inventory.
+- Advertise `live_update_status` in API v3 discovery. Retain mTLS, live registry
+  authorization, command/release evidence and active-trial safeguards.
+- Advance runtime generation to 214 and signed release sequence to 2823.
+  Publish matched signed application/core/universal bundles for real-device
+  testing. Offline tests are not a qualification of physical flash/TLS timing.
+- Preserve existing configuration and security. Factory images, setup passwords
+  and signing keys remain private; publication does not upgrade any device.
+
 ## 3.0.0-alpha.117 - 2026-10-11
 
 - Publish a signed, version-only universal test release for Management 3.2.7's

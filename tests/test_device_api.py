@@ -61,6 +61,34 @@ class FakeBroker:
 
 
 class DeviceAPITests(unittest.TestCase):
+    def test_live_update_status_is_small_scoped_and_does_not_collect_inventory(self):
+        forbidden = mock.Mock(side_effect=AssertionError('Broad inventory must not run'))
+        inventory = DeviceInventory({'device_id': 'device-1', 'release_sequence': 2822,
+            'firmware_release_sequence': 2822, 'update_progress': {'phase': 'install'},
+            'drivers': forbidden, 'resources': forbidden, 'qualification': forbidden,
+            'device_description': forbidden, 'runtime': forbidden})
+        self.api.device_getter = forbidden
+        self.api.broker.catalog = forbidden
+        self.api.update_status_getter = inventory.update_status
+        self.api.fleet = mock.Mock(progress_snapshot=mock.Mock(return_value={'policy_sequence': 12}))
+        self.api.update_cancellation = mock.Mock(status=mock.Mock(return_value={'status': 'idle'}))
+        self.registry.enrol(self.cert, 'reader', ('read',))
+        request = APIRequest('GET', '/api/v3/fleet/update-status', b'', self.cert)
+        self.assertEqual(self.api.handle(request).status, 403)
+        self.registry.enrol(self.cert, 'manager', ('read', 'fleet:read'))
+        reply = self.api.handle(request)
+        self.assertEqual(reply.status, 200)
+        self.assertEqual(reply.payload['boot_id'], self.operations.boot_id)
+        self.assertEqual(reply.payload['device']['release_sequence'], 2822)
+        self.assertEqual(reply.payload['cancellation']['status'], 'idle')
+        self.assertLess(len(json.dumps(reply.payload)), 1024)
+        forbidden.assert_not_called()
+        self.api.update_cancellation.cancel.assert_not_called()
+        discovery = self.api.handle(APIRequest('GET', '/api/v3', b'', self.cert))
+        self.assertTrue(discovery.payload['capabilities']['live_update_status'])
+        self.registry.revoke(self.registry.identify(self.cert)['fingerprint'])
+        self.assertEqual(self.api.handle(request).status, 403)
+
     def test_inventory_bounds_release_qualification_projection(self):
         inventory = DeviceInventory({
             'qualification': {

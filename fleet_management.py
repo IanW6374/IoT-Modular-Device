@@ -1,4 +1,4 @@
-"""Signed fleet policy and rollout state for the IoT-MD v2 device API."""
+"""Signed fleet policy and rollout state for the IoT-MD v3 device API."""
 
 try:
     import ujson as json
@@ -297,3 +297,24 @@ class FleetService:
             'pending_commands': self.pending_commands(),
         })
         return value
+
+    def progress_snapshot(self):
+        """Bounded reconciliation evidence, without hashing keys or copying profiles."""
+        policy = self.state.get('policy') or {}
+        commands = [{key: item.get(key) for key in (
+            'id', 'action', 'release_sequence', 'release_type')}
+            for item in policy.get('commands', ())[:16]]
+        completed = set(self.state.get('completed_commands', ()))
+        stopped = (self.state.get('rollout_paused') or
+                   self.state.get('command_chain_failed') or
+                   self.state.get('update_cancelled'))
+        return {
+            'policy_sequence': self.state.get('policy_sequence', 0),
+            'policy': {'commands': commands},
+            'pending_commands': [] if stopped else [
+                dict(item) for item in commands if item['id'] not in completed],
+            'rollout_paused': bool(self.state.get('rollout_paused')),
+            'command_chain_failed': bool(self.state.get('command_chain_failed')),
+            'last_result': dict(self.state.get('last_result') or {}),
+            'within_maintenance_window': self.within_maintenance_window(),
+        }

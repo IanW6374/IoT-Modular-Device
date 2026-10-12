@@ -9,6 +9,23 @@ import update_security
 
 
 class FleetManagementTests(unittest.TestCase):
+    def test_progress_snapshot_does_not_hash_keys_or_copy_signed_profile_material(self):
+        service = self.service()
+        service.state.update(policy={'commands': [
+            {'id': 'one', 'action': 'download-update', 'release_sequence': 2822,
+             'release_type': 'universal', 'secret': 'not-for-telemetry'},
+            {'id': 'two', 'action': 'activate-update', 'release_sequence': 2822}],
+            'signature': 'large', 'profile': {'password': 'secret'}}, completed_commands=['one'])
+        with mock.patch.object(update_security, 'verification_key_fingerprint', side_effect=AssertionError('Key I/O')):
+            value = service.progress_snapshot()
+        self.assertEqual([item['id'] for item in value['pending_commands']], ['two'])
+        self.assertNotIn('secret', value['policy']['commands'][0])
+        self.assertNotIn('signature', value['policy'])
+        value['policy']['commands'][0]['id'] = 'changed'
+        self.assertEqual(service.state['policy']['commands'][0]['id'], 'one')
+        service.state['command_chain_failed'] = True
+        self.assertEqual(service.progress_snapshot()['pending_commands'], [])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.private_key = bytes(range(1, 33))

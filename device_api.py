@@ -87,7 +87,7 @@ class DeviceAPI:
                  configuration_restarter=None, configuration_backup=None,
                  configuration_restore_preview=None,
                  configuration_restore_apply=None, operations=None,
-                 update_cancellation=None):
+                 update_cancellation=None, update_status_getter=None):
         self.broker = broker
         self.health = health
         self.registry = registry
@@ -110,6 +110,7 @@ class DeviceAPI:
         self.configuration_restore_apply = configuration_restore_apply
         self.operations = operations
         self.update_cancellation = update_cancellation
+        self.update_status_getter = update_status_getter
         self._operation_id = ''
         if operations and hasattr(broker, 'add_listener'):
             previous = getattr(operations, '_broker_listener', None)
@@ -272,6 +273,7 @@ class DeviceAPI:
                     'module_operations': True,
                     'persistent_idempotency': bool(self.operations),
                     'update_cancellation': bool(self.update_cancellation),
+                    'live_update_status': bool(self.update_status_getter and self.fleet),
                 },
                 'next_request_sequence': self.operations.next_sequence(client['fingerprint']) if self.operations else None,
                 'limits': {
@@ -413,6 +415,16 @@ class DeviceAPI:
             )
             return 202, {'accepted': True, 'scenario': result}
 
+        if method == 'GET' and route == '/api/v3/fleet/update-status':
+            if not self.update_status_getter or not self.fleet:
+                return 503, {'error': 'live update status is unavailable'}
+            return 200, {
+                'api_version': API_VERSION,
+                'boot_id': self.operations.boot_id if self.operations else '',
+                'device': self.update_status_getter(),
+                'fleet': self.fleet.progress_snapshot(),
+                'cancellation': self.update_cancellation.status() if self.update_cancellation else None,
+            }
         if method == 'GET' and route == '/api/v3/device/inventory':
             return 200, {
                 'api_version': API_VERSION,
