@@ -6,6 +6,7 @@
 #include "py/runtime.h"
 #include "esp_attr.h"
 #include "esp_heap_caps.h"
+#include "nvs.h"
 #include "iotmd_transport_diagnostics.h"
 #include "iotmd_heap_diagnostics.h"
 
@@ -83,6 +84,21 @@ static mp_obj_t iotmd_platform_transport_resources(void) {
     #undef TRANSPORT_FIELD
     mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_tls_last_error),
         mp_obj_new_int(state.tls_last_error));
+    // Read-only partition allocation evidence. Never export namespace values,
+    // record payloads, credentials or replay watermarks.
+    nvs_stats_t storage;
+    esp_err_t error = nvs_get_stats(NULL, &storage);
+    if (error == ESP_OK) {
+        #define NVS_FIELD(name) mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_nvs_##name), mp_obj_new_int_from_uint(storage.name))
+        NVS_FIELD(used_entries);
+        NVS_FIELD(free_entries);
+        NVS_FIELD(available_entries);
+        NVS_FIELD(total_entries);
+        NVS_FIELD(namespace_count);
+        #undef NVS_FIELD
+    } else {
+        mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_nvs_stats_error), mp_obj_new_int(error));
+    }
     return result;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(

@@ -159,9 +159,30 @@ class DeviceAPI:
                     raise OperationError('durable_operations_unavailable',
                         'Durable operation storage is unavailable; writes are disabled', 503)
                 body = request.body.encode() if isinstance(request.body, str) else bytes(request.body)
-                record, replay = self.operations.reserve(client['fingerprint'],
-                    request.headers.get('idempotency-key'), request.method,
-                    request.path, body)
+                try:
+                    record, replay = self.operations.reserve(client['fingerprint'],
+                        request.headers.get('idempotency-key'), request.method,
+                        request.path, body)
+                except OperationError as exc:
+                    if exc.code not in ('journal_full', 'operation_limit'):
+                        raise
+                    self._record_failure(request, exc)
+                    payload = error_payload(exc.status, exc)
+                    payload['error'].update(code=exc.code, phase='reservation', dispatched=False)
+                    payload['error']['storage'] = getattr(tls_listener, 'storage_snapshot', lambda: {})()
+                    return APIResponse(exc.status, payload)
+                except (RuntimeError, OSError) as exc:
+                    # Reservation may have partially committed its watermark,
+                    # but dispatch has not run. Do not promise a reusable key.
+                    self._record_failure(request, exc)
+                    message = ('encrypted transactional storage is full; request was not dispatched'
+                        if str(exc) == 'encrypted transactional storage is full' else
+                        'Operation storage unavailable; request was not dispatched')
+                    payload = error_payload(503, message)
+                    payload['error'].update(code='operation_reservation_failed',
+                        phase='reservation', dispatched=False)
+                    payload['error']['storage'] = getattr(tls_listener, 'storage_snapshot', lambda: {})()
+                    return APIResponse(503, payload)
                 if replay:
                     status, payload = self.operations.result(record['id'], record['client'])
                     payload['api_version'] = API_VERSION

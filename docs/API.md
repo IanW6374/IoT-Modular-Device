@@ -57,6 +57,16 @@ Management allocates sequences and records request keys durably before sending.
 Discovery advertises storage limits and `persistent_idempotency`; if encrypted
 storage is unavailable, reads work but writes fail closed with 503.
 
+Reservation failure responses additionally identify `error.phase: reservation`
+and `error.dispatched: false`, with code `operation_reservation_failed`,
+`journal_full` or `operation_limit`. These mean this request's handler was not
+dispatched, even if a reservation watermark partially committed. The key is
+not advertised as reusable and clients must not automatically repeat a write.
+Optional `error.storage` contains whitelisted native NVS allocation counters,
+not namespace contents, credentials or operation keys. An HTTP 503 without
+this complete pre-dispatch proof remains an uncertain outcome; in particular,
+`operation_outcome_uncertain` after a callback must never be treated as rejected.
+
 The encrypted-NVS reservation and watermark are committed before any side
 effect. The same certificate/key/method/path/body replays its retained result;
 changed content returns 409. Even after result eviction, a consumed sequence

@@ -33,6 +33,18 @@ def resource_snapshot():
     return result
 
 
+def storage_snapshot():
+    """Bounded allocation counters, not namespace contents or keys."""
+    try:
+        values = resource_snapshot()
+        names = ('nvs_used_entries', 'nvs_free_entries', 'nvs_available_entries',
+                 'nvs_total_entries', 'nvs_namespace_count', 'nvs_stats_error')
+        return {name: values[name] for name in names if isinstance(values.get(name), int)
+                and not isinstance(values[name], bool) and 0 <= values[name] <= 0xffffffff}
+    except Exception:
+        return {}
+
+
 def report_failure(log_output, service, stage, exc, peer='unknown'):
     """Never include request bodies, URLs, credentials or certificate data."""
     if not log_output:

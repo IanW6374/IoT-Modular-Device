@@ -14,6 +14,12 @@ try:
 except ImportError:
     import binascii
 
+import sys
+try:
+    from _iotmd_crypto import p256_verify_digest as _native_p256_verify
+except ImportError:
+    _native_p256_verify = None
+
 
 RECOVERY_API_VERSION = 6
 CORE_API_VERSION = 15
@@ -435,6 +441,10 @@ def sign_manifest(bundle_type, manifest, private_key):
 
 
 def verify_message_signature(message, signature, public_key):
+    if (not isinstance(public_key, (tuple, list)) or len(public_key) != 2 or
+            any(not isinstance(value, int) or isinstance(value, bool) or
+                not 0 <= value < _P for value in public_key)):
+        return False
     try:
         raw_signature = binascii.unhexlify(signature)
     except Exception:
@@ -446,6 +456,17 @@ def verify_message_signature(message, signature, public_key):
     if not 1 <= r < _N or not 1 <= s <= _N // 2:
         return False
     digest = hashlib.sha256(bytes(message)).digest()
+    if _native_p256_verify is not None:
+        try:
+            key = _int_to_bytes(public_key[0]) + _int_to_bytes(public_key[1])
+            return _native_p256_verify(key, digest, raw_signature) is True
+        except (ValueError, TypeError, IndexError):
+            return False
+    if sys.implementation.name == 'micropython':
+        # Frozen verifier and native binding ship together in the same core.
+        # Never silently resume slow Python verification on a broken core.
+        raise RuntimeError('Native P-256 verification is unavailable; install the matching core')
+    # Host-only build/signing tools retain the independent reference verifier.
     inverse = _inverse(s, _N)
     first = _scalar_multiply(_bytes_to_int(digest) * inverse % _N, _G)
     second = _to_affine(_scalar_multiply(r * inverse % _N, public_key))

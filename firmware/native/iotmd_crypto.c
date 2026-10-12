@@ -7,6 +7,34 @@
 #include "mbedtls/gcm.h"
 #include "mbedtls/pkcs5.h"
 #include "mbedtls/platform_util.h"
+#include "esp_timer.h"
+#include "esp_log.h"
+#include "iotmd_p256_verify.h"
+
+static mp_obj_t iotmd_crypto_p256_verify_digest(mp_obj_t key_obj,
+        mp_obj_t digest_obj, mp_obj_t signature_obj) {
+    mp_buffer_info_t key, digest, signature;
+    mp_get_buffer_raise(key_obj, &key, MP_BUFFER_READ);
+    mp_get_buffer_raise(digest_obj, &digest, MP_BUFFER_READ);
+    mp_get_buffer_raise(signature_obj, &signature, MP_BUFFER_READ);
+    int64_t started = esp_timer_get_time();
+    bool valid = iotmd_p256_verify(key.buf, key.len, digest.buf, digest.len,
+        signature.buf, signature.len);
+    uint32_t elapsed_ms = (uint32_t)((esp_timer_get_time() - started + 999) / 1000);
+    static uint32_t calls, maximum_ms;
+    ++calls;
+    if (elapsed_ms > maximum_ms) { maximum_ms = elapsed_ms; }
+    // Bounded, payload-free timing evidence for the physical qualification.
+    if (calls <= 8 || (calls % 16) == 0 || elapsed_ms >= 1000) {
+        esp_log_level_set("IoT-MD-Crypto", ESP_LOG_INFO);
+        ESP_LOGI("IoT-MD-Crypto", "p256_calls=%lu duration_ms=%lu max_ms=%lu accepted=%u",
+            (unsigned long)calls, (unsigned long)elapsed_ms,
+            (unsigned long)maximum_ms, (unsigned)valid);
+    }
+    return mp_obj_new_bool(valid);
+}
+static MP_DEFINE_CONST_FUN_OBJ_3(iotmd_crypto_p256_verify_digest_obj,
+    iotmd_crypto_p256_verify_digest);
 
 #define IoTMD_PBKDF2_DIGEST_BYTES (32)
 #define IoTMD_PBKDF2_MAX_INPUT_BYTES (1024)
@@ -153,6 +181,8 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(
 
 static const mp_rom_map_elem_t iotmd_crypto_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__iotmd_crypto) },
+    { MP_ROM_QSTR(MP_QSTR_p256_verify_digest),
+      MP_ROM_PTR(&iotmd_crypto_p256_verify_digest_obj) },
     { MP_ROM_QSTR(MP_QSTR_pbkdf2_sha256),
       MP_ROM_PTR(&iotmd_crypto_pbkdf2_sha256_obj) },
     { MP_ROM_QSTR(MP_QSTR_aes_gcm_encrypt),

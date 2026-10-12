@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.0.0-alpha.121 - 2026-10-12
+
+- Route frozen-core P-256 verification through strict native SDK Mbed TLS,
+  retaining independent host reference verification and failing closed on
+  devices if the matching binding is missing. Add bounded, secret-free UART
+  duration reports and real native-C signature/negative-vector coverage.
+- Identify confirmed pre-dispatch operation-storage failures in API v3 without
+  implying that partially committed reservation keys are reusable. Preserve
+  ambiguous post-dispatch failures and no-replay protections.
+- Expose read-only NVS allocation counters in transport diagnostics and storage
+  rejection responses. Reproduce latest-only storage pressure without deleting
+  current documents; no partition changes or connected-device cleanup.
+- Advance runtime generation to 217 and signed release sequence to 2826.
+  Publish matched production-signed core/application/universal artifacts for
+  testing with Management 3.2.11. Physical timing and the exact cause of 002's
+  storage pressure remain unqualified; publication changes no devices.
+
 ## 3.0.0-alpha.120 - 2026-10-12
 
 - Publish a signed, version-only universal test release for Management 3.2.10's

@@ -187,6 +187,17 @@ int main(void) {
     assert(slots[3][0].present && !slots[3][1].present && latest(3)==6);
     assert(iotmd_nvs_reclaim_snapshot(3)==ESP_OK && erases==1);
 
+    // Latest-only snapshots can also fill a bounded partition. Reclamation
+    // must fail safely, not remove current documents to make an API write fit.
+    reset();
+    for(int n=0;n<4;n++)seed(n,1,5,3000);
+    for(int n=4;n<7;n++){seed(n,0,4,1000);seed(n,1,5,1000);}
+    capacity=used()+1024;
+    if(!setjmp(interrupted)){write_generation(5,3000);assert(false);}
+    assert(last_error==ESP_ERR_NVS_NOT_ENOUGH_SPACE && !erases && !writes);
+    for(int n=0;n<4;n++)assert(latest(n)==5 && slots[n][1].present);
+    for(int n=4;n<7;n++)assert(slots[n][0].present && slots[n][1].present);
+
     // Invalid CRC/header/parity or an unreadable snapshot prevents reclamation.
     for(int mode=0;mode<6;mode++){
         reset();seed(3,0,4,200);seed(3,1,5,200);

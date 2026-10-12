@@ -11,12 +11,13 @@ import certificate_codec
 import configuration_profiles
 import device_api
 import http_support
+import tls_listener
 from api_contracts import APIRequest, APIResponse
 from device_api import DeviceAPI
 from device_api_inventory import DeviceInventory
 from feature_flags import FeatureFlags
 from runtime_health import HealthHistory
-from api_operations import OperationJournal
+from api_operations import OperationJournal, OperationError
 from api_operation_fixtures import MemoryNamespace
 
 
@@ -223,7 +224,51 @@ class DeviceAPITests(unittest.TestCase):
         self.registry.enrol(self.cert, 'writer', ('configuration:write',))
         self.api.configuration_restarter = mock.Mock()
         self.operation_storage.fail = True
-        self.assertEqual(self.api.handle(self.mutation()).status, 503)
+        response = self.api.handle(self.mutation())
+        self.assertEqual(response.status, 503)
+        self.assertEqual(response.payload['error']['code'], 'operation_reservation_failed')
+        self.assertEqual(response.payload['error']['phase'], 'reservation')
+        self.assertIs(response.payload['error']['dispatched'], False)
+        self.assertIsInstance(response.payload['error']['storage'], dict)
+        self.api.configuration_restarter.assert_not_called()
+
+    def test_failed_reservation_after_durable_commit_is_not_claimed_reusable(self):
+        self.registry.enrol(self.cert, 'writer', ('configuration:write',))
+        self.api.configuration_restarter = mock.Mock()
+        original = self.operation_storage.commit
+        def partial_commit(generation, payload):
+            original(generation, payload)
+            raise OSError('Readback failed after commit')
+        with mock.patch.object(self.operation_storage, 'commit', side_effect=partial_commit):
+            response = self.api.handle(self.mutation())
+        self.assertIs(response.payload['error']['dispatched'], False)
+        self.assertEqual(response.payload['error']['code'], 'operation_reservation_failed')
+        self.api.configuration_restarter.assert_not_called()
+        self.assertEqual(max(json.loads(self.operation_storage.payload)['clients'].values()), 1)
+
+    def test_storage_full_rejection_preserves_message_but_exports_only_safe_counts(self):
+        self.registry.enrol(self.cert, 'writer', ('configuration:write',))
+        self.api.configuration_restarter = mock.Mock()
+        with mock.patch.object(self.operations, 'reserve', side_effect=RuntimeError('encrypted transactional storage is full')), \
+             mock.patch.object(tls_listener, 'resource_snapshot', return_value={
+                'nvs_used_entries': 600, 'nvs_available_entries': 2, 'nvs_total_entries': 756,
+                'private_key': 'secret', 'nvs_free_entries': 'secret', 'nvs_namespace_count': True}):
+            response = self.api.handle(self.mutation())
+        self.assertIn('encrypted transactional storage is full', response.payload['error']['message'])
+        self.assertEqual(response.payload['error']['storage'], {'nvs_used_entries': 600,
+            'nvs_available_entries': 2, 'nvs_total_entries': 756})
+        self.assertNotIn('secret', json.dumps(response.payload))
+        self.api.configuration_restarter.assert_not_called()
+
+    def test_journal_backpressure_is_confirmed_not_dispatched(self):
+        self.registry.enrol(self.cert, 'writer', ('configuration:write',))
+        self.api.configuration_restarter = mock.Mock()
+        for code in ('journal_full', 'operation_limit'):
+            with mock.patch.object(self.operations, 'reserve', side_effect=OperationError(code, 'Operation storage full', 503)):
+                response = self.api.handle(self.mutation())
+            self.assertEqual(response.status, 503)
+            self.assertEqual(response.payload['error']['code'], code)
+            self.assertIs(response.payload['error']['dispatched'], False)
         self.api.configuration_restarter.assert_not_called()
 
     def test_async_module_completion_is_durable_and_client_bound(self):
@@ -255,6 +300,8 @@ class DeviceAPITests(unittest.TestCase):
         with mock.patch.object(self.operations, 'finish', side_effect=OSError('result storage failed')):
             response = self.api.handle(self.mutation())
         self.assertEqual(response.status, 503)
+        self.assertEqual(response.payload['error']['code'], 'operation_outcome_uncertain')
+        self.assertNotIn('dispatched', response.payload['error'])
         retry = self.api.handle(self.mutation())
         self.assertEqual(retry.status, 409)
         callback.assert_called_once()

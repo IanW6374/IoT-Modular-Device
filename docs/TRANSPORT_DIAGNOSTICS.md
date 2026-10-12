@@ -56,6 +56,40 @@ cause. Correlate snapshots, API/portal behaviour and the surrounding UART log.
 Diagnostics do not restart devices, close sockets, bypass TLS verification,
 change socket limits or alter update/confirmation/watchdog policy.
 
+## Signature verification timing and storage pressure
+
+The frozen verifier routes P-256/SHA-256 verification through
+`_iotmd_crypto.p256_verify_digest` and SDK Mbed TLS, preserving raw 64-byte
+signatures, valid curve points, nonzero/in-range scalars and low-S rules.
+MicroPython fails closed if the matching core binding is absent; only host
+build tools retain the independent Python reference verifier. The native
+binding and frozen verifier are packaged together in the core, so updating
+only the application cannot install this correction. Existing platform ABI
+and wire-format contracts are unchanged.
+
+`IoT-MD-Crypto` UART reports contain only call counts, elapsed/maximum
+milliseconds and accepted/rejected flags. The first eight calls and each
+sixteenth call are reported; calls taking at least a second are also reported.
+Include this tag in receive-only capture filters. Actual physical qualification
+is still necessary: host vectors and a compiled core do not establish device
+latency or prove that every observed event-loop pause was cryptographic work.
+
+Native transport resource snapshots additionally expose NVS used, free,
+available and total entry counts, namespace count or a statistics-read error.
+These are read-only allocation counters, not namespace data. Reservation
+failure responses return only those counters when available.
+
+The NVS partition is 24 KiB and shared with protected configuration and other
+records. Transaction documents can each approach 4 KiB. Latest-only records
+plus protected data, NVS metadata/fragmentation and replacement/garbage-collection
+headroom can exhaust it even after all eligible redundant snapshots are gone.
+Tests reproduce safe failure in that case: latest records, credentials and
+anti-replay state must not be removed to make a new request fit. This explains
+a structural possibility, not 002's exact current allocation; collect its
+allocation/record-size evidence before choosing a capacity or retention redesign.
+Do not resize partition tables, erase NVS or reset replay watermarks as an OTA
+workaround. This change neither enlarges NVS nor clears connected devices.
+
 ## Internal-memory allocation tracing (opt-in diagnostic core)
 
 The Alpha 104 capture on 7 October showed a roughly 21–23 KB/hour decrease

@@ -414,6 +414,18 @@ components:
             code: {type: string}
             message: {type: string, maxLength: 256}
             retryable: {const: false}
+            phase: {type: string, enum: [reservation]}
+            dispatched: {type: boolean, const: false}
+            storage:
+              type: object
+              additionalProperties: false
+              properties:
+                nvs_used_entries: {type: integer, minimum: 0, maximum: 4294967295}
+                nvs_free_entries: {type: integer, minimum: 0, maximum: 4294967295}
+                nvs_available_entries: {type: integer, minimum: 0, maximum: 4294967295}
+                nvs_total_entries: {type: integer, minimum: 0, maximum: 4294967295}
+                nvs_namespace_count: {type: integer, minimum: 0, maximum: 4294967295}
+                nvs_stats_error: {type: integer, minimum: 0, maximum: 4294967295}
     Discovery:
       type: object
       required: [api_version, capabilities, limits]
