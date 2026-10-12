@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.0-alpha.120 - 2026-10-12
+
+- Publish a signed, version-only universal test release for Management 3.2.10's
+  retained live-read diagnostics. No functional changes from Alpha 119; this
+  is not a claimed fix for the unqualified real-device progress freezes.
+- Advance runtime generation to 216 and signed release sequence to 2825 so
+  devices on Alpha 119 can perform a genuine newer core/application upgrade.
+- Preserve configuration and security. Only application, core, universal,
+  SBOM and provenance artifacts are public; factory images and setup passwords
+  remain private. Publication does not install or restart connected devices.
+
 ## 3.0.0-alpha.119 - 2026-10-12
 
 - Publish a signed, version-only universal test release for Management 3.2.9's
