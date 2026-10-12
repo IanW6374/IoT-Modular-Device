@@ -22,6 +22,8 @@ CORE_FILES = (
     'iotmd_runtime.py',
     'update_telemetry.py',
     'update_operations.py',
+    'operation_reporting.py',
+    'update_operation_reports.py',
     'update_cancellation.py',
     'release_selection.py',
     'application_upload.py',

@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.0.0-alpha.124 - 2026-10-12
+
+- Runtime generation 220; signed release sequence 2829; minimum core API 15.
+  Pair with Management 3.2.13 for optional MQTT tracking. API remains the default.
+- Add opt-in authenticated MQTT update-operation reports over the device's
+  existing trusted TLS broker connection. Validate the configured broker against
+  Management's chosen endpoint before admission; never change device broker
+  settings or send progress to a different destination implicitly.
+- Make topic templates per-operation configurable, with the recommended
+  `iotmd/update-operations/{device_id}/{operation_id}` default. Report only
+  bounded lifecycle facts and generic outcomes, not raw private errors or keys.
+- Persist the per-operation report key/configuration on encrypted VFS. Keep
+  report samples/heartbeats in RAM, coalesce by topic and recover via API snapshots.
+  MQTT publishing failures never replay commands or stop the local installer.
+
 ## 3.0.0-alpha.123 - 2026-10-12
 
 - Introduce device-owned update operations with a signed stable ID retained

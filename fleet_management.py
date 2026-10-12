@@ -147,13 +147,15 @@ def validate_policy_structure(policy):
 class FleetService:
     def __init__(self, device_id, cohort='default', state_path=DEFAULT_STATE_PATH,
                  key_path=FLEET_VERIFICATION_KEY_PATH, now=None,
-                 localtime=None, update_operations=None, update_admission_guard=None):
+                 localtime=None, update_operations=None, update_admission_guard=None,
+                 update_reporting_validator=None):
         self.device_id = str(device_id)
         self.cohort = str(cohort or 'default')
         self.state_path = str(state_path)
         self.key_path = key_path
         self.update_operations = update_operations
         self.update_admission_guard = update_admission_guard
+        self.update_reporting_validator = update_reporting_validator
         self._now = now or (lambda: int(time.time()) if time else 0)
         self._localtime = localtime or (lambda epoch: time.localtime(epoch))
         self.state = self._load()
@@ -186,7 +188,7 @@ class FleetService:
             json.dump(self.state, stream)
         _replace(temporary, self.state_path)
 
-    def apply_policy(self, policy, report_key=None):
+    def apply_policy(self, policy, report_key=None, reporting=None):
         validate_policy_structure(policy)
         if (
             str(policy.get('target_device', '')) not in ('', self.device_id) or
@@ -211,11 +213,17 @@ class FleetService:
             raise ValueError('fleet policy signature verification failed')
         operation_id = None
         if self.update_operations:
+            if report_key is not None:
+                if not self.update_reporting_validator or not policy.get('commands'):
+                    raise ValueError('Authenticated MQTT progress reporting is unavailable')
+                reporting = self.update_reporting_validator(reporting, policy['commands'][0]['id'])
+            elif reporting is not None:
+                raise ValueError('MQTT reporting requires a per-operation authentication key')
             if policy.get('commands') and self.update_admission_guard:
                 self.update_admission_guard()
             # The existing signed policy and API anti-replay reservation remain
             # admission authorities. Reserve lifecycle capacity before effects.
-            operation_id = self.update_operations.prepare(policy, report_key)
+            operation_id = self.update_operations.prepare(policy, report_key, reporting)
         self.state['policy_sequence'] = sequence
         self.state['policy'] = dict(policy)
         self.state['rollout_paused'] = False

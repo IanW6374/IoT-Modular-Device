@@ -189,7 +189,7 @@ class UpdateOperations:
             value.update(boot_id=self.boot_id, boot_epoch=value['boot_epoch'] + 1)
             self._commit(value)
 
-    def prepare(self, policy, report_key=None):
+    def prepare(self, policy, report_key=None, reporting=None):
         self.open()
         plan = operation_plan(policy)
         active = self.active()
@@ -208,6 +208,7 @@ class UpdateOperations:
                       revision=1, completed=['queued'], detail='Admission prepared')
         if report_key:
             record['report_key'] = report_key
+            record['reporting'] = reporting
         value = _copy(self.state)
         value['watermark'] = plan['policy_sequence']
         value['records'] = (value['records'] + [record])[-RETAINED:]
@@ -273,6 +274,7 @@ class UpdateOperations:
             raise KeyError('Update operation is not retained; absence is not a job outcome')
         result = _copy(record)
         result.pop('report_key', None)
+        result.pop('reporting', None)
         result.update(contract=CONTRACT, boot_id=self.boot_id, boot_epoch=self.state['boot_epoch'])
         sample, percent = self.samples.get(identifier, (0, None))
         result['sample_sequence'] = sample
@@ -299,6 +301,12 @@ class UpdateOperations:
         record = self.active()
         return bool(record and record['state'] not in ('prepared', 'cancelling', 'installing') and
                     command.get('id') in record['command_ids'])
+
+
+def staged_component_ready(record, application, firmware, universal):
+    component = {'application': application, 'firmware': firmware, 'universal': universal}[record['release_type']]
+    state = component.update_status()
+    return state.get('status') == 'ready' and int(state.get('release_sequence', 0)) == record['release_sequence']
 
 
 class UpdateOperationRunner:

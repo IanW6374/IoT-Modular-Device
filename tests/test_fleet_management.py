@@ -6,6 +6,8 @@ from unittest import mock
 import fleet_management
 import timezone_rules
 import update_security
+from update_operations import UpdateOperations
+from update_operation_reports import validate_reporting
 
 
 class FleetManagementTests(unittest.TestCase):
@@ -74,6 +76,51 @@ class FleetManagementTests(unittest.TestCase):
             now=lambda: self.now,
             localtime=lambda _epoch: (2033, 5, 18, 10, 30, 0, 2, 138),
         )
+
+    def mqtt_policy_service(self):
+        service = self.service()
+        service.update_operations = UpdateOperations('device-1', str(Path(self.temp.name) / 'operations'), 'boot')
+        broker = {'host': 'mqtt-broker.home.arpa', 'port': 8883, 'trusted_tls': True}
+        service.update_reporting_validator = lambda value, identifier: validate_reporting(value, 'device-1', identifier, broker)
+        policy = self.policy()
+        policy['format_version'] = 2
+        policy['commands'] = [
+            {'id': '%032x' % index, 'action': action, 'release_sequence': 2828, 'release_type': 'universal'}
+            for index, action in enumerate(('check-update', 'download-update', 'activate-update'), 1)]
+        policy['signature'] = update_security.sign_manifest('fleet-policy', policy, self.private_key)
+        reporting = {'host': broker['host'], 'port': broker['port'],
+                     'topic_template': 'custom/{device_id}/progress/{operation_id}'}
+        return service, policy, reporting
+
+    def test_mqtt_admission_persists_private_settings_without_exposing_them(self):
+        service, policy, reporting = self.mqtt_policy_service()
+        service.apply_policy(policy, 'a'*64, reporting)
+        recovered = UpdateOperations('device-1', service.update_operations.path, 'next-boot')
+        recovered.open()
+        record = recovered.active()
+        self.assertEqual(record['report_key'], 'a'*64)
+        self.assertEqual(record['reporting'], reporting)
+        self.assertEqual(record['state'], 'accepted')
+        public = recovered.snapshot(record['id'])
+        self.assertNotIn('report_key', public)
+        self.assertNotIn('reporting', public)
+
+    def test_untrusted_mqtt_destination_is_rejected_before_journal_admission(self):
+        service, policy, reporting = self.mqtt_policy_service()
+        reporting['host'] = 'unapproved.example'
+        with self.assertRaises(ValueError): service.apply_policy(policy, 'a'*64, reporting)
+        self.assertEqual(service.state['policy_sequence'], 0)
+        self.assertEqual(service.update_operations.state['records'], [])
+        self.assertEqual(service.update_operations.state['watermark'], 0)
+        self.assertFalse(Path(service.update_operations.path + '.0').exists())
+
+    def test_signed_policy_is_verified_before_mqtt_settings_or_keys_are_admitted(self):
+        service, policy, reporting = self.mqtt_policy_service()
+        policy['updates']['channel'] = 'tampered'
+        service.update_reporting_validator = mock.Mock(side_effect=AssertionError('validator before signature'))
+        with self.assertRaises(ValueError): service.apply_policy(policy, 'a'*64, reporting)
+        service.update_reporting_validator.assert_not_called()
+        self.assertEqual(service.state['policy_sequence'], 0)
 
     def test_applies_signed_targeted_policy_and_exposes_command(self):
         service = self.service()

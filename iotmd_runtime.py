@@ -31,7 +31,8 @@ import firmware_update
 import universal_update
 import release_selection
 from update_telemetry import telemetry as update_telemetry
-from update_operations import UpdateOperations, UpdateOperationRunner
+from update_operations import UpdateOperations, UpdateOperationRunner, staged_component_ready
+from update_operation_reports import UpdateOperationReports, validate_reporting, runtime_broker
 import universal_upload
 import hardware_platform
 import boot_state
@@ -390,6 +391,8 @@ fleet_service = fleet_management.FleetService(
     localtime=lambda epoch: timezone_rules.localtime(epoch, timezone_name),
     update_operations=update_operations,
     update_admission_guard=lambda: guard_management_admission(),
+    update_reporting_validator=lambda value, identifier: validate_reporting(value, hardware_deviceid, identifier,
+        runtime_broker(config, mqtt_configured and mqtt_tls_ready)),
 )
 qualification_service = runtime_qualification_service(
     hardware_deviceid, component_versions, app_update, firmware_update,
@@ -2243,13 +2246,7 @@ update_cancellation = UpdateCancellation(
 )
 
 
-def operation_staged_ready(record):
-    component = {'application': app_update, 'firmware': firmware_update,
-                 'universal': universal_update}[record['release_type']]
-    state = component.update_status()
-    return state.get('status') == 'ready' and int(state.get('release_sequence', 0)) == record['release_sequence']
-
-
+operation_staged_ready = lambda record: staged_component_ready(record, app_update, firmware_update, universal_update)
 update_operation_runner = UpdateOperationRunner(
     update_operations, fleet_service,
     lambda channel, sequence, kind: check_release_once(False, channel, sequence, kind),
@@ -3104,6 +3101,10 @@ async def main(client):
         start_task('usb_ncm', usb_network.run())
     application_context.lifecycle.transition('services-ready')
     start_task('fleet_policy_monitor', fleet_policy_monitor())
+    start_task('update_operation_reports', UpdateOperationReports(update_operations,
+        lambda: runtime_broker(config, mqtt_configured and mqtt_tls_ready), client.isconnected,
+        publish_message, lambda: ticks_ms() / 1000,
+        lambda: runtime_health.increment('update_report_failures')).run())
     if remote_syslog.active:
         start_task('remote_syslog', remote_syslog.run())
     start_task('certificate_alerts', certificate_alert_monitor())

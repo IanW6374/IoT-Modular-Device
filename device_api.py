@@ -296,6 +296,7 @@ class DeviceAPI:
                     'update_cancellation': bool(self.update_cancellation),
                     'live_update_status': bool(self.update_status_getter and self.fleet),
                     'update_operation_contract': 1 if self.fleet and getattr(self.fleet, 'update_operations', None) else None,
+                    'update_operation_reports': bool(self.fleet and getattr(self.fleet, 'update_reporting_validator', None)),
                 },
                 'next_request_sequence': self.operations.next_sequence(client['fingerprint']) if self.operations else None,
                 'limits': {
@@ -492,9 +493,9 @@ class DeviceAPI:
                 raise RuntimeError('fleet management is unavailable')
             policy = json.loads(body.decode() if isinstance(body, bytes) else body)
             if isinstance(policy, dict) and 'policy' in policy:
-                if set(policy) != {'policy', 'report_key'}:
+                if set(policy) != {'policy', 'report_key', 'reporting'}:
                     raise ValueError('Update operation admission envelope is invalid')
-                result = self.fleet.apply_policy(policy['policy'], policy['report_key'])
+                result = self.fleet.apply_policy(policy['policy'], policy['report_key'], policy['reporting'])
             else:
                 result = self.fleet.apply_policy(policy)
             self.health.record_event(
