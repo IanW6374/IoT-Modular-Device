@@ -100,10 +100,11 @@ class UpdateService:
     """Own resumable upload state and dispatch verified artifacts to installers."""
 
     def __init__(self, resumable_store, receivers=None, status_getter=None,
-                 maximum_chunk_bytes=64 * 1024, discard_handlers=()):
+                 maximum_chunk_bytes=64 * 1024, discard_handlers=(), admission_guard=None):
         self.store = resumable_store
         self.receivers = {}
         self._status_getter = status_getter
+        self.admission_guard = admission_guard
         self._installing = False
         self._installing_id = ''
         self._discard_requested = False
@@ -123,6 +124,8 @@ class UpdateService:
         return receiver
 
     def begin(self, request, reclaim_kind=None):
+        if self.admission_guard:
+            self.admission_guard()
         if not isinstance(request, dict):
             raise ValueError('resumable upload request is invalid')
         if self._installing:
@@ -155,6 +158,8 @@ class UpdateService:
         return self.store.append(identifier, offset, payload)
 
     async def complete(self, identifier, progress_callback=None):
+        if self.admission_guard:
+            self.admission_guard()
         if self._installing:
             raise ValueError('another update is already being installed')
         self._installing = True

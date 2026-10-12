@@ -4,6 +4,7 @@
 class UpdateTelemetry:
     def __init__(self):
         self.progress = {}
+        self.operations = None
 
     def begin(self, release):
         self.progress = {
@@ -24,6 +25,10 @@ class UpdateTelemetry:
             'complete': 'pair',
         }
         step = phases.get(str(phase))
+        if not step and self.progress.get('type') == 'application':
+            step = {'receiving': 'application_download', 'verification': 'application_verify'}.get(str(phase))
+        elif not step and self.progress.get('type') == 'firmware':
+            step = {'writing': 'core_write', 'verification': 'core_verify'}.get(str(phase))
         if not step:
             return
         order = ('queued', 'inspect', 'core_write', 'core_verify',
@@ -36,6 +41,8 @@ class UpdateTelemetry:
         # A 100% byte counter isn't a successful signature/flash verification.
         # Complete a verification boundary only when the next phase starts.
         self.progress.update({'phase': step, 'percent': percent})
+        if self.operations:
+            self.operations.progress(step, percent, done)
 
     def staged(self):
         if self.progress:

@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.0.0-alpha.123 - 2026-10-12
+
+- Introduce device-owned update operations with a signed stable ID retained
+  through staging, activation, reboot and local health confirmation. Management
+  reads the exact operation rather than inferring outcomes from installed versions.
+- Reserve a bounded, checksummed dual-slot lifecycle journal on encrypted VFS
+  before admitting a signed plan; persist stage boundaries, not byte percentages.
+  Keep existing API mutation admission, release signatures and anti-replay
+  watermarks unchanged. Generic API NVS capacity exhaustion remains a separate issue.
+- Run managed updates through one cooperative lifecycle worker. Do not replay
+  interrupted staging or uncertain activation; retain explicit unresolved outcomes.
+  Cancel by operation ID before installation, with worker-owned safe cleanup.
+- Block competing browser uploads/release selection while a managed operation
+  owns the installer. Preserve existing native paired activation/rollback checks.
+- Advertise update operation contract 1 and expose authenticated per-operation
+  API snapshots. MQTT transport is not enabled in this release.
+- Runtime generation 219; signed release sequence 2828. Bootstrap this release
+  using the device portal or existing Management before installing Management 3.2.12.
+  Power-cut durability and transfer-time API responsiveness still require hardware testing.
+
 ## 3.0.0-alpha.122 - 2026-10-12
 
 - Publish a signed, version-only universal test release with no functional

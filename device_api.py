@@ -295,6 +295,7 @@ class DeviceAPI:
                     'persistent_idempotency': bool(self.operations),
                     'update_cancellation': bool(self.update_cancellation),
                     'live_update_status': bool(self.update_status_getter and self.fleet),
+                    'update_operation_contract': 1 if self.fleet and getattr(self.fleet, 'update_operations', None) else None,
                 },
                 'next_request_sequence': self.operations.next_sequence(client['fingerprint']) if self.operations else None,
                 'limits': {
@@ -436,6 +437,16 @@ class DeviceAPI:
             )
             return 202, {'accepted': True, 'scenario': result}
 
+        operation_prefix = '/api/v3/fleet/update-operations/'
+        if method == 'GET' and route.startswith(operation_prefix):
+            operations = getattr(self.fleet, 'update_operations', None)
+            if not operations:
+                raise RuntimeError('device-owned update operations are unavailable')
+            identifier = route[len(operation_prefix):]
+            if len(identifier) != 32 or any(c not in '0123456789abcdef' for c in identifier):
+                raise ValueError('Update operation ID is invalid')
+            return 200, {'api_version': API_VERSION, 'update_operation': operations.snapshot(identifier),
+                         'device': self.update_status_getter() if self.update_status_getter else {}}
         if method == 'GET' and route == '/api/v3/fleet/update-status':
             if not self.update_status_getter or not self.fleet:
                 return 503, {'error': 'live update status is unavailable'}
@@ -480,7 +491,12 @@ class DeviceAPI:
             if not self.fleet:
                 raise RuntimeError('fleet management is unavailable')
             policy = json.loads(body.decode() if isinstance(body, bytes) else body)
-            result = self.fleet.apply_policy(policy)
+            if isinstance(policy, dict) and 'policy' in policy:
+                if set(policy) != {'policy', 'report_key'}:
+                    raise ValueError('Update operation admission envelope is invalid')
+                result = self.fleet.apply_policy(policy['policy'], policy['report_key'])
+            else:
+                result = self.fleet.apply_policy(policy)
             self.health.record_event(
                 'fleet_policy_applied', 'Applied fleet policy',
                 {'policy_sequence': result['policy_sequence']}, force=True,

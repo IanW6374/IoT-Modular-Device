@@ -147,11 +147,13 @@ def validate_policy_structure(policy):
 class FleetService:
     def __init__(self, device_id, cohort='default', state_path=DEFAULT_STATE_PATH,
                  key_path=FLEET_VERIFICATION_KEY_PATH, now=None,
-                 localtime=None):
+                 localtime=None, update_operations=None, update_admission_guard=None):
         self.device_id = str(device_id)
         self.cohort = str(cohort or 'default')
         self.state_path = str(state_path)
         self.key_path = key_path
+        self.update_operations = update_operations
+        self.update_admission_guard = update_admission_guard
         self._now = now or (lambda: int(time.time()) if time else 0)
         self._localtime = localtime or (lambda epoch: time.localtime(epoch))
         self.state = self._load()
@@ -184,7 +186,7 @@ class FleetService:
             json.dump(self.state, stream)
         _replace(temporary, self.state_path)
 
-    def apply_policy(self, policy):
+    def apply_policy(self, policy, report_key=None):
         validate_policy_structure(policy)
         if (
             str(policy.get('target_device', '')) not in ('', self.device_id) or
@@ -207,12 +209,21 @@ class FleetService:
             'fleet-policy', policy, policy['signature'], public_key
         ):
             raise ValueError('fleet policy signature verification failed')
+        operation_id = None
+        if self.update_operations:
+            if policy.get('commands') and self.update_admission_guard:
+                self.update_admission_guard()
+            # The existing signed policy and API anti-replay reservation remain
+            # admission authorities. Reserve lifecycle capacity before effects.
+            operation_id = self.update_operations.prepare(policy, report_key)
         self.state['policy_sequence'] = sequence
         self.state['policy'] = dict(policy)
         self.state['rollout_paused'] = False
         self.state['command_chain_failed'] = False
         self.state.pop('update_cancelled', None)
         self._save()
+        if operation_id:
+            self.update_operations.transition('accepted', detail='Signed admission committed')
         return self.snapshot()
 
     def within_maintenance_window(self, epoch=None):
@@ -233,10 +244,13 @@ class FleetService:
             return []
         completed = set(self.state.get('completed_commands', ()))
         policy = self.state.get('policy') or {}
-        return [
+        pending = [
             dict(command) for command in policy.get('commands', ())
             if command.get('id') not in completed
         ]
+        if self.update_operations:
+            pending = [item for item in pending if self.update_operations.command_allowed(item)]
+        return pending
 
     def command_release(self, command, default_channel):
         updates = (self.state.get('policy') or {}).get('updates') or {}

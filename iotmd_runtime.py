@@ -31,6 +31,7 @@ import firmware_update
 import universal_update
 import release_selection
 from update_telemetry import telemetry as update_telemetry
+from update_operations import UpdateOperations, UpdateOperationRunner
 import universal_upload
 import hardware_platform
 import boot_state
@@ -382,10 +383,13 @@ inputDevices = []
 runtime_health = HealthHistory()
 boot_tracker = boot_state.store()
 boot_tracker.stage('configuration', device_state='initialising', durable=True)
+update_operations = UpdateOperations(hardware_deviceid)
 fleet_service = fleet_management.FleetService(
     hardware_deviceid, 'default',
     now=lambda: int(time.time()),
-    localtime=lambda epoch: timezone_rules.localtime(epoch, timezone_name)
+    localtime=lambda epoch: timezone_rules.localtime(epoch, timezone_name),
+    update_operations=update_operations,
+    update_admission_guard=lambda: guard_management_admission(),
 )
 qualification_service = runtime_qualification_service(
     hardware_deviceid, component_versions, app_update, firmware_update,
@@ -1984,6 +1988,7 @@ def portal_action(action, params):
             'certificates': str(params.get('certificates', '')).lower() in ('1', 'true', 'on')
         }
         try:
+            begin_managed_activation('application')
             app_update.configure_pending_update(selections)
             update_orchestrator.mark_activating('application')
         except Exception as exc:
@@ -2002,6 +2007,7 @@ def portal_action(action, params):
             )
             return 'Base firmware activation failed: ' + detail
         try:
+            begin_managed_activation('firmware')
             firmware_update.activate_pending()
             update_orchestrator.mark_activating('firmware')
         except Exception as exc:
@@ -2026,6 +2032,7 @@ def portal_action(action, params):
             maintenance_allowed = universal_update.activation_maintenance_allowed(
                 'manual' if action == 'activate-universal-manual' else 'managed', bool(fleet_policy),
                 fleet_snapshot.get('within_maintenance_window'))
+            begin_managed_activation('universal')
             universal_update.activate_pending(maintenance_allowed)
         except Exception as exc:
             state = universal_update.update_status()
@@ -2059,6 +2066,8 @@ def portal_action(action, params):
         )
 
     if action == 'download-release':
+        if update_operations.active():
+            return 'Release download failed: a managed operation is active; cancel it before another download'
         if not release_manifest_url:
             return 'Release download failed: release checks are not configured'
         if not release_available_choices:
@@ -2121,59 +2130,39 @@ def fleet_activation_allowed():
     )
 
 
+def guard_managed_update():
+    if update_operations.active():
+        raise ValueError('A managed update operation is active; cancel it before a browser upload')
+
+
+def guard_management_admission():
+    if update_service.installing() or portal_task_registry.download_active() or any(
+            component.update_status().get('status') in ('ready', 'activating', 'trial', 'committing')
+            for component in (app_update, firmware_update, universal_update)):
+        raise ValueError('Another update owns the device installer; reconcile it before a managed operation')
+
+
+def begin_managed_activation(kind):
+    active = update_operations.active()
+    if not active:
+        return
+    if active['release_type'] != kind or active['state'] not in ('staged', 'scheduled', 'installing'):
+        raise ValueError('The requested activation is not the staged managed operation')
+    if active['state'] != 'installing':
+        if not operation_staged_ready(active):
+            raise ValueError('The requested verified components are not staged')
+        update_operations.transition('installing', 'install', 'Portal activation; awaiting local health confirmation')
+
+
 async def fleet_policy_monitor():
-    """Execute only bounded commands carried by a verified fleet policy."""
+    """One durable device-owned lifecycle, rather than replayable command lists."""
     while True:
-        for command in fleet_service.pending_commands():
-            if not any(item.get('id') == command.get('id') for item in fleet_service.pending_commands()):
-                break
-            identifier = command.get('id', '')
-            action = command.get('action', '')
-            policy_channel, target_sequence, target_type = fleet_service.command_release(command, release_channel)
-            if action == 'activate-update' and not fleet_service.within_maintenance_window(): continue
-            try:
-                if action == 'check-update':
-                    result = await check_release_once(False, policy_channel, target_sequence, target_type)
-                    if str(result).startswith('No newer compatible release'): raise RuntimeError(str(result))
-                elif action == 'download-update':
-                    await download_release_once(managed=True)
-                elif action == 'activate-update':
-                    status = universal_update.update_status()
-                    if status.get('status') == 'ready':
-                        result = portal_action('activate-universal', {})
-                    elif firmware_update.update_status().get('status') == 'ready':
-                        result = portal_action('activate-firmware', {})
-                    else:
-                        result = portal_action('activate-update', {})
-                    if 'failed' in str(result).lower():
-                        raise RuntimeError(result)
-                elif action == 'rollback':
-                    result = portal_action('rollback-application', {})
-                    if 'failed' in str(result).lower():
-                        raise RuntimeError(result)
-                else:
-                    raise RuntimeError('unsupported fleet command')
-            except Exception as exc:
-                if not any(item.get('id') == identifier for item in fleet_service.pending_commands()):
-                    break
-                fleet_service.complete_command(identifier, 'failed', str(exc))
-                runtime_health.record_event(
-                    'fleet_command_failed', str(exc),
-                    {'command': identifier, 'action': action}, force=True,
-                    severity='error', component='fleet',
-                    correlation_id=identifier
-                )
-                break
-            else:
-                if not any(item.get('id') == identifier for item in fleet_service.pending_commands()):
-                    break
-                fleet_service.complete_command(identifier, 'complete', action)
-                runtime_health.record_event(
-                    'fleet_command_complete', action,
-                    {'command': identifier}, force=True, component='fleet',
-                    correlation_id=identifier
-                )
-        await asyncio.sleep(30)
+        try:
+            await update_operation_runner.tick()
+        except Exception as exc:
+            logOutput('Local', 'Update operation', {'log': str(exc)}, 'ERROR')
+            await asyncio.sleep(30)
+        await asyncio.sleep(1)
 
 async def portal_update_upload(reader, content_length, params):
     if not web_portal_updates_enabled:
@@ -2244,14 +2233,30 @@ update_service = UpdateService(
     },
     maximum_chunk_bytes=resumable_upload.MAX_CHUNK_BYTES,
     discard_handlers=(universal_upload.discard, update_orchestrator.clear,
-                      universal_update.discard_all_ready))
+                      universal_update.discard_all_ready), admission_guard=guard_managed_update)
 application_context.register('updates', update_service)
 from update_cancellation import UpdateCancellation, UpdateCancelled
 update_cancellation = UpdateCancellation(
     update_service, portal_task_registry, fleet_service,
     (app_update, firmware_update, universal_update), update_orchestrator,
-    update_telemetry,
+    update_telemetry, operations=update_operations,
 )
+
+
+def operation_staged_ready(record):
+    component = {'application': app_update, 'firmware': firmware_update,
+                 'universal': universal_update}[record['release_type']]
+    state = component.update_status()
+    return state.get('status') == 'ready' and int(state.get('release_sequence', 0)) == record['release_sequence']
+
+
+update_operation_runner = UpdateOperationRunner(
+    update_operations, fleet_service,
+    lambda channel, sequence, kind: check_release_once(False, channel, sequence, kind),
+    lambda: download_release_once(managed=True),
+    lambda record: portal_action({'application': 'activate-update', 'firmware': 'activate-firmware',
+                                 'universal': 'activate-universal'}[record['release_type']], {}),
+    operation_staged_ready, update_cancellation.finalize)
 
 async def complete_portal_update(identifier, progress_callback=None):
     """Include upload-store and installer failures in persistent history."""
@@ -2337,6 +2342,9 @@ async def _check_release_once(channel=None, target_sequence=0, target_type=''):
 async def check_release_once(automatic=False, channel=None, target_sequence=0, target_type=''):
     global release_check_status, release_last_checked
     global release_automatic_check_status, release_automatic_last_checked
+    active = update_operations.active()
+    if active and (target_sequence != active['release_sequence'] or target_type != active['release_type']):
+        raise ValueError('A managed update operation owns release selection; cancel it before another check')
     release_check_status = 'Checking'
     request_url = release_update.release_manifest_request_url(
         release_manifest_url, str(channel or release_channel)
@@ -2382,11 +2390,14 @@ async def check_release_once(automatic=False, channel=None, target_sequence=0, t
 
 async def download_release_once(progress_callback=None, managed=False):
     global release_available
+    if not managed and update_operations.active():
+        raise ValueError('A managed update operation is active; cancel it before another download')
     release = release_available
     if not release:
         raise ValueError('no checked release is available')
     progress_callback = portal_task_registry.begin_cancellable(progress_callback)
     update_telemetry.begin(release)
+    update_telemetry.operations = update_operations if managed else None
     report = update_telemetry.reporter(progress_callback)
     try:
         state = await release_update.stage_release(
@@ -2410,6 +2421,7 @@ async def download_release_once(progress_callback=None, managed=False):
         )
         raise
     finally:
+        update_telemetry.operations = None
         portal_task_registry.finish_cancellable(update_service.discard_staged)
     update_orchestrator.mark_staged(release)
     update_telemetry.staged()
@@ -3071,6 +3083,13 @@ async def main(client):
     firmware_confirmed, application_confirmed = startup.confirm_updates(
         firmware_update, app_update, universal_update, recovery_boot
     )
+    try:
+        update_operation_runner.recover(
+            app_update.running_release_sequence(), firmware_update.running_release_sequence(),
+            all(component.update_status().get('status') == 'idle'
+                for component in (app_update, firmware_update, universal_update)))
+    except Exception as exc:
+        logOutput('Local', 'Update operation recovery', {'log': str(exc)}, 'ERROR')
     cancel_recovery_trial_deadline_if_healthy()
 
     ntp_ready = await sync_ntp_time()

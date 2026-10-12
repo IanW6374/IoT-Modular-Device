@@ -74,7 +74,11 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         )
         monitor = source[source.index('async def fleet_policy_monitor():'):
                          source.index('async def portal_update_upload(')]
-        self.assertIn('break', monitor)
+        self.assertIn('await update_operation_runner.tick()', monitor)
+        self.assertNotIn('complete_command(', monitor)
+        runner = Path('update_operations.py').read_text()
+        self.assertIn("self.operations.transition('installing', 'install'", runner)
+        self.assertIn('self.activate(record)', runner)
 
     def test_manual_universal_activation_has_an_explicit_context(self):
         portal_source = Path('web_portal.py').read_text()
