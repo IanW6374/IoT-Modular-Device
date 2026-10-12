@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0-alpha.119 - 2026-10-12
+
+- Publish a signed, version-only universal test release for Management 3.2.9's
+  redesigned live progress monitoring. No functional changes from Alpha 118.
+- Advance runtime generation to 215 and signed release sequence to 2824 so
+  devices running Alpha 118 can perform a genuine newer paired upgrade using
+  the dedicated small update-status endpoint throughout the transaction.
+- Exercise normal core/application writes, verification, restart and fresh
+  health confirmation. Preserve configuration and existing hardware security;
+  factory images, setup passwords and signing keys remain private. Publishing
+  this release does not install it on connected devices.
+
 ## 3.0.0-alpha.118 - 2026-10-12
 
 - Add the authenticated, read-only `/api/v3/fleet/update-status` projection for
