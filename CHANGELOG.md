@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.0-alpha.122 - 2026-10-12
+
+- Publish a signed, version-only universal test release with no functional
+  changes from Alpha 121. Devices already on Alpha 121 can exercise its native
+  signature verifier throughout a genuine newer paired upgrade.
+- Advance runtime generation to 218 and signed release sequence to 2827.
+  Pair with Management 3.2.11 and retained progress/UART timing diagnostics;
+  physical responsiveness remains to be qualified and storage exhaustion is
+  not resolved by this release.
+- Preserve configuration and security. Publish only application, signed core,
+  universal, SBOM and provenance; factory images and passwords stay private.
+  Publication does not install firmware, reset or clean connected devices.
+
 ## 3.0.0-alpha.121 - 2026-10-12
 
 - Route frozen-core P-256 verification through strict native SDK Mbed TLS,
