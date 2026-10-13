@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.0-alpha.126 - 2026-10-13
+
+- Publish a signed, version-only universal test release for receive-only USB
+  observation of API tracking and portal-navigation stalls. No functional
+  changes from Alpha 125; existing native transport/heap counters and crypto
+  timing remain available without enabling allocation tracing.
+- Advance runtime generation to 222 and signed release sequence to 2831;
+  minimum core API remains 15. Keep API tracking for this test. No sensor,
+  timeout, MQTT, storage-cleanup or anti-replay policy changes are introduced.
+- This release does not fix IoT-MD-002's disabled API write journal or encrypted
+  NVS exhaustion, and does not authorize erasing protected state. Devices with
+  disabled durable writes must not be treated as successful remote deployments.
+
 ## 3.0.0-alpha.125 - 2026-10-13
 
 - Publish a signed, version-only universal test release with no functional
