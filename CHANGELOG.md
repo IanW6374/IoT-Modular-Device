@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0-alpha.125 - 2026-10-13
+
+- Publish a signed, version-only universal test release with no functional
+  changes from Alpha 124. Use Management 3.2.13 in API tracking mode to exercise
+  the device-owned operation lifecycle with a genuinely newer paired upgrade.
+- Advance runtime generation to 221 and signed release sequence to 2830;
+  minimum core API remains 15. No changes to broker settings, tracking defaults,
+  update/cancel behavior, credentials or anti-replay protections.
+- Physical API progress, transfer-time responsiveness and confirmation still
+  require testing. This release does not claim to fix native event-loop stalls
+  or generic API encrypted-NVS capacity exhaustion.
+
 ## 3.0.0-alpha.124 - 2026-10-12
 
 - Runtime generation 220; signed release sequence 2829; minimum core API 15.
